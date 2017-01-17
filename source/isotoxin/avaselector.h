@@ -12,7 +12,7 @@ class dialog_avaselector_c;
 template<> struct MAKE_ROOT<dialog_avaselector_c> : public _PROOT(dialog_avaselector_c)
 {
     dialog_avasel_params_s prms;
-    MAKE_ROOT(bool, const dialog_avasel_params_s &prms) : _PROOT(dialog_avaselector_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const dialog_avasel_params_s &prms) : _PROOT(dialog_avaselector_c)(), prms(prms) { init(RS_NORMAL_MAINPARENT); }
     ~MAKE_ROOT() {}
 };
 
@@ -28,8 +28,9 @@ struct framedrawer_s
 
 class dialog_avaselector_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     GM_RECEIVER(dialog_avaselector_c, GM_DROPFILES);
-    
+
     struct compressor_s : public ts::task_c
     {
         dialog_avaselector_c *dlg;
@@ -48,7 +49,7 @@ class dialog_avaselector_c : public gui_isodialog_c
         {
         }
 
-        /*virtual*/ int iterate() override;
+        /*virtual*/ int iterate(ts::task_executor_c *e) override;
         /*virtual*/ void done(bool canceled) override;
     } *compressor = nullptr;
 
@@ -146,7 +147,7 @@ public:
 
     /*virtual*/ void children_repos() override
     {
-        __super::children_repos();
+        super::children_repos();
         dirty = true;
     }
 

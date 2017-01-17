@@ -14,13 +14,14 @@ class dialog_addcontact_c;
 template<> struct MAKE_ROOT<dialog_addcontact_c> : public _PROOT(dialog_addcontact_c)
 {
     dialog_addcontact_params_s prms;
-    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
-    MAKE_ROOT(bool, const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init(RS_NORMAL_MAINPARENT); }
+    MAKE_ROOT(bool, const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init(RS_NORMAL_MAINPARENT); }
     ~MAKE_ROOT() {}
 };
 
 class dialog_addcontact_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     GM_RECEIVER(dialog_addcontact_c, ISOGM_CMD_RESULT);
 
     int apid = 0;
@@ -42,6 +43,8 @@ class dialog_addcontact_c : public gui_isodialog_c
     void start_reslove_process();
     bool resolve_anm( RID, GUIPARAM );
     ts::ivec2 anmpos();
+
+    void update_auth_checkbox();
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_ADDCONTACT; }
@@ -71,6 +74,7 @@ public:
 
 class dialog_addconference_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     int apid = 0;
     ts::str_c confaname; // utf8
     ts::str_c o;

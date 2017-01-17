@@ -2,7 +2,7 @@
 # (C) 2016 Rotkaermota
 
 CC=gcc
-CFLAGS=-O3  -DHAVE_HIDDEN
+CFLAGS=-O3 -DHAVE_HIDDEN -m64 -DDYNAMIC_CRC_TABLE
 #CFLAGS=-O3  -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
 #CFLAGS=-O -DMAX_WBITS=14 -DMAX_MEM_LEVEL=7
 #CFLAGS=-g -DDEBUG
@@ -13,7 +13,7 @@ LDFLAGS=
 LDSHARED=gcc
 CPP=gcc -E
 
-LIBS=zlib.a minizip.a
+LIBS=libzstatic.a libminizipstatic.a
 
 AR=ar
 ARFLAGS=rc
@@ -38,11 +38,11 @@ all: mkdirs static
 
 static: $(LIBS)
 
-zlib.a: $(OBJS)
+libzstatic.a: $(OBJS)
 	$(AR) $(ARFLAGS) $(libdir)/$@ $(addprefix $(garbage)/, $(OBJS))
 	-@ ($(RANLIB) $@ || true) >/dev/null 2>&1
 
-minizip.a: $(mzobjs)
+libminizipstatic.a: $(mzobjs)
 	$(AR) $(ARFLAGS) $(libdir)/$@ $(addprefix $(garbage)/, $(mzobjs))
 	-@ ($(RANLIB) $@ || true) >/dev/null 2>&1
 
@@ -63,8 +63,8 @@ $(mzobjs):
 	$(CC) -o $(garbage)/$@ -c $(CFLAGS) ./src/contrib/minizip/$(@:.o=.c) -I./src
 
 clean:
-	rm -f $(libdir)/zlib.a
-	rm -f $(libdir)/minizip.a
+	rm -f $(libdir)/libzstatic.a
+	rm -f $(libdir)/libminizipstatic.a
 	rm -r -f $(garbage)/zlib
 
 

@@ -19,6 +19,7 @@ public:
 
 class picture_animated_c : public picture_c, public animation_c
 {
+    typedef picture_c super;
 
 protected:
     int numframes = 1;
@@ -36,7 +37,7 @@ class picture_gif_c : public picture_animated_c
 {
 protected:
     ts::animated_c gif;
-    
+
 public:
     bool load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body );
     /*virtual*/ bool load( const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress ) override;
@@ -80,7 +81,7 @@ public:
 
     bool upd_btnpos(RID r = RID(), GUIPARAM p = nullptr);
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched(guirect_c &to) override { if (!__super::i_leeched(to)) return false; update_ctl_pos(); return true; };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (!autoparam_i::i_leeched(to)) return false; update_ctl_pos(); return true; };
     /*virtual*/ void i_unleeched() override { /* do nothing */ };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 

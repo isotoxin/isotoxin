@@ -185,6 +185,7 @@ struct evt_data_s
 			ts::make_pod<ts::irect> rect;
 			ts::uint32 area;
             bool apply;
+            bool undock;
 		} rectchg;
 
         struct
@@ -335,7 +336,8 @@ class rectprops_c // pod
 	DECLAREBIT( F_ALPHABPLEND );
     DECLAREBIT( F_HIGHLIGHT );
     DECLAREBIT( F_ACTIVE );
-    DECLAREBIT( F_MAXIMIZED ); // only for root rect
+    DECLAREBIT( F_FS_DOCK_V ); // only for root rect
+    DECLAREBIT( F_FS_DOCK_H ); // only for root rect
     DECLAREBIT( F_MINIMIZED ); // only for root rect
     DECLAREBIT( F_MICROMIZED ); // only for root rect
 
@@ -375,9 +377,12 @@ public:
 	bool is_visible() const {return m_flags.is(F_VISIBLE); }
     bool is_highlighted() const {return m_flags.is(F_HIGHLIGHT); }
     bool is_active() const {return m_flags.is(F_ACTIVE); }
-    
+
 	bool is_alphablend() const {return m_flags.is(F_ALPHABPLEND); }
-    bool is_maximized() const {return m_flags.is(F_MAXIMIZED); }
+    bool is_fs_dock_v() const {return m_flags.is(F_FS_DOCK_V); }
+    bool is_fs_dock_h() const { return m_flags.is(F_FS_DOCK_H); }
+    bool is_maximized() const { return is_fs_dock_v() && is_fs_dock_h(); }
+    bool is_docked() const { return is_fs_dock_v() || is_fs_dock_h(); }
     bool is_minimized() const {return m_flags.is(F_MINIMIZED); }
     bool is_micromized() const {return m_flags.is(F_MICROMIZED); }
     bool is_collapsed() const {return m_flags.is(F_MINIMIZED|F_MICROMIZED); }
@@ -387,25 +392,41 @@ public:
 
     bool out_of_bound() const {return m_flags.is(F_OUT_OF_BOUND); }
 
+    int get_dock() const
+    {
+        return (is_fs_dock_v() ? 1 : 0) | (is_fs_dock_h() ? 2 : 0);
+    }
+
     float opacity() const { return m_opacity; }
     float zindex() const {return m_zindex;}
 	const ts::ivec2 &pos() const {return m_pos;}
 	const ts::ivec2 &size() const {return m_size;}
-    const ts::ivec2 currentsize() const {return is_maximized() ? m_fsrect.size() : m_size;}
+
+    ts::irect fsrect() const
+    {
+        ts::irect r = rect();
+        if (is_fs_dock_v())
+            r.lt.y = m_fsrect.lt.y, r.rb.y = m_fsrect.rb.y;
+        if (is_fs_dock_h())
+            r.lt.x = m_fsrect.lt.x, r.rb.x = m_fsrect.rb.x;
+        return r;
+    }
+
+    const ts::ivec2 currentsize() const {return is_docked() ? fsrect().size() : m_size;}
 	ts::irect rect() const {return ts::irect(m_pos, m_pos + m_size);}
-    ts::irect screenrect(bool maxmask = true) const
+    ts::irect screenrect(bool dockmask = true) const
     {
         if( m_flags.is( F_RECALC_SCREENPOS ) )
             update_screenpos();
-        return (is_maximized()&&maxmask) ? m_fsrect : ts::irect(m_screenpos, m_screenpos + m_size);
+        return (is_docked() && dockmask) ? fsrect() : ts::irect(m_screenpos, m_screenpos + m_size);
     }
 	ts::irect szrect() const { return ts::irect(ts::ivec2(0), m_size); } // just size
     ts::irect currentszrect() const { return ts::irect(ts::ivec2(0), currentsize() ); } // just size
-    const ts::ivec2 &screenpos() const
+    ts::ivec2 screenpos() const
     {
         if (m_flags.is( F_RECALC_SCREENPOS ))
             update_screenpos();
-        return is_maximized() ? m_fsrect.lt : m_screenpos;
+        return is_docked() ? fsrect().lt : m_screenpos;
     }
 
     rectprops_c &opacity( float opa ) { m_opacity = opa; return *this; }
@@ -439,15 +460,24 @@ public:
     rectprops_c &highlight(bool h = true) { m_flags.init(F_HIGHLIGHT, h); return *this; }
     rectprops_c &active(bool a = true) { m_flags.init(F_ACTIVE, a); return *this; }
 	rectprops_c &makealphablend() { m_flags.set(F_ALPHABPLEND); return *this; }
-    rectprops_c &maximize(bool m)
+    rectprops_c &dock(int dval)
     {
-        m_flags.init(F_MAXIMIZED, m);
+        m_flags.init(F_FS_DOCK_V, 0 != (dval & 1));
+        m_flags.init(F_FS_DOCK_H, 0 != (dval & 2));
         updatefs();
         return *this;
     }
-    rectprops_c &maximize( const ts::irect& maxrect )
+    rectprops_c &dock(bool dock_v, bool dock_h)
     {
-        m_flags.set( F_MAXIMIZED );
+        m_flags.init(F_FS_DOCK_V, dock_v);
+        m_flags.init(F_FS_DOCK_H, dock_h);
+        updatefs();
+        return *this;
+    }
+    rectprops_c &dock( const ts::irect& maxrect, bool dock_v, bool dock_h)
+    {
+        m_flags.init(F_FS_DOCK_V, dock_v);
+        m_flags.init(F_FS_DOCK_H, dock_h);
         m_fsrect = ts::wnd_get_max_size( maxrect );
         return *this;
     }
@@ -455,7 +485,7 @@ public:
     rectprops_c &decollapse() { m_flags.clear(F_MINIMIZED|F_MICROMIZED); m_flags.set(F_VISIBLE); return *this; }
     rectprops_c &minimize(bool m) { m_flags.init(F_MINIMIZED, m); return *this; }
     rectprops_c &micromize(bool m) { m_flags.init(F_MICROMIZED, m); return *this; }
-	
+
     rectprops_c &allow_move_resize(bool _move = true, bool _resize = true) { m_flags.init(F_ALLOW_MOVE, _move); m_flags.init(F_ALLOW_RESIZE, _resize); return *this; }
 
     bool change_to(const rectprops_c &p);
@@ -512,6 +542,9 @@ enum rect_sys_e
     RS_TASKBAR = 2,
     RS_INACTIVE = 4,
     RS_MAINPARENT = 8,
+
+    RS_NORMAL_MAINPARENT = RS_NORMAL | RS_MAINPARENT,
+    RS_TOOL_INACTIVE = RS_TOOL | RS_INACTIVE,
 };
 
 namespace newrectkitchen
@@ -696,6 +729,11 @@ public:
 
     void leech( sqhandler_i * h );
     void unleech( sqhandler_i * h );
+    template<typename H> void iterate_leeches(const H&h)
+    {
+        for (sqhandler_i *l : m_leeches)
+            if (l) h(l);
+    }
 
     bool inmod() const {return m_inmod > 0;} // modification in progress
 
@@ -764,6 +802,27 @@ public:
     void __spec_set_outofbound(bool f) { m_props.__spec_set_outofbound(f); }
 };
 
+template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<( ts::streamstr<STRTYPE> &dl, RID r )
+{
+    dl.begin();
+    if (r)
+    {
+        dl.raw_append( "RID=[" );
+        dl << ts::ref_cast<int>(r);
+        ts::wstr_c n = HOLD( r )().get_name();
+        if (!n.is_empty())
+        {
+            dl << ',';
+            dl << n;
+        }
+        dl << ']';
+    } else
+    {
+        dl.raw_append( "RID=[]" );
+    }
+    return dl;
+}
+
 INLINE guirect_c * rectprops_c::owner() const
 {
     if (CHECK( m_flags.is( F_RECT_MEMBER ) ))
@@ -786,6 +845,7 @@ class gui_popup_menu_c;
 class gui_control_c : public guirect_c
 {
     DUMMY(gui_control_c);
+    typedef guirect_c super;
 protected:
     cached_theme_rect_c thrcache;
     ts::uint32 get_state() const;
@@ -823,17 +883,11 @@ public:
         return thrcache(get_state());
     }
 
-    template<typename F> void iterate_children(F & f)
-    {
-        for (rectengine_c *e : getengine())
-            if (e) if (!f(e->getrect())) break;
-    }
-
     void set_updaterect( ts::UPDATE_RECTANGLE h ) { updaterect = h; }
     ts::UPDATE_RECTANGLE get_updaterect() { return updaterect; }
 
     // custom data
-    void set_customdata(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER()) 
+    void set_customdata(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER())
     {
         if (!customdatakiller.empty()) customdatakiller(getrid(), customdata);
         customdata = _data; customdatakiller = _datakiller;
@@ -916,14 +970,14 @@ public:
 
     /*virtual*/ ts::ivec2 get_min_size() const override
     {
-        ts::ivec2 sz = __super::get_min_size();
+        ts::ivec2 sz = gui_control_c::get_min_size();
         if (minsz.x >= 0) sz.x = minsz.x;
         if (minsz.y >= 0) sz.y = minsz.y;
         return sz;
     }
     /*virtual*/ ts::ivec2 get_max_size() const override
     {
-        ts::ivec2 sz = __super::get_max_size();
+        ts::ivec2 sz = gui_control_c::get_max_size();
         if (maxsz.x >= 0) sz.x = maxsz.x;
         if (maxsz.y >= 0) sz.y = maxsz.y;
         return sz;
@@ -936,7 +990,7 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &d) override
     {
         if (qp == SQ_DRAW) return false; // stub control - nothing to draw
-        return __super::sq_evt(qp,rid,d);
+        return gui_control_c::sq_evt(qp,rid,d);
     }
 };
 
@@ -953,7 +1007,7 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &d) override
     {
         if (qp == SQ_DRAW && drawhandler) return drawhandler(rid,&getengine()); // stub control - nothing to draw
-        return __super::sq_evt(qp, rid, d);
+        return gui_stub_c::sq_evt(qp, rid, d);
     }
 
 };
@@ -964,6 +1018,7 @@ typedef fastdelegate::FastDelegate< button_desc_s *() > GET_BUTTON_FACE;
 class gui_button_c : public gui_control_c
 {
     DUMMY(gui_button_c);
+    typedef gui_control_c super;
 
     GM_RECEIVER(gui_button_c, GM_UI_EVENT);
 
@@ -1072,10 +1127,11 @@ struct text_draw_params_s;
 class gui_label_c : public gui_control_c
 {
     DUMMY(gui_label_c);
-
-    void draw();
+    typedef gui_control_c super;
 
 protected:
+
+    void draw(ts::ivec2 *glyph_pos);
 
     static const ts::flags32_s::BITS FLAGS_AUTO_HEIGHT          = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS FLAGS_SELECTION            = FLAGS_FREEBITSTART << 1;
@@ -1124,6 +1180,7 @@ public:
 class gui_label_ex_c : public gui_label_c
 {
     DUMMY(gui_label_ex_c);
+    typedef gui_label_c super;
 
     ts::ivec2 glyphs_shift() const;
 
@@ -1154,6 +1211,7 @@ typedef fastdelegate::FastDelegate<void (const ts::wstr_c &)> CLICK_LINK;
 class gui_label_simplehtml_c : public gui_label_ex_c
 {
     DUMMY(gui_label_simplehtml_c);
+    typedef gui_label_ex_c super;
     ts::wstrings_c links;
     ts::wstr_c tt() const;
 
@@ -1178,6 +1236,7 @@ template<> struct MAKE_ROOT<gui_tooltip_c> : public _PROOT(gui_tooltip_c)
 class gui_tooltip_c : public gui_label_c
 {
     DUMMY(gui_tooltip_c);
+    typedef gui_label_c super;
 
     GM_RECEIVER( gui_tooltip_c, GM_TOOLTIP_PRESENT );
     GM_RECEIVER( gui_tooltip_c, GM_KILL_TOOLTIPS );
@@ -1207,6 +1266,7 @@ public:
 class gui_group_c : public gui_control_c // group
 {
     DUMMY(gui_group_c);
+    typedef gui_control_c super;
 
 protected:
 
@@ -1236,10 +1296,12 @@ public:
 class gui_hgroup_c : public gui_group_c // vertical or horizontal group
 {
     DUMMY(gui_hgroup_c);
+    typedef gui_group_c super;
+
     ts::tbuf_t<float> proportions;
 
     static const ts::flags32_s::BITS F_ALLOW_MOVE_SPLITTER = FLAGS_FREEBITSTART << 0;
-    
+
     void update_proportions();
 protected:
 
@@ -1273,7 +1335,7 @@ protected:
         return 0;
     }
     virtual ts::uint32 __splitcursor() const;
-    
+
     virtual int __vec_index() const {return 0;}
     virtual ts::asptr __themerect_name() const
     {
@@ -1299,7 +1361,7 @@ public:
     /*virtual*/ void created() override
     {
         set_theme_rect(__themerect_name(), false);
-        __super::created();
+        gui_group_c::created();
     }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
@@ -1345,6 +1407,7 @@ enum scroll_to_e
 class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical scrollbar
 {
     DUMMY(gui_vscrollgroup_c);
+    typedef gui_group_c super;
 
     sbhelper_s sbhelper;
     ts::buf0_c drawflags;
@@ -1424,7 +1487,7 @@ public:
         if (offset) *offset = top_visible_offset;
         return top_visible;
     }
-    
+
     int width_for_children() const
     {
         cri_s info;
@@ -1441,20 +1504,21 @@ template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
     menu_c menu;
     RID parentmenu;
     bool toolr;
-    MAKE_ROOT(const menu_anchor_s& screenpos, const menu_c &menu, bool toolr, RID parentmenu) : _PROOT(gui_popup_menu_c)(), screenpos(screenpos), menu(menu), parentmenu(parentmenu), toolr( toolr ) { init( toolr ? (rect_sys_e)(RS_TOOL|RS_INACTIVE)  : RS_INACTIVE ); }
+    MAKE_ROOT(const menu_anchor_s& screenpos, const menu_c &menu, bool toolr, RID parentmenu) : _PROOT(gui_popup_menu_c)(), screenpos(screenpos), menu(menu), parentmenu(parentmenu), toolr( toolr ) { init( toolr ? RS_TOOL_INACTIVE  : RS_INACTIVE ); }
     ~MAKE_ROOT();
 };
 
 class gui_popup_menu_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_popup_menu_c);
+    typedef gui_vscrollgroup_c super;
 
     GM_RECEIVER( gui_popup_menu_c, GM_KILLPOPUPMENU_LEVEL );
     GM_RECEIVER( gui_popup_menu_c, GM_POPUPMENU_DIED );
     GM_RECEIVER( gui_popup_menu_c, GM_TOOLTIP_PRESENT );
     GM_RECEIVER( gui_popup_menu_c, GM_SYSMENU_PRESENT );
     GM_RECEIVER( gui_popup_menu_c, GM_CHECK_ALLOW_CLICK );
-    
+
 
     bool check_focus(RID r, GUIPARAM p);
     bool update_size(RID r, GUIPARAM p);
@@ -1472,7 +1536,7 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
     static gui_popup_menu_c & create(const menu_anchor_s& screenpos, const menu_c &mnu, bool sys, RID parentmenu);
 
     static const ts::flags32_s::BITS F_SYSMENU = F_VSCROLLFREEBITSTART << 0;
-    
+
 
 public:
 
@@ -1530,6 +1594,7 @@ template<> struct MAKE_CHILD<gui_menu_item_c> : public _PCHILD(gui_menu_item_c)
 class gui_menu_item_c : public gui_label_c
 {
     DUMMY(gui_menu_item_c);
+    typedef gui_label_c super;
 
     ts::safe_ptr<gui_popup_menu_c> submnu_shown;
     menu_c submnu;
@@ -1595,6 +1660,8 @@ template<> struct MAKE_CHILD<gui_textfield_c> : public _PCHILD(gui_textfield_c)
 class gui_textfield_c : public gui_textedit_c
 {
     DUMMY(gui_textfield_c);
+    typedef gui_textedit_c super;
+
     friend struct MAKE_CHILD<gui_textfield_c>;
     ts::safe_ptr<gui_button_c> selector;
     int height = 0;
@@ -1641,6 +1708,7 @@ template<> struct MAKE_CHILD<gui_htabsel_c> : public _PCHILD(gui_htabsel_c)
 class gui_htabsel_c : public gui_hgroup_c
 {
     DUMMY(gui_htabsel_c);
+    typedef gui_hgroup_c super;
 
     GM_RECEIVER( gui_htabsel_c, GM_HEARTBEAT );
     GM_RECEIVER( gui_htabsel_c, GM_UI_EVENT );
@@ -1682,6 +1750,7 @@ template<> struct MAKE_CHILD<gui_htabsel_item_c> : public _PCHILD(gui_htabsel_it
 class gui_htabsel_item_c : public gui_label_c
 {
     DUMMY(gui_htabsel_item_c);
+    typedef gui_label_c super;
 
     MENUHANDLER handler;
     ts::str_c param;
@@ -1720,6 +1789,7 @@ template<> struct MAKE_CHILD<gui_vtabsel_c> : public _PCHILD(gui_vtabsel_c)
 class gui_vtabsel_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_vtabsel_c);
+    typedef gui_vscrollgroup_c super;
 
     GM_RECEIVER(gui_vtabsel_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_vtabsel_c, GM_UI_EVENT);
@@ -1760,6 +1830,7 @@ template<> struct MAKE_CHILD<gui_vtabsel_item_c> : public _PCHILD(gui_vtabsel_it
 class gui_vtabsel_item_c : public gui_label_c
 {
     DUMMY(gui_vtabsel_item_c);
+    typedef gui_label_c super;
 
     menu_c submnu;
     MENUHANDLER handler;
@@ -1811,6 +1882,7 @@ template<> struct MAKE_CHILD<gui_hslider_c> : public _PCHILD(gui_hslider_c)
 class gui_hslider_c : public gui_control_c
 {
     DUMMY(gui_hslider_c);
+    typedef gui_control_c super;
 
     float level = -1.0f;
     float pos = 0;

@@ -183,7 +183,7 @@ public:
 	bp_t &set(const sptr<TCHARACTER> &name)
 	{
 		if (bp_t *bp = get(name)) return *bp;
-		return add_block(name);
+		return add_block( string_type(name) );
 	}
 
 	bp_t &set_at_path(const sptr<TCHARACTER> &path)

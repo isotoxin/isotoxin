@@ -21,14 +21,14 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
 {
-    return __super::get_name().append(CONSTWSTR(" - ")).append(gui_dialog_c::get_name());
+    return super::get_name().append(CONSTWSTR(" - ")).append(gui_dialog_c::get_name());
 }
 
 
 /*virtual*/ void dialog_contact_props_c::created()
 {
     set_theme_rect(CONSTASTR("cprops"), false);
-    __super::created();
+    super::created();
     if (open_details_tab)
         tabsel( CONSTASTR( "2" ) );
     else
@@ -43,7 +43,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 void dialog_contact_props_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 }
 
 bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn, bool )
@@ -196,7 +196,7 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
             {
                 regexp = c->keywords.substr( 0, i );
                 keywords = c->keywords.substr( i + 1 );
-            }                
+            }
         }
 
         if ( h.size() )
@@ -218,7 +218,7 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
 
         if ( contactue->getkey().is_conference() )
         {
-            ts::wstr_c ttt = TTT("Conference name",506);
+            ts::wstr_c ttt(TTT("Conference name",506));
             if (contactue->get_conference_permissions() & CP_CHANGE_NAME)
                 dm().textfield( ttt, from_utf8( customname ), DELEGATE( this, custom_name ) );
             else
@@ -248,14 +248,14 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
         dm << 2;
         if (contactue->getkey().is_conference())
         {
-            dm().list( L"", L"", -250 ).setname( CONSTASTR( "det" ) );
+            dm().list( ts::wsptr(), ts::wsptr(), -250 ).setname( CONSTASTR( "det" ) );
         } else
         {
-            dm().list( L"", L"", -250 ).setname( CONSTASTR( "list" ) );
+            dm().list( ts::wsptr(), ts::wsptr(), -250 ).setname( CONSTASTR( "list" ) );
         }
 
         dm << 4;
-        dm().textfieldml(L"", from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
+        dm().textfieldml(ts::wsptr(), from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
 
         dm << 8;
 
@@ -278,25 +278,25 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
         dm().label( TTT("Greeting will be sent every time contact appears online, but only once per $ minutes",486) / ctl );
 
         dm().vspace();
-        dm().textfieldml( L"", from_utf8( cgreeting ), DELEGATE( this, greeting ), 10 ).focus( true );
+        dm().textfieldml( ts::wsptr(), from_utf8( cgreeting ), DELEGATE( this, greeting ), 10 ).focus( true );
 
         if (contactue->getkey().is_conference())
         {
             dm << 64;
-            dm().list( L"", L"", -250 ).setname( CONSTASTR( "list" ) );
+            dm().list( ts::wsptr(), ts::wsptr(), -250 ).setname( CONSTASTR( "list" ) );
 
             dm << 128;
             dm().label( TTT("Regular expression (egrep syntax)",511) );
-            dm().textfieldml( L"", regexp, DELEGATE( this, regexp_handler ), 5 ).focus( true );
+            dm().textfieldml( ts::wsptr(), regexp, DELEGATE( this, regexp_handler ), 5 ).focus( true );
 
             dm().label( TTT("Keywords (comma separated phrases/words per line; each line represents a separate rule)",512) );
-            dm().textfieldml( L"", keywords, DELEGATE( this, keywords_handler ), 5 );
+            dm().textfieldml( ts::wsptr(), keywords, DELEGATE( this, keywords_handler ), 5 );
         }
     }
 
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
-    
+
     if (!contactue->getkey().is_conference())
     {
         m.add( TTT( "Notification", 466 ), 0, TABSELMI( 16 ) );
@@ -348,7 +348,7 @@ ts::wstr_c dialog_contact_props_c::buildmh()
         }
     }
 
-    if (__super::sq_evt(qp, rid, d)) return true;
+    if (super::sq_evt(qp, rid, d)) return true;
 
     //switch (qp)
     //{
@@ -455,7 +455,7 @@ ts::wstr_c dialog_contact_props_c::buildmh()
         }
     }
 
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 
@@ -504,7 +504,7 @@ void dialog_contact_props_c::update()
 
 ts::uint32 dialog_contact_props_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
-    if (contactue && contactue->subpresent(c.contact->getkey()) || c.contact == contactue)
+    if (contactue && (contactue->subpresent(c.contact->getkey()) || c.contact == contactue))
     {
         if (lstrid && lstrid.call_ctxmenu_present())
             return 0;
@@ -523,29 +523,34 @@ ts::uint32 dialog_contact_props_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 namespace customel
 {
     class gui_lli_c;
-    template<> struct MAKE_CHILD<gui_lli_c> : public _PCHILD(gui_lli_c), public gui_listitem_params_s
+}
+
+template<> struct MAKE_CHILD<customel::gui_lli_c> : public _PCHILD(customel::gui_lli_c), public gui_listitem_params_s
+{
+    ts::astrings_c links;
+    ts::buf_c qrs;
+    MAKE_CHILD(ts::astrings_c &&links_, ts::buf_c &&qrs_, RID parent_, const ts::wstr_c &text_, const ts::str_c &param_)
     {
-        ts::astrings_c links;
-        ts::buf_c qrs;
-        MAKE_CHILD(ts::astrings_c &&links_, ts::buf_c &&qrs_, RID parent_, const ts::wstr_c &text_, const ts::str_c &param_)
-        {
-            parent = parent_;
-            text = text_;
-            param = param_;
-            addmarginleft = 5;
-            addmarginleft_icon = 3;
-            links = std::move(links_);
-            qrs = std::move(qrs_);
-        }
-        ~MAKE_CHILD();
+        parent = parent_;
+        text = text_;
+        param = param_;
+        addmarginleft = 5;
+        addmarginleft_icon = 3;
+        links = std::move(links_);
+        qrs = std::move(qrs_);
+    }
+    ~MAKE_CHILD();
 
-        MAKE_CHILD &operator<<(const ts::bitmap_c *_icon) { icon = _icon; return *this; }
-        MAKE_CHILD &operator<<(GETMENU_FUNC _gm) { gm = _gm; return *this; }
-        //MAKE_CHILD &threct(const ts::asptr&thr) { themerect = thr; return *this; }
-    };
+    MAKE_CHILD &operator<<(const ts::bitmap_c *_icon) { icon = _icon; return *this; }
+    MAKE_CHILD &operator<<(GETMENU_FUNC _gm) { gm = _gm; return *this; }
+    //MAKE_CHILD &threct(const ts::asptr&thr) { themerect = thr; return *this; }
+};
 
+namespace customel
+{
     class gui_lli_c : public gui_listitem_c
     {
+        typedef gui_listitem_c super;
         ts::astrings_c links;
         ts::buf_c qrs;
         int clicklink = -1;
@@ -588,7 +593,7 @@ namespace customel
         {
             links = std::move(links_);
             qrs = std::move(qrs_);
-            __super::set( text_, param_, icon_ );
+            super::set( text_, param_, icon_ );
             getengine().redraw();
         }
 
@@ -604,7 +609,7 @@ namespace customel
                 }
                 return;
             }
-                    
+
             if (linknum == overlink)
                 r.set(CONSTWSTR("<u>"));
 
@@ -655,7 +660,7 @@ namespace customel
                     }
                 }
 
-                return __super::sq_evt(qp, rid, data);
+                return super::sq_evt(qp, rid, data);
             }
 
             switch(qp)
@@ -702,7 +707,7 @@ namespace customel
                 clicka = SQ_NOP;
                 return true;
             }
-            return __super::sq_evt(qp, rid, data);
+            return super::sq_evt(qp, rid, data);
         }
 
     };
@@ -769,13 +774,13 @@ void dialog_contact_props_c::add_det(RID lstctl, int index, contact_c *c)
     {
         ts::str_c temp( c->get_name() );
         text_adapt_user_input( temp );
-        addl( TTT( "User name", 364 ), temp, false, false, false, vals.add( temp ) );
+        addl( TTT( "User name", 364 ), temp, false, true, false, vals.add( temp ) );
 
         if (!c->get_statusmsg().is_empty() || c->get_state() != CS_UNKNOWN) // don't show empty status message for unknown contacts
         {
             temp = c->get_statusmsg();
             text_adapt_user_input( temp );
-            addl( TTT( "User status message", 365 ), temp, false, false, false, vals.add( temp ) );
+            addl( TTT( "User status message", 365 ), temp, false, true, false, vals.add( temp ) );
         }
     }
 

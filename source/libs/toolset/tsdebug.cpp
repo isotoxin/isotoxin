@@ -33,16 +33,14 @@ bool g_warning_inprogress = false;
 void LogMessage(const char *caption, const char *msg)
 {
 #if defined _DEBUG || defined _DEBUG_OPTIMIZED || defined _CRASH_HANDLER
-	FILE *f = nullptr;
-	fopen_s(&f, "messages.log", "ab");
+	FILE *f = fopen("messages.log", "ab");
 	if (f)
 	{
-		char module[MAX_PATH];
-		GetModuleFileNameA(NULL, module, ARRAY_SIZE(module));
-		tm t;
+		char module[MAX_PATH_LENGTH];
+        get_exe_full_name(module, ARRAY_SIZE(module));
 		time_t curtime;
 		time(&curtime);
-		localtime_s(&t, &curtime);
+		const tm &t = *localtime(&curtime);
         if (caption)
 		    fprintf(f, "-------------------------\r\nMODULE: %s\r\nDATETIME: %i-%02i-%02i %02i:%02i\r\nCAPTION: %s\r\nMESSAGE: %s\r\n\r\n", strrchr(module, '\\')+1, t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, caption, msg);
         else
@@ -161,24 +159,22 @@ bool Warning(const char *s, ...)
 	if (g_warning_inprogress) return false;
 	g_warning_inprogress = true;
 
-	char str[4000];
+	ts::str_c str(4000, false);
 
 	va_list args;
 	va_start(args, s);
-    vsnprintf(str, ARRAY_SIZE(str), s, args);
+    str.set_length( vsnprintf(str.str(), str.get_capacity(), s, args) );
 	va_end(args);
 
-	ts::str_c msg = str;
-
 	bool result = false;
-	if (messages().get(msg) == nullptr)
-		switch (LoggedMessageBox(msg, "\n\nShow the same messages?", "Warning", SMB_YESNOCANCEL))
+	if (messages().get(str) == nullptr)
+		switch (LoggedMessageBox(str, "\n\nShow the same messages?", "Warning", SMB_YESNOCANCEL))
 	    {
 		    case SMBR_CANCEL:
 			    result = true;
 			    break;
             case SMBR_NO:
-			    messages().add(msg);
+			    messages().add(str.make_clone());
 			    break;
 	    }
 	g_warning_inprogress = false;
@@ -187,11 +183,11 @@ bool Warning(const char *s, ...)
 
 void Error(const char *s, ...)
 {
-	char str[4000];
+    ts::str_c str(4000, false);
 
 	va_list args;
 	va_start(args, s);
-    vsnprintf(str, ARRAY_SIZE(str), s, args);
+    str.set_length(vsnprintf(str.str(), str.get_capacity(), s, args));
 	va_end(args);
 
 	if ( LoggedMessageBox(str, "", "Error", sys_is_debugger_present() ? SMB_OKCANCEL : SMB_OK) == SMBR_CANCEL)
@@ -233,7 +229,9 @@ tmcalc_c::~tmcalc_c()
 //#############################################################################################################
 #ifdef __DMSG__
 
+#ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 namespace
 {
@@ -298,7 +296,7 @@ namespace
 
 
 
-void _cdecl dmsg(const char *str)
+void dmsg(const char *str)
 {
     SIMPLELOCK(__dmsg__().sync);
 

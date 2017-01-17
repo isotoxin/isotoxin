@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2013-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2013-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -69,7 +69,13 @@ namespace gloox
     if( m_delay )
       f->addChild( m_delay->tag() );
     if( m_stanza )
-      f->addChild( m_stanza->tag() );
+    {
+      Tag* tmp = m_stanza->tag();
+      if( tmp->name() == "message" )
+        tmp->setXmlns( XMLNS_CLIENT );
+
+      f->addChild( tmp );
+    }
 
     return f;
   }

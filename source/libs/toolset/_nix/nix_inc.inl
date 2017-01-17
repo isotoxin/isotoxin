@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/statvfs.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <pthread.h>

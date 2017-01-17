@@ -2,19 +2,26 @@
 
 //-V::550
 
-__forceinline double fRED( ts::TSCOLOR c )
+#ifdef _MSC_VER
+#define FORCEINLINE __forceinline
+#endif
+#ifdef __GNUC__
+#define FORCEINLINE inline
+#endif
+
+FORCEINLINE double fRED( ts::TSCOLOR c )
 {
     return (double)ts::RED(c) * (1.0/255.0);
 }
-__forceinline double fGREEN(ts::TSCOLOR c)
+FORCEINLINE double fGREEN(ts::TSCOLOR c)
 {
     return (double)ts::GREEN(c) * (1.0 / 255.0);
 }
-__forceinline double fBLUE(ts::TSCOLOR c)
+FORCEINLINE double fBLUE(ts::TSCOLOR c)
 {
     return (double)ts::BLUE(c) * (1.0 / 255.0);
 }
-__forceinline double fALPHA(ts::TSCOLOR c)
+FORCEINLINE double fALPHA(ts::TSCOLOR c)
 {
     return (double)ts::ALPHA(c) * (1.0 / 255.0);
 }
@@ -46,35 +53,35 @@ rsvg_cairo_surface_c::~rsvg_cairo_surface_c()
 void cairo_paths_c::move_to(double x, double y)
 {
     last_move_to_index = (int)paths.size();
-    cairo_path_data_t &data = paths.add();
+    cairo_path_data_t &data = paths.add().pd;
     data.header.type = CAIRO_PATH_MOVE_TO;
     data.header.length = 2;
-    cairo_path_data_t &p = paths.add();
+    cairo_path_data_t &p = paths.add().pd;
     p.point.x = x;
     p.point.y = y;
 }
 
 void cairo_paths_c::close()
 {
-    cairo_path_data_t &data = paths.add();
+    cairo_path_data_t &data = paths.add().pd;
     data.header.type = CAIRO_PATH_CLOSE_PATH;
     data.header.length = 1;
 
     /* Add a 'move-to' element */
     if (last_move_to_index >= 0)
     {
-        const auto &p = paths.get(last_move_to_index + 1).point;
+        const auto &p = paths.get(last_move_to_index + 1).pd.point;
         move_to( p.x, p.y );
     }
 }
 
 void cairo_paths_c::line_to(double x, double y)
 {
-    cairo_path_data_t &data = paths.add();
+    cairo_path_data_t &data = paths.add().pd;
     data.header.type = CAIRO_PATH_LINE_TO;
     data.header.length = 2;
 
-    cairo_path_data_t &p = paths.add();
+    cairo_path_data_t &p = paths.add().pd;
     p.point.x = x;
     p.point.y = y;
 
@@ -219,19 +226,19 @@ void cairo_paths_c::arc_segment( double xc, double yc, float th0, float th1, dou
 
 void cairo_paths_c::curve_to(double x1, double y1, double x2, double y2, double x3, double y3)
 {
-    cairo_path_data_t &data = paths.add();
+    cairo_path_data_t &data = paths.add().pd;
     data.header.type = CAIRO_PATH_CURVE_TO;
     data.header.length = 4;
 
-    cairo_path_data_t &p1 = paths.add();
+    cairo_path_data_t &p1 = paths.add().pd;
     p1.point.x = x1;
     p1.point.y = y1;
 
-    cairo_path_data_t &p2 = paths.add();
+    cairo_path_data_t &p2 = paths.add().pd;
     p2.point.x = x2;
     p2.point.y = y2;
 
-    cairo_path_data_t &p3 = paths.add();
+    cairo_path_data_t &p3 = paths.add().pd;
     p3.point.x = x3;
     p3.point.y = y3;
 }
@@ -246,8 +253,8 @@ void cairo_paths_c::render( const rsvg_stroke_and_fill_s &snf, rsvg_cairo_surfac
 {
     cairo_path_t p;
     p.status = CAIRO_STATUS_SUCCESS;
-    p.data = paths.begin();
-    p.num_data = (int)paths.size();
+    p.data = &paths.begin()->pd;
+    p.num_data = static_cast<int>(paths.size());
 
     cairo_new_path(surf.cr());
     cairo_append_path(surf.cr(), &p);
@@ -277,8 +284,8 @@ void cairo_paths_c::render( const rsvg_stroke_s &snf, rsvg_cairo_surface_c &surf
 {
     cairo_path_t p;
     p.status = CAIRO_STATUS_SUCCESS;
-    p.data = paths.begin();
-    p.num_data = (int)paths.size();
+    p.data = &paths.begin()->pd;
+    p.num_data = static_cast<int>(paths.size());
 
     cairo_new_path(surf.cr());
     cairo_append_path(surf.cr(), &p);

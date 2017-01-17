@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -53,7 +53,9 @@ namespace gloox
       virtual ~UniqueMUCRoom();
 
       // reimplemented from MUCRoom
-      virtual void join();
+      virtual void join(Presence::PresenceType type = Presence::Available,
+          const std::string& status = EmptyString,
+          int priority = 0) override; /* isotoxin.im looks like bad override of join from MUCRoom */
 
     private:
 #ifdef UNIQUEMUCROOM_TEST

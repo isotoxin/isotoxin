@@ -104,6 +104,7 @@
     <ClInclude Include="plgcommon.h" />
     <ClInclude Include="plghost_interface.h" />
     <ClInclude Include="proto_interface.h" />
+    <ClInclude Include="std_lite.h" />
     <ClInclude Include="stkwlk.h" />
     <ClInclude Include="strings.h" />
     <ClInclude Include="stdafx.h" />

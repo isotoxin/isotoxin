@@ -78,14 +78,13 @@ enum temp_contact_type_e
 
 struct contact_key_s
 {
-    MOVABLE( true );
     DUMMY(contact_key_s);
 
     unsigned contactid : 24;        // contact id (0 - conference itself)
     unsigned temp_type : 2;
     unsigned is_self : 1;
     unsigned reserved : 5;          // unused
-    unsigned gid : 16;              // negative conference id ( all conference id's are negative, so gid is inversed conference id )
+    unsigned gid : 16;              // conference id
     unsigned protoid : 16;          // 0 - metacontact. all visible contacts are metacontacts with history and conversation / >0 - protocol contact
 
     explicit contact_key_s( const ts::asptr&s )
@@ -115,14 +114,33 @@ struct contact_key_s
         }
     }
 
-    contact_key_s( int cid_, int ap_ ) :contactid( cid_ ), is_self( 0 ), temp_type( TCT_NONE ), reserved( 0 ), gid( 0 ), protoid( ( ts::uint16 )ap_ )
+    static int cid_as_int(contact_id_s cid)
     {
-        if ( cid_ < 0 )
-            contactid = 0, gid = ( ts::uint16 )( -cid_ );
-        else if ( cid_ == 0 && ap_ != 0 )
-            is_self = 1;
+        ASSERT( cid.is_contact() || cid.is_empty() );
+        return cid.id;
     }
-    contact_key_s( int gid_, int cid_, int ap_ ) :contactid( cid_ ), is_self(0), temp_type( TCT_NONE ), reserved(0), gid( ( ts::uint16 )( -gid_ ) ), protoid( ( ts::uint16 )ap_ ) { ASSERT( gid_ <= 0 ); }
+
+    contact_key_s(contact_id_s gidcid, int ap_ ) :contactid( 0 ), is_self( 0 ), temp_type( TCT_NONE ), reserved( 0 ), gid( 0 ), protoid( static_cast<ts::uint16>(ap_) )
+    {
+        ASSERT(ap_ >= 0 && ap_ < 65536);
+
+        if (gidcid.is_contact())
+        {
+            contactid = cid_as_int(gidcid);
+            if (gidcid.is_self() && ap_ != 0)
+                is_self = 1;
+
+        } else if (gidcid.is_conference())
+            contactid = 0, gid = static_cast<ts::uint16>( gidcid.id );
+    }
+    contact_key_s( contact_id_s gid_, contact_id_s cid_, int ap_ ) :contactid(cid_as_int(cid_)), is_self(0), temp_type( TCT_NONE ), reserved(0),
+        gid( static_cast<ts::uint16>( gid_.id ) ),
+        protoid(static_cast<ts::uint16>(ap_) )
+    {
+        ASSERT(ap_ >= 0 && ap_ < 65536);
+        ASSERT(gid_.is_empty() || (gid_.id >= 0 && gid_.id < 65536 && gid_.is_conference()));
+    }
+
     explicit contact_key_s( bool self = false )
     {
         ts::ref_cast<uint64>( *this ) = 0;
@@ -131,21 +149,7 @@ struct contact_key_s
     }
     contact_key_s( temp_contact_type_e tt, int cid_, int ap_ ) :contactid( (unsigned)cid_ ), is_self( 0 ), temp_type( tt ), reserved( 0 ), gid( 0 ), protoid( ( ts::uint16 )ap_ ) {}
 
-    int gidcid() const;
-
-    contact_key_s conference_key() const
-    {
-        ASSERT( is_conference() || is_conference_member() );
-        ASSERT( gid > 0 );
-        return contact_key_s( -static_cast<int>(gid), 0, protoid );
-    }
-
-    contact_key_s conference_member_key() const
-    {
-        ASSERT( is_conference_member() );
-        return contact_key_s( contactid, protoid );
-    }
-    
+    contact_id_s gidcid() const;
 
     bool is_meta() const {return (protoid == 0 && contactid > 0) && temp_type == TCT_NONE;}
     bool is_conference() const {return (contactid == 0 && protoid > 0 && gid > 0) || temp_type == TCT_CONFERENCE;}
@@ -169,7 +173,7 @@ struct contact_key_s
                 return contact_key_s( TCT_CONFERENCE, high_part, v & 0xffff );
         }
 
-        return contact_key_s( v & 0xffffff, v >> 32 );
+        return contact_key_s(contact_id_s(contact_id_s::CONTACT, v & 0xffffff), v >> 32 );
     }
     int64 dbvalue() const
     {
@@ -202,6 +206,8 @@ struct contact_key_s
     contact_c *find_conference_member( contact_root_c *confa ) const;
 };
 
+DECLARE_MOVABLE(contact_key_s, true);
+
 uint64 operator |( const contact_key_s&root, const contact_key_s &sub );
 
 TS_STATIC_CHECK( sizeof( contact_key_s ) == sizeof(uint64), "keysize!" );
@@ -227,12 +233,16 @@ ts::asptr  calc_message_skin( message_type_app_e mt, const contact_key_s &sender
 // initialization: [POST_INIT]
 struct post_s
 {
-    MOVABLE( true );
     DUMMY(post_s);
     post_s() {}
-#if _USE_32BIT_TIME_T
+
+#ifdef _WIN32
+#if defined _USE_32BIT_TIME_T
 #error "time_t must be 64 bit"
 #endif
+#endif // _WIN32
+
+    TS_STATIC_CHECK( sizeof(time_t) == 8, "time_t must be 64 bit" );
 
     static const int type_size_bits = 8;
     static const int options_size_bits = 8;
@@ -255,8 +265,9 @@ struct post_s
         type = dbval & ( SETBIT( type_size_bits ) - 1 );
         options = ( dbval >> 16 ) & ( SETBIT( options_size_bits ) - 1 );
     }
-
 };
+
+DECLARE_MOVABLE(post_s, true)
 
 struct avatar_s : public ts::bitmap_c
 {
@@ -270,7 +281,8 @@ struct avatar_s : public ts::bitmap_c
 template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
 {
     gmsg() :gmsgbase(ISOGM_UPDATE_CONTACT) {}
-    contact_key_s key;
+    contact_id_s key;
+    ts::uint16 apid;
     int mask;
     ts::str_c pubid;
     ts::str_c name;
@@ -282,7 +294,8 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
     contact_gender_e gender = CSEX_UNKNOWN;
     int grants = -1;
 
-    ts::tbuf0_t<int> members;
+    ts::tbuf0_t<contact_id_s> members;
+    ts::blob_c pdata;
 };
 
 template<> struct gmsg<ISOGM_PEER_STREAM_OPTIONS> : public gmsgbase
@@ -346,6 +359,8 @@ enum reselect_options_e
 
 //-V:options():807
 
+#define FPROTOCALL( fname, ... ) do { if (active_protocol_c *ap = prf().ap(getkey().protoid)) { ap->fname(getkey().gidcid(), ## __VA_ARGS__); } } while(false)
+
 class gui_contact_item_c;
 struct contacts_s;
 class contact_root_c;
@@ -363,6 +378,7 @@ class contact_c : public ts::shared_object
     ts::str_c statusmsg;
     ts::str_c details;
     UNIQUE_PTR( avatar_s ) avatar;
+    ts::blob_c protodata;
 
     // TODO: lower memory usage: use bits
     contact_state_e state = CS_OFFLINE;
@@ -383,12 +399,13 @@ public:
     static const ts::flags32_s::BITS F_SYSTEM_USER  = SETBIT(4);
 
     // not saved
+    static const ts::flags32_s::BITS F_ALLOWACCEPTDATA = SETBIT(21);
     static const ts::flags32_s::BITS F_HISTORY_NEED_LOAD = SETBIT(22);
     static const ts::flags32_s::BITS F_JUST_REJECTED = SETBIT(23);
     static const ts::flags32_s::BITS F_JUST_ACCEPTED = SETBIT(24);
     static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(25);
     static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(26);
-    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
+    static const ts::flags32_s::BITS F_VIDEOCALL = SETBIT(27); // valid only when F_CALLTONE
     static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
     static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
     static const ts::flags32_s::BITS F_RINGTONE = SETBIT(30);
@@ -418,9 +435,6 @@ public:
     void redraw();
     void redraw(float delay);
 
-    bool is_protohit( bool strong );
-    void protohit(bool f);
-
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; }; // meta, but not conference
     bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_conference() || (getkey().protoid == 0 && getkey().is_self)); } // root contact - in contact list
 
@@ -437,6 +451,8 @@ public:
 
     contact_root_c *getmeta() {return metacontact;}
     const contact_root_c *getmeta() const {return metacontact;}
+
+    void detach();
 
     const contact_root_c *get_historian() const;
     contact_root_c *get_historian();
@@ -469,6 +485,9 @@ public:
     contact_state_e get_state() const {return state;}
     contact_online_state_e get_ostate() const {return ostate;}
     contact_gender_e get_gender() const {return gender;}
+
+    const ts::blob_c &get_protodata() const { return protodata; }
+    bool set_protodata(const ts::blob_c &d);
 
     bool authorized() const { return get_state() == CS_OFFLINE || get_state() == CS_ONLINE; }
 
@@ -516,8 +535,25 @@ typedef ts::array_shared_t<contact_c, 8> contacts_array_t;
 
 struct conference_s;
 
+enum calltone_e
+{
+    CALLTONE_HANGUP,
+    CALLTONE_CALL_ACCEPTED,
+    CALLTONE_VOICE_CALL,
+    CALLTONE_VIDEO_CALL,
+};
+
+enum why_this_subget_e
+{
+    WTS_ONLY_ONE,
+    WTS_MARKED_DEFAULT,
+    WTS_BY_LAST_ACTIVITY,
+};
+
 class contact_root_c : public contact_c // metas and conferences
 {
+    typedef contact_c super;
+
     DUMMY(contact_root_c);
     ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
 
@@ -562,7 +598,7 @@ public:
     
     bool ringtone( contact_c *sub, bool activate = true, bool play_stop_snd = true);
     void av( contact_c *sub, bool f, bool video);
-    bool calltone( contact_c *sub, bool f = true, bool call_accepted = false);
+    bool calltone( contact_c *sub, calltone_e ctt ); // returns video flag on call accepted
 
     bool hasproto(int apid) const
     {
@@ -611,8 +647,8 @@ public:
         return subcontacts.get(indx);
     }
 
-    contact_c * subget_default() const;
-    contact_c * subget_for_send() const;
+    contact_c * subget_only_marked_defaul() const;
+    contact_c * subget_smart(why_this_subget_e &why) const;
     void subactivity(const contact_key_s &ck);
 
     void subadd(contact_c *c);
@@ -672,7 +708,7 @@ public:
 
     time_t nowtime() const
     {
-        time_t time = now();
+        time_t time = ts::now();
         if (history.size() && history.last()->recv_time >= time) time = history.last()->recv_time + 1;
         return time;
     }
@@ -685,7 +721,8 @@ public:
 
     bool b_load( RID, GUIPARAM );
     
-    void del_history( uint64 utag );
+    void del_history(); // all
+    void del_history(uint64 utag);
 
     post_s* add_history_unsafe()
     {
@@ -956,7 +993,9 @@ template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 template<> struct gmsg<ISOGM_INCOMING_MESSAGE> : public gmsgbase
 {
     gmsg() :gmsgbase(ISOGM_INCOMING_MESSAGE) {}
-    contact_key_s sender;
+    contact_id_s gid;
+    contact_id_s cid;
+    ts::uint16 apid;
     time_t create_time;
     message_type_app_e mt;
     ts::str_c msgutf8;
@@ -1040,7 +1079,7 @@ class contacts_c
 {
     friend struct contact_key_s;
 
-    GM_RECEIVER(contacts_c, ISOGM_PROFILE_TABLE_LOADED);
+    GM_RECEIVER(contacts_c, ISOGM_PROFILE_TABLE_SL );
     GM_RECEIVER(contacts_c, ISOGM_UPDATE_CONTACT);
     GM_RECEIVER(contacts_c, ISOGM_INCOMING_MESSAGE);
     GM_RECEIVER(contacts_c, ISOGM_FILE);
@@ -1050,7 +1089,8 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_AVATAR);
     GM_RECEIVER(contacts_c, GM_UI_EVENT);
     GM_RECEIVER(contacts_c, ISOGM_PROTO_CRASHED);
-    
+    GM_RECEIVER(contacts_c, ISOGM_PROTO_LOADED);
+
     ts::tbuf_t<contact_key_s> activity; // last active historian at end of array
     contacts_array_t arr;
     ts::shared_ptr<contact_root_c> self;
@@ -1136,7 +1176,7 @@ public:
 
     void kill(const contact_key_s &ck, bool kill_with_history = false);
 
-    void update_roots( bool only_confas = false );
+    void update_roots();
 
     void change_key( const contact_key_s &oldkey, const contact_key_s &newkey );
 
@@ -1146,7 +1186,7 @@ public:
     template <typename R> void iterate_proto_contacts( R r, int proto = 0 )
     {
         for( contact_c *c : arr )
-            if (!c->is_meta())
+            if (!c->is_meta() && c->getkey().protoid)
                 if (proto == 0 || static_cast<ts::uint16>(proto) == c->getkey().protoid)
                     if (!r( c )) break;
     }

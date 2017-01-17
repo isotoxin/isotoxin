@@ -65,8 +65,6 @@ struct menu_anchor_s
 
 class RID
 {
-    MOVABLE( true );
-
     enum rid_e
     {
         EMPTY,
@@ -79,16 +77,16 @@ public:
     int index() const { return id - 1; }
     explicit operator bool() const { return id != EMPTY; }
 
-    bool operator==(const RID&or) const { return id == or.id; }
-    bool operator!=(const RID&or) const { return id != or.id; }
+    bool operator==(RID r) const { return id == r.id; }
+    bool operator!=(RID r) const { return id != r.id; }
 
     // check parent-child relations, not compare
-    bool operator>(const RID&or) const; // true if [this] is direct parent of [or]
-    bool operator>>(const RID&or) const; // true if [or] is child of [*] that is child of [this]
-    bool operator>>=(const RID&or) const { return or == *this || (*this >> or); } // true if [or] is child of [*] that is child of [this]
+    bool operator>(RID r) const; // true if [this] is direct parent of [or]
+    bool operator>>(RID r) const; // true if [or] is child of [*] that is child of [this]
+    bool operator>>=(RID r) const { return r == *this || (*this >> r); } // true if [or] is child of [*] that is child of [this]
 
     // compare for sort
-    bool operator<(const RID&or) const;
+    bool operator<(RID r) const;
 
     static RID from_param(GUIPARAM p)
     {
@@ -115,6 +113,8 @@ public:
     void        call_enable(bool enableflg) const;
 };
 
+DECLARE_MOVABLE( RID, true )
+
 INLINE unsigned calc_hash( RID r )
 {
     return r.index();
@@ -130,28 +130,6 @@ INLINE GUIPARAM as_param(GUIPARAM v)
 INLINE GUIPARAM as_param(RID r)
 {
     return r.to_param();
-}
-
-template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, RID r)
-{
-    dl.begin();
-    if (r)
-    {
-        dl.raw_append("RID=[");
-        dl << ts::ref_cast<int>(r);
-        ts::wstr_c n = HOLD(r)().get_name();
-        if (!n.is_empty())
-        {
-            dl << ',';
-            dl << n;
-        }
-        dl << ']';
-    }
-    else
-    {
-        dl.raw_append("RID=[]");
-    }
-    return dl;
 }
 
 void fixrect(ts::irect &r, const ts::ivec2 &minsz, const ts::ivec2 &maxsz, ts::uint32 hitarea);
@@ -202,7 +180,7 @@ bool check_always_ok_except_empty(const ts::wstr_c &, bool);
 void text_remove_tags(ts::str_c &text_utf8);
 ts::str_c text_remove_cstm(const ts::str_c &text_utf8);
 
-#define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ttt; } )
+#define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ts::wstr_c(ttt); } )
 
 INLINE void make_color(ts::str_c &s, ts::TSCOLOR c)
 {
@@ -249,9 +227,8 @@ struct process_animation_s
 class rectengine_root_c;
 class animation_c
 {
-    struct redraw_request_s
+    struct redraw_request_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::safe_ptr<rectengine_root_c> engine;
         ts::irect rr;
     };

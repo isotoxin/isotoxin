@@ -223,7 +223,7 @@ void Player::SetListenerParameters(const float pos[3], const float front[3], con
 
 void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, LPVOID lpContext)
 {
-    typedef BOOL __stdcall device_enum_callback_win32( GUID *lpGuid, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext );
+    typedef BOOL __stdcall device_enum_callback_win32( GUID *lpGuid, const wchar *lpcstrDescription, const wchar *lpcstrModule, void *lpContext );
     DirectSoundEnumerateW((device_enum_callback_win32 *)lpDSEnumCallback,lpContext);
 }
 
@@ -232,4 +232,4 @@ void Update()
     Source::autoDeleteSources();
 }
 
-}
+} // namespace s3

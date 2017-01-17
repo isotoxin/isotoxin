@@ -54,5 +54,8 @@
     <ClCompile Include="rsvg.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="tests.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

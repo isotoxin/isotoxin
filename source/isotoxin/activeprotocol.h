@@ -1,5 +1,7 @@
 #pragma once
 
+#define NUMTICKS_COUNTDOWN_UNLOAD 6
+
 struct proxy_settings_s
 {
     int proxy_type = 0;
@@ -41,17 +43,32 @@ public:
     // protocol will handle these fields itself
     proxy_settings_s proxy;
     int server_port = 0;
-    bool ipv6_enable = true;
-    bool udp_enable = true;
-    bool initialized = false;
+
+#define COPDEF( n, dv ) unsigned n : 1;
+    CONN_OPTIONS
+#undef COPDEF
+
+    unsigned initialized : 1;
 
     bool operator != (const configurable_s &o) const
     {
-        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || ipv6_enable != o.ipv6_enable || udp_enable != o.udp_enable ||
-            login != o.login | password != o.password;
+        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port ||
+            
+#define COPDEF( n, dv ) n != o.n ||
+        CONN_OPTIONS
+#undef COPDEF
+
+            login != o.login || password != o.password;
     }
-    configurable_s() {}
-    configurable_s(const configurable_s &c)
+    configurable_s()
+    {
+#define COPDEF( n, dv ) n = dv;
+        CONN_OPTIONS
+#undef COPDEF
+            
+        initialized = 0;
+    }
+    configurable_s(const configurable_s &c):initialized(0)
     {
         *this = c;
     }
@@ -64,9 +81,12 @@ public:
         if (!c.initialized) return *this;
         proxy = c.proxy;
         server_port = c.server_port;
-        ipv6_enable = c.ipv6_enable;
-        udp_enable = c.udp_enable;
-        initialized = true;
+
+#define COPDEF( n, dv ) n = c.n;
+        CONN_OPTIONS
+#undef COPDEF
+
+        initialized = 1;
         return *this;
     }
 
@@ -79,7 +99,6 @@ public:
 
 struct active_protocol_data_s
 {
-    MOVABLE( true );
     ts::str_c tag;
     ts::str_c name; // utf8
     ts::str_c user_name; // utf8
@@ -107,6 +126,8 @@ struct sync_data_s
     ts::flags32_s flags;
     contact_online_state_e manual_cos = COS_ONLINE;
     cmd_result_e current_state;
+    int cbits = 0;
+    int reconnect_in = 0;
 
     const ts::str_c &getstr( info_string_e s ) const
     {
@@ -128,43 +149,54 @@ struct avatar_restrictions_s
 
 class active_protocol_c : public ts::safe_object
 {
-    GM_RECEIVER( active_protocol_c, ISOGM_PROFILE_TABLE_SAVED );
-    GM_RECEIVER( active_protocol_c, ISOGM_MESSAGE);
-    GM_RECEIVER( active_protocol_c, ISOGM_CHANGED_SETTINGS);
-    GM_RECEIVER( active_protocol_c, GM_HEARTBEAT);
-    GM_RECEIVER( active_protocol_c, ISOGM_CMD_RESULT);
-    GM_RECEIVER( active_protocol_c, GM_UI_EVENT);
-    
+    GM_RECEIVER(active_protocol_c, ISOGM_PROFILE_TABLE_SL);
+    GM_RECEIVER(active_protocol_c, ISOGM_MESSAGE);
+    GM_RECEIVER(active_protocol_c, ISOGM_CHANGED_SETTINGS);
+    GM_RECEIVER(active_protocol_c, GM_HEARTBEAT);
+    GM_RECEIVER(active_protocol_c, ISOGM_CMD_RESULT);
+    GM_RECEIVER(active_protocol_c, GM_UI_EVENT);
+
     int id;
     int priority = 0;
     int indicator = 0;
     int features = 0;
     int conn_features = 0;
+
+    int countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
+
     avatar_restrictions_s arest;
     s3::Format audio_fmt;
     isotoxin_ipc_s * volatile ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
     ts::Time lastconfig;
     ts::Time typingtime = ts::Time::past();
-    int typingsendcontact = 0;
+    contact_id_s typingsendcontact;
 
     time_t last_backup_time = 0;
 
     spinlock::long3264 lbsync = 0;
     ts::pointers_t<data_header_s,0> locked_bufs;
 
-    static const ts::flags32_s::BITS F_DIP                  = SETBIT(0);
-    static const ts::flags32_s::BITS F_WORKER               = SETBIT(1);
-    static const ts::flags32_s::BITS F_CONFIG_OK            = SETBIT(2);
-    static const ts::flags32_s::BITS F_CONFIG_FAIL          = SETBIT(3);
-    static const ts::flags32_s::BITS F_SAVE_REQUEST         = SETBIT(4);
-    static const ts::flags32_s::BITS F_CONFIG_UPDATED       = SETBIT(5);
-    static const ts::flags32_s::BITS F_CFGSAVE_CHECKER      = SETBIT(6);
-    static const ts::flags32_s::BITS F_CONFIGURABLE_RCVD    = SETBIT(7);
-    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(8);
-    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(9);
-    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(10);
-    static const ts::flags32_s::BITS F_WORKER_STOPED        = SETBIT(11);
+    NUMGEN_START(fff, 0);
+#define DECLAREBIT( fn ) static const ts::flags32_s::BITS fn = SETBIT(NUMGEN_NEXT(fff))
+
+    DECLAREBIT(F_DIP);
+    DECLAREBIT(F_WORKER);
+    DECLAREBIT(F_WORKER_STOP);
+    DECLAREBIT(F_WORKER_STOPED);
+    DECLAREBIT(F_CONFIG_OK);
+    DECLAREBIT(F_CONFIG_FAIL);
+    DECLAREBIT(F_SAVE_REQUEST);
+    DECLAREBIT(F_CONFIG_UPDATED);
+    DECLAREBIT(F_CFGSAVE_CHECKER);
+    DECLAREBIT(F_CONFIGURABLE_RCVD);
+    DECLAREBIT(F_ONLINE_SWITCH);
+    DECLAREBIT(F_SET_PROTO_OK);
+    DECLAREBIT(F_CURRENT_ONLINE);
+    DECLAREBIT(F_NEED_SEND_CONFIGURABLE); // wait for restore plugin process and send config
+    DECLAREBIT(F_CLEAR_ICON_CACHE);
+
+#undef DECLAREBIT
 
     struct tlm_statistic_s
     {
@@ -236,19 +268,21 @@ public:
         protocol_description_s d;
         d.connection_features = conn_features;
         d.features = features;
-        d.strings = syncdata.lock_read()( ).strings;
+        d.strings = syncdata.lock_read()().strings;
         return d;
     }
 
     const ts::str_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
     const ts::str_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
-    
+
     configurable_s get_configurable() const { return syncdata.lock_read()().data.configurable; };
     void set_configurable( const configurable_s &c, bool force_send = false );
+    void send_configurable(const configurable_s &c);
 
     const s3::Format& defaudio() const {return audio_fmt;}
 
     const ts::bitmap_c &get_icon(int sz, icon_type_e icot);
+    void clear_icon_cache() { syncdata.lock_write()().flags.set(F_CLEAR_ICON_CACHE); }
 
     bool set_current_online(bool oflg)
     {
@@ -258,7 +292,13 @@ public:
         return ofv != oflg;
     }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
-    cmd_result_e get_current_state() const { return syncdata.lock_read()().current_state; }
+    cmd_result_e get_current_state(int &reconnect_in) const
+    {
+        auto r = syncdata.lock_read();
+        reconnect_in = r().reconnect_in;
+        return r().current_state;
+    }
+    int get_connection_bits() const { return syncdata.lock_read()().cbits; }
 
     int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }
     void set_sortfactor(int sf);
@@ -279,38 +319,39 @@ public:
 
     void del_message( uint64 utag );
 
-    void join_conference(int gid, int cid);
-    void rename_conference(int gid, const ts::str_c &confaname);
+    void join_conference(contact_id_s gid, contact_id_s cid);
+    void rename_conference(contact_id_s gid, const ts::str_c &confaname);
     void create_conference( const ts::str_c &confaname, const ts::str_c &o );
     void del_conference( const ts::str_c &confa_id );
     void enter_conference( const ts::str_c &confa_id );
-    void leave_conference( int gid, bool keep_leave );
-    void resend_request( int cid, const ts::str_c &msg_utf8 );
+    void leave_conference(contact_id_s gid, bool keep_leave );
+    void resend_request(contact_id_s cid, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id ); // without authorization
     void del_contact(const contact_key_s &ck);
-    void accept(int cid);
-    void reject(int cid);
+    void accept(contact_id_s cid);
+    void reject(contact_id_s cid);
+    void send_proto_data(contact_id_s cid, const ts::blob_c &pdata);
 
     void refresh_details( const contact_key_s &ck );
 
     void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
-    void accept_call(int cid);
-    void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );
-    void send_audio(int cid, const void *data, int size, uint64 timestamp );
-    void call(int cid, int seconds);
-    void stop_call(int cid);
-    void set_stream_options(int cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recommended video resolution (if I see video in 320x240, why you send 640x480?)
+    void accept_call(contact_id_s cid);
+    void send_video_frame(contact_id_s cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );
+    void send_audio(contact_id_s cid, const void *data, int size, uint64 timestamp );
+    void call(contact_id_s cid, int seconds, bool videocall);
+    void stop_call(contact_id_s cid);
+    void set_stream_options(contact_id_s cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recommended video resolution (if I see video in 320x240, why you send 640x480?)
 
     void file_accept( uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);
-    void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
+    void send_file(contact_id_s cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
     bool file_portion(uint64 utag, uint64 offset, const void *data, ts::aint sz);
 
-    void avatar_data_request(int cid);
+    void avatar_data_request(contact_id_s cid);
 
     void typing( const contact_key_s &ck );
-    
+
     void export_data();
     void reset_data();
     void change_data( const ts::blob_c &b, bool is_native );

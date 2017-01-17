@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+ * Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
  * This file is part of the gloox library. http://camaya.net/gloox
  *
  * This software is distributed under a license. The full license
@@ -45,7 +45,10 @@ namespace gloox
   void ConnectionTLS::setConnectionImpl( ConnectionBase* connection )
   {
     if( m_connection )
+    {
       m_connection->registerConnectionDataHandler( 0 );
+      delete m_connection;
+    }
 
     m_connection = connection;
 

@@ -38,9 +38,10 @@ public:
         unsigned state : 4;
         unsigned inactive : 1; // true - selected other av contact
         unsigned dirty_cam_size : 1;
+        unsigned mute : 1;
 
         int cur_so() const { return inactive ? ( so & ~( SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO ) ) : so; }
-        ccore_s( contact_root_c *c, state_e st ):c(c), state(st) {}
+        ccore_s( contact_root_c *c, state_e st ):c(c), state(st), mute(0) {}
 
     };
     ts::shared_ptr<ccore_s> core;
@@ -105,7 +106,7 @@ class av_contacts_c
 {
     GM_RECEIVER( av_contacts_c, ISOGM_PEER_STREAM_OPTIONS );
 
-    spinlock::long3264 sync = 0;
+    volatile mutable spinlock::long3264 sync = 0;
     ts::array_del_t< av_contact_s, 0 > m_contacts;
 
     struct so_s
@@ -145,8 +146,16 @@ public:
     void del( contact_root_c *c ); // del by root
     void del( int tag ); // del by tag
     void del( active_protocol_c *ap ); // del by ap
-    template<typename R> void iterate( const R &r ) const { for ( const av_contact_s *avc : m_contacts ) r( *avc ); }
-    template<typename R> void iterate( const R &r ) { for ( av_contact_s *avc : m_contacts ) r( *avc ); }
+    template<typename R> void iterate( const R &r ) const 
+    {
+        SIMPLELOCK(sync);
+        for ( const av_contact_s *avc : m_contacts ) r( *avc );
+    }
+    template<typename R> void iterate( const R &r )
+    {
+        SIMPLELOCK(sync);
+        for ( av_contact_s *avc : m_contacts ) r( *avc );
+    }
     void stop_all_av();
     void clear();
 

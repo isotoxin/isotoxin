@@ -6,14 +6,11 @@ ts::uint32 desktop_rect_c::gm_handler( gmsg<GM_HEARTBEAT> & )
 
     if ( 0 != ( checktick & 1 ) && !getprops().is_maximized() )
     {
-        ts::irect cmrect = ts::wnd_get_max_size( rrect );
-        if ( cmrect != mrect || getprops().screenrect() != rrect )
-        {
-            ts::ivec2 newc = rrect.center() - mrect.center() + cmrect.center();
-            ts::irect newr = ts::irect::from_center_and_size( newc, rrect.size() );
-            newr.movein( cmrect );
+        ts::irect curmrect;
+        ts::monitor_find_max_sz(rrect, curmrect);
+        ts::irect newr = correct_rect_by_maxrect( mrect, curmrect, rrect, getprops().screenrect() != rrect );
+        if (newr != getprops().screenrect() )
             MODIFY( *this ).pos( newr.lt ).size( newr.size() );
-        }
     }
     ++checktick;
 
@@ -45,11 +42,10 @@ ts::uint32 desktop_rect_c::gm_handler( gmsg<GM_UI_EVENT> &ue )
     return name;
 }
 
-
 namespace
 {
-
     class conv_host_c;
+}
     template<> struct MAKE_ROOT<conv_host_c> : public _PROOT( conv_host_c )
     {
         ts::irect rect;
@@ -59,10 +55,13 @@ namespace
         ~MAKE_ROOT() { }
     };
 
+namespace
+{
 
     class conv_host_c : public desktop_rect_c
     {
         DUMMY( conv_host_c );
+        typedef desktop_rect_c super;
 
         ts::safe_ptr<mainrect_c> mr;
         ts::shared_ptr<contact_root_c> contact;
@@ -85,7 +84,7 @@ namespace
                 dialog_msgbox_c::mb_warning( TTT( "There are call with $[br]What do you want to do with this call?", 482 ) / from_utf8( nn ) ).bcancel()
                     .bcustom( true, TTT( "Break", 483 ) )
                     .bok( TTT( "Don't break", 484 ) )
-                    .on_ok( DELEGATE( this, custom_close ), CONSTASTR( "1" ) ).on_custom( DELEGATE( this, custom_close ), CONSTASTR( "0" ) ).summon( true );
+                    .on_ok(DELEGATE(this, custom_close), ts::str_c(CONSTASTR("1"))).on_custom(DELEGATE(this, custom_close), ts::str_c(CONSTASTR("0"))).summon(true);
             } else
             {
                 close_me(RID(), nullptr);
@@ -144,14 +143,14 @@ namespace
         {
             defaultthrdraw = DTHRO_BORDER | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
             set_theme_rect( CONSTASTR( "mainrect" ), false );
-            __super::created();
+            super::created();
 
             bcreate_s cbs[2];
             cbs[0].handler = DELEGATE( this, close_me_chk );
             cbs[0].tooltip = ( GET_TOOLTIP )[]()->ts::wstr_c { return ts::wstr_c(TTT("Close",481)); };
 
             cbs[1].handler = DELEGATE( this, min_me );
-            cbs[1].tooltip = ( GET_TOOLTIP )[]()->ts::wstr_c { return loc_text( loc_minimize ); };
+            cbs[1].tooltip = (GET_TOOLTIP)[]()->ts::wstr_c { return ts::wstr_c(loc_text(loc_minimize)); };
 
             gui->make_app_buttons( m_rid, 0xffffffff, cbs + 0, cbs + 1 );
 
@@ -175,7 +174,7 @@ namespace
             ts::astrmap_c d( cfg().convs() );
 
             ts::str_c s;
-            config_base_c::cvts<ts::irect>::cvt( true, s, getprops().screenrect() );
+            cvt::cvts<ts::irect>::cvt( true, s, getprops().screenrect() );
             d.set( contact->getkey().as_str() ) = s;
             cfg().convs( d.to_str() );
         }
@@ -185,12 +184,6 @@ namespace
             onclosesave();
             return true;
         }
-
-        //GM_RECEIVER( conv_host_c, ISOGM_CHANGED_SETTINGS )
-        //{
-
-        //    return 0;
-        //}
 
         ts::safe_ptr<gui_conversation_c> conv;
         ts::bitmap_c icon, desktopicon;
@@ -240,7 +233,7 @@ namespace
             };
 
             contact->subiterate( [&]( contact_c *c ) {
-       
+
                 if ( emptyitag )
                 {
                     itag.cs = csfix( c->get_state() );
@@ -295,7 +288,8 @@ namespace
         conv_host_c( MAKE_ROOT<conv_host_c> &data ):desktop_rect_c(data), mr(data.mr), contact(data.c)
         {
             rrect = data.rect;
-            mrect = cfg().get<ts::irect>( CONSTASTR( "main_rect_monitor" ), ts::wnd_get_max_size( data.rect ) );
+            ts::monitor_find_max_sz(data.rect, mrect);
+            mrect = cfg().get<ts::irect>( CONSTASTR( "main_rect_monitor" ), mrect );
         }
         ~conv_host_c()
         {
@@ -325,8 +319,8 @@ namespace
                 cfg().onclosereg( DELEGATE( this, onclosesave ) );
                 if ( data.changed.manual )
                 {
-                    rrect = getprops().screenrect();
-                    mrect = ts::wnd_get_max_size( rrect );
+                    rrect = getprops().screenrect(false);
+                    ts::monitor_find_max_sz( rrect, mrect );
                     DEFERRED_UNIQUE_CALL( 1.0, DELEGATE( this, saverectpos ), nullptr );
                 }
             }
@@ -348,7 +342,7 @@ namespace
                 return false;
             }
 
-            if ( __super::sq_evt( qp, rid, data ) ) return true;
+            if (super::sq_evt( qp, rid, data ) ) return true;
 
             switch ( qp )
             {
@@ -386,16 +380,13 @@ namespace
 
 
 
-
-
-
 mainrect_c::mainrect_c(MAKE_ROOT<mainrect_c> &data):desktop_rect_c(data)
 {
     rrect = data.rect;
     mrect = cfg().get<ts::irect>( CONSTASTR("main_rect_monitor"), ts::wnd_get_max_size(data.rect) );
 }
 
-mainrect_c::~mainrect_c() 
+mainrect_c::~mainrect_c()
 {
     if (gui) gui->delete_event( DELEGATE(this,saverectpos) );
     cfg().onclosedie( DELEGATE(this, onclosesave) );
@@ -403,7 +394,7 @@ mainrect_c::~mainrect_c()
 
 ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 {
-    if (g_app->F_MODAL_ENTER_PASSWORD) return 0;
+    if (g_app->F_MODAL_ENTER_PASSWORD()) return 0;
 
     if (getprops().is_collapsed())
         MODIFY(*this).decollapse();
@@ -439,11 +430,11 @@ ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
         ts::buf_c b;
         b.load_from_disk_file( ts::get_exe_full_name() );
         long sz;
-        wchar_t bx[ 32 ];
-        wchar_t * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>( bx, sz, b.crc() );
+        ts::wchar bx[ 32 ];
+        ts::wchar * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>( bx, sz, b.crc() );
         n.append( ts::wsptr(t) );
 #endif // _DEBUG
-        
+
     }
     return name;
 }
@@ -452,12 +443,12 @@ ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
     defaultthrdraw = DTHRO_BORDER | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
     set_theme_rect(CONSTASTR("mainrect"), false);
-    __super::created();
+    super::created();
     gui->make_app_buttons(m_rid);
 
-    apply_ui_mode( g_app->F_SPLIT_UI );
+    apply_ui_mode(g_app->F_SPLIT_UI());
 
-    g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
+    g_app->F_ALLOW_AUTOUPDATE(!g_app->F_READONLY_MODE());
 
     rebuild_icons();
 }
@@ -514,7 +505,7 @@ RID mainrect_c::create_new_conv( contact_root_c *c )
         .pos( defconvc.lt )
         .allow_move_resize()
         .show()
-        .maximize( false );
+        .dock( false, false );
 
     return ch.getrid();
 }
@@ -632,7 +623,7 @@ void mainrect_c::onclosesave()
     cfg().param(CONSTASTR("main_rect_pos"), ts::amake<ts::ivec2>(rrect.lt));
     cfg().param(CONSTASTR("main_rect_size"), ts::amake<ts::ivec2>(rrect.size()));
     cfg().param(CONSTASTR("main_rect_monitor"), ts::amake<ts::irect>(mrect));
-    cfg().param( CONSTASTR( "main_rect_fs" ), getprops().is_maximized() ? "1" : "0" );
+    cfg().param(CONSTASTR("main_rect_dock"), ts::amake(getprops().get_dock()));
 }
 
 bool mainrect_c::saverectpos(RID,GUIPARAM)
@@ -650,8 +641,8 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
         cfg().onclosereg( DELEGATE(this, onclosesave) );
         if (data.changed.manual)
         {
-            rrect = getprops().screenrect();
-            mrect = ts::wnd_get_max_size(rrect);
+            rrect = getprops().screenrect(false);
+            ts::monitor_find_max_sz(rrect, mrect);
             DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this,saverectpos), nullptr );
         }
     }
@@ -661,7 +652,7 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
         return false;
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
 	switch( qp )
 	{
@@ -670,7 +661,7 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
 		if (icons.info().sz.x > 0)
         {
             ts::irect cr = tr->captionrect( getprops().currentszrect(), getprops().is_maximized() );
-            int st = g_app->F_OFFLINE_ICON ? contact_online_state_check : contacts().get_self().get_ostate();
+            int st = g_app->F_OFFLINE_ICON() ? contact_online_state_check : contacts().get_self().get_ostate();
             ts::irect ir;
             ir.lt.x = 0;
             ir.rb.x = icons.info().sz.x;
@@ -707,3 +698,51 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
     return false;
 }
 
+
+
+
+MAKE_ROOT<desktop_shade_c>::~MAKE_ROOT()
+{
+    MODIFY(*me).pos(r.lt).size(r.size()).opacity(0.1960784314f).visible(true);
+}
+
+desktop_shade_c::desktop_shade_c(MAKE_ROOT<desktop_shade_c> &data) :gui_control_c(data)
+{
+}
+
+desktop_shade_c::~desktop_shade_c()
+{
+}
+
+/*virtual*/ void desktop_shade_c::created()
+{
+    set_theme_rect(CONSTASTR("desktopgrab"), false);
+    super::created();
+}
+
+/*virtual*/ bool desktop_shade_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (rid != getrid()) return false;
+
+    switch (qp)
+    {
+    case SQ_DRAW:
+        super::sq_evt(qp, rid, data);
+
+        {
+            getengine().begin_draw();
+            getengine().draw(get_client_area(), get_default_text_color(0));
+            getengine().end_draw();
+        }
+        return true;
+    break;
+    }
+
+    return super::sq_evt(qp, rid, data);
+}
+
+desktop_shade_c &desktop_shade_c::summon(const ts::irect &r)
+{
+    MAKE_ROOT<desktop_shade_c> g(r);
+    return g;
+}

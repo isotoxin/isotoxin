@@ -16,7 +16,7 @@ dialog_metacontact_c::~dialog_metacontact_c()
 /*virtual*/ void dialog_metacontact_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 
 }
@@ -28,7 +28,7 @@ dialog_metacontact_c::~dialog_metacontact_c()
 
 void dialog_metacontact_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
     if (bcr.tag == 1)
     {
         bcr.btext = TTT("Create metacontact",149);
@@ -120,7 +120,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
 
 /*virtual*/ bool dialog_metacontact_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -176,11 +176,8 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     });
     prf().dirtycontact( basec->getkey() );
     if (basec->gui_item)
-    {
-        basec->gui_item->protohit();
         basec->gui_item->update_text();
-    }
     basec->reselect();
-    __super::on_confirm();
+    super::on_confirm();
 }
 

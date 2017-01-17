@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="toolset" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Option virtualFolders="src/;src/_nix/;src/internal/;src/internal/asm/;" />
+		<Build>
+			<Target title="Debug">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../$(PROJECT_NAME)d" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-Wall" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+					<Add option="-D_NIX" />
+					<Add directory="$(PROJECTDIR)" />
+					<Add directory="/usr/include/freetype2" />
+					<Add directory="$(PROJECTDIR)/../../libs-external/libqrencode/src" />
+					<Add directory="$(PROJECTDIR)/../../libs-external/zlib/src" />
+					<Add directory="$(PROJECTDIR)/../../libs-external" />
+					<Add directory="$(PROJECTDIR)/../" />
+				</Compiler>
+				<Linker>
+					<Add option="-m64" />
+				</Linker>
+			</Target>
+			<Target title="Final">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../$(PROJECT_NAME)" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-O3" />
+					<Add option="-Wall" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-D_FINAL" />
+					<Add option="-DNDEBUG" />
+					<Add option="-D_NIX" />
+					<Add directory="$(PROJECTDIR)" />
+					<Add directory="$(PROJECTDIR)/../../libs-external/freetype/include" />
+					<Add directory="$(PROJECTDIR)/../../libs-external/libqrencode/src" />
+					<Add directory="$(PROJECTDIR)/../../libs-external/zlib/src" />
+					<Add directory="$(PROJECTDIR)/../../libs-external" />
+					<Add directory="$(PROJECTDIR)/../" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-m64" />
+				</Linker>
+			</Target>
+		</Build>
+		<Unit filename="_nix/nix_bitmap.inl">
+			<Option virtualFolder="src/_nix/" />
+		</Unit>
+		<Unit filename="_nix/nix_common.inl">
+			<Option virtualFolder="src/_nix/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="_nix/nix_inc.inl">
+			<Option virtualFolder="src/_nix/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="_nix/nix_master.inl">
+			<Option virtualFolder="src/_nix/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="asm/a64_resample_yasm_linux.asm">
+			<Option virtualFolder="src/internal/asm/" />
+			<Option compiler="null" use="1" buildCommand="yasm -f x64 -m amd64 $file -o $object\n" />
+			<Option compiler="gcc" use="1" buildCommand="yasm -f x64 -m amd64 $file -o $object" />
+		</Unit>
+		<Unit filename="internal/convert.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/cpu_detector.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/cpu_detector.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/excpn.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/excpn.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/fourcc.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/glyphscache.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/glyphscache.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/imageformat.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/imageformat_bmp.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/imageformat_dds.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/imageformat_gif.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/imageformat_jpg.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/imageformat_png.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/imageformat_tga.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/lnkreader.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/math.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/pixmap.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/platform.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/rapidxml.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/rapidxml_iterators.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/resample.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/resample.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/rotate.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/sharpen.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/stkwlk.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/stkwlk.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/textparser.cpp">
+			<Option virtualFolder="src/internal/" />
+		</Unit>
+		<Unit filename="internal/textparser.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/vdstl.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="internal/vdtypes.h">
+			<Option virtualFolder="src/internal/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="toolset.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="toolset.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsarray.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsarray.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsbitmap.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsbitmap.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsbp.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsbp.h">
+			<Option virtualFolder="src/" />
+			<Option target="Debug" />
+		</Unit>
+		<Unit filename="tsbuf.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsbuf.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsdebug.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsdebug.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsexecutor.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsexecutor.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsfile_zip.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsfile_zip.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsfilesystem.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsfilesystem.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsflags.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tshash_md5.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tshash_md5.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tshashmap.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsjson.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsjson.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsmath.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsmath.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsmlock.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tspackcol.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tspackcol.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tspackfile.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tspackfile.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsparse.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsparse.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tspointers.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tspointers.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsregex.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsregex.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsrnd.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsrnd.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tssqlite.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tssqlite.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsstrar.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsstrar.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsstreamstr.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsstrs.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tsstrs.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tssys.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tssys.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tssystools.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tssystools.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tstext.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tstext.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tstime.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tstime.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tsvec.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tswnd.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tswnd.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tszip.cpp">
+			<Option virtualFolder="src/" />
+		</Unit>
+		<Unit filename="tszip.h">
+			<Option virtualFolder="src/" />
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Extensions>
+			<envvars set="default" />
+			<code_completion />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

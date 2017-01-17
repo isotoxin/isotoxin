@@ -2,6 +2,8 @@
 
 #include "boost/boost_some.h"
 
+#define PLUGIN_INTERFACE_VER 1
+
 #define HOME_SITE "http://isotoxin.im"
 
 #if defined(_MSC_VER)
@@ -64,15 +66,34 @@ enum info_string_e // hard order
     _is_count_
 };
 
+#define CONN_OPTIONS \
+    COPDEF( ipv6_enable, 1 ) \
+    COPDEF( udp_enable, 1 ) \
+    COPDEF( hole_punch, 1 ) \
+    COPDEF( local_discovery, 1 ) \
+    COPDEF( enc_only, 1 ) \
+    COPDEF( trust_only, 1 ) \
+
+enum auto_conn_options_e
+{
+#define COPDEF( n, dv ) auto_co_##n,
+    CONN_OPTIONS
+#undef COPDEF
+    auto_co_count
+};
+
+
 enum connection_features_e
 {
     CF_PROXY_SUPPORT_HTTP   = 1,
     CF_PROXY_SUPPORT_HTTPS  = 2,
     CF_PROXY_SUPPORT_SOCKS4 = 4,
     CF_PROXY_SUPPORT_SOCKS5 = 8,
-    CF_IPv6_OPTION          = 16,
-    CF_UDP_OPTION           = 32,
-    CF_SERVER_OPTION        = 64,
+    CF_SERVER_OPTION        = 16,
+    
+#define COPDEF( n, dv ) CF_##n = 65536 << auto_co_##n,
+    CONN_OPTIONS
+#undef COPDEF
 
     CF_PROXY_MASK = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5,
 };
@@ -91,13 +112,7 @@ enum cd_mask_e
     CDM_MEMBERS         = 1 << 7,
     CDM_PERMISSIONS     = 1 << 8,
     CDM_DETAILS         = 1 << 9,
-    CDM_SPECIAL_BITS    = 1 << 10, // CDF_AUDIO_CONFERENCE
-
-    //                          = 1 << 30,
-    CDF_AUDIO_CONFERENCE        = 1 << 29,
-    CDF_CONFERENCE_MEMBER       = 1 << 28, // for unknown contacts
-    CDF_ALLOW_INVITE            = 1 << 27, // set if unknown contact available for friend invite
-    CDF_SYSTEM_USER             = 1 << 26,
+    CDM_DATA            = 1 << 10,
 };
 
 enum conference_permission_e
@@ -108,22 +123,50 @@ enum conference_permission_e
     CP_KICK_CONTACT    = 1 << 3,
 };
 
+enum connection_bits_e
+{
+    CB_ENCRYPTED = 1 << 0,
+    CB_TRUSTED = 1 << 1,
+    CP_UDP_USED = 1 << 2,
+    CP_TCP_USED = 1 << 3,
+    CP_IPv6_USED = 1 << 4,
+};
+
 enum cmd_result_e
 {
     CR_OK,
+    CR_UNKNOWN_ERROR,
+    CR_OPERATION_IN_PROGRESS,
     CR_MODULE_NOT_FOUND,
+    CR_MODULE_VERSION_MISMATCH,
     CR_FUNCTION_NOT_FOUND,
     CR_INVALID_PUB_ID,
     CR_ALREADY_PRESENT,
     CR_MULTIPLE_CALL,
     CR_MEMORY_ERROR,
     CR_TIMEOUT,
-    CR_OPERATION_IN_PROGRESS,
     CR_NETWORK_ERROR,
     CR_CORRUPT,
-    CR_UNKNOWN_ERROR,
     CR_ENCRYPTED,
     CR_AUTHENTICATIONFAILED,
+    CR_UNTRUSTED_CONNECTION,
+    CR_NOT_ENCRYPTED_CONNECTION,
+    CR_SERVER_CLOSED_CONNECTION,
+};
+
+enum request_entity_e
+{
+    RE_DETAILS,
+    RE_AVATAR,
+    RE_EXPORT_DATA,
+};
+
+enum app_signal_e
+{
+    APPS_INIT_DONE,
+    APPS_ONLINE,
+    APPS_OFFLINE,
+    APPS_GOODBYE,
 };
 
 enum file_control_e
@@ -153,6 +196,56 @@ enum message_type_e : unsigned // hard order
     message_type_bits = 1 + (::boost::static_log2<(message_type_check - 1)>::value)
 
 };
+
+struct contact_id_s
+{
+    unsigned id : 24;
+    unsigned type : 2;
+
+    // addition flags, NOT state of contact! used only during transferring A <-> H
+    unsigned unknown : 1;
+    unsigned confmember : 1;
+    unsigned sysuser : 1;
+    unsigned allowinvite : 1; // valid if unknown
+    unsigned audio : 1; // valid for conference type
+
+    enum type_e
+    {
+        EMPTY,
+        CONTACT,
+        CONFERENCE,
+    };
+
+    contact_id_s():id(0), type(EMPTY), unknown(0), confmember(0), sysuser(0), allowinvite(0), audio(0) {}
+    contact_id_s(type_e t, int id) :id(0x00ffffff & id), type(t), unknown(0), confmember(0), sysuser(0), allowinvite(0), audio(0) {}
+
+    void clear() {
+        id = 0; type = EMPTY; unknown = 0, confmember = 0; sysuser = 0; allowinvite = 0; audio = 0;
+    }
+
+    bool is_empty() const { return type == EMPTY; }
+    bool is_self() const { return id == 0 && type == CONTACT; }
+    bool is_conference() const{ return type == CONFERENCE; }
+    bool is_contact() const { return type == CONTACT; }
+    
+
+    bool operator == (const contact_id_s&id_) const
+    {
+        return id == id_.id && type == id_.type; // ignore unknown and confmember bits
+    }
+    bool operator != (const contact_id_s&id_) const
+    {
+        return id != id_.id || type != id_.type; // ignore unknown and confmember bits
+    }
+
+    static contact_id_s make_self()
+    {
+        return contact_id_s( CONTACT, 0 );
+    }
+
+};
+
+static_assert(sizeof(contact_id_s) == 4, "size!");
 
 enum contact_state_e : unsigned // hard order
 {
@@ -253,9 +346,8 @@ enum config_flags_e
 // app will wait values of these fields from protocol
 #define CFGF_PROXY_TYPE     "proxy_type"
 #define CFGF_PROXY_ADDR     "proxy_addr"
-#define CFGF_UDP_ENABLE     "udp_enable"
-#define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"
+// other options see CONN_OPTIONS
 
 // conference options
 #define CONFA_OPT_TYPE      "type"

@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -84,11 +84,11 @@ namespace gloox
     DataFormField* dff = df.addField( DataFormField::TypeListSingle, "stream-method" );
     StringMultiMap sm;
     if( streamTypes & FTTypeS5B )
-      sm.insert( std::make_pair( "s5b", XMLNS_BYTESTREAMS ) );
+      sm.insert( std::make_pair( std::string( "s5b" ), XMLNS_BYTESTREAMS ) );
     if( streamTypes & FTTypeIBB )
-      sm.insert( std::make_pair( "ibb", XMLNS_IBB ) );
+      sm.insert( std::make_pair( std::string( "ibb" ), XMLNS_IBB ) );
     if( streamTypes & FTTypeOOB )
-      sm.insert( std::make_pair( "oob", XMLNS_IQ_OOB ) );
+      sm.insert( std::make_pair( std::string( "oob" ), XMLNS_IQ_OOB ) );
     dff->setOptions( sm );
     feature->addChild( df.tag() );
 

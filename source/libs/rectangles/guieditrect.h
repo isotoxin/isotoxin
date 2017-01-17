@@ -3,12 +3,13 @@
 */
 #pragma once
 
-#define SEPARATORS L" \n\t:;\"',./?`~!@#$%^&*()-+=\\|{}—"
-#define IS_WORDB(c) (c==0||ts::CHARz_find(SEPARATORS,c)>=0)
+#define SEPARATORS WIDE2(" \n\t:;\"',./?`~!@#$%^&*()-+=\\|{}\x2014")
+#define IS_WORDB(c) (c==0||ts::CHARz_find<ts::wchar>(SEPARATORS,c)>=0)
 
 class gui_textedit_c : public gui_control_c
 {
     DUMMY( gui_textedit_c );
+    typedef gui_control_c super;
 
     GM_RECEIVER( gui_textedit_c, GM_HEARTBEAT );
     GM_RECEIVER( gui_textedit_c, GM_UI_EVENT );
@@ -52,10 +53,8 @@ public:
 
 private:
 
-	class text_element_c
+	class text_element_c : public ts::movable_flag<true>
 	{
-        MOVABLE( true );
-
         ts::shared_ptr<active_element_s> p;
         ts::wchar ch = 0;
     public:
@@ -133,9 +132,8 @@ private:
     };
 
 
-    struct snapshot_s
+    struct snapshot_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         DUMMY(snapshot_s);
         snapshot_s() {}
         ts::array_inplace_t<text_element_c,1> text;
@@ -184,9 +182,8 @@ private:
 	bool copy_( int cp);//used internally
 	bool prepare_lines(int startChar = 0); // split text to lines
 
-    struct kbd_press_callback_s
+    struct kbd_press_callback_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         GUIPARAMHANDLER handler;
         int scancode; // negative means ctrl+scancode
     };
@@ -339,7 +336,7 @@ public:
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
-    /*virtual*/ bool accept_focus() const override { return __super::accept_focus() && !flags.is( F_DISABLE_CARET ); }
+    /*virtual*/ bool accept_focus() const override { return gui_control_c::accept_focus() && !flags.is( F_DISABLE_CARET ); }
 
     const ts::font_desc_c &get_font() const { ASSERT(font); return *font; }
 

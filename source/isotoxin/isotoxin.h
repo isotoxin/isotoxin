@@ -1,6 +1,7 @@
 #pragma once
 
 #define _ALLOW_RTCc_IN_STL
+#include <zstrings/z_str_fake_std.h> // 1st include fake std::string
 
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 
@@ -38,11 +39,14 @@
 #pragma pop_macro("near")
 
 #define STRTYPE(TCHARACTER) ts::pstr_t<TCHARACTER>
+typedef ts::wchar WIDECHAR;
 #define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( ts::sptr<TCHARACTER>((s),(l)) )
 #include "../plugins/plgcommon/plghost_interface.h"
 #undef MAKESTRTYPE
 #undef STRTYPE
 #include "../plugins/plgcommon/common_types.h"
+
+DECLARE_MOVABLE( contact_id_s, true )
 
 #if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
 #define LIBSUFFIX "64.lib"

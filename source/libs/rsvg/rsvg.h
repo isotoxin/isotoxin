@@ -17,6 +17,8 @@ struct rsvg_stroke_s
 
 struct rsvg_stroke_and_fill_s : public rsvg_stroke_s
 {
+    typedef rsvg_stroke_s super;
+
     ts::TSCOLOR fillcolor = ts::ARGB(0, 0, 0);
     bool load(ts::rapidxml::xml_attribute<char> *a);
 };

@@ -6,6 +6,7 @@ extern CONSOLE_SCREEN_BUFFER_INFO csbi;
 #else
 #define FOREGROUND_RED 1
 #define FOREGROUND_GREEN 2
+#define FOREGROUND_BLUE 3
 #endif // _WIN32
 
 void Print(int color, const char *format, ...);

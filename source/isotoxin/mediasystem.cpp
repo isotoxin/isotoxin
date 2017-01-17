@@ -62,7 +62,7 @@ namespace
             ev = std::move( ev_ );
         }
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *e) override
         {
 
             talks.params.device = device_from_string( talkdevice );
@@ -108,7 +108,7 @@ namespace
                     notifs->Shutdown();
             }
        
-            __super::done( canceled );
+            ts::task_c::done( canceled );
         }
 
     };
@@ -541,9 +541,9 @@ void play_sound( sound_e sss, bool looped, bool forced )
 
     if ( !forced )
     {
-        if ( contacts().get_self().get_ostate() == COS_AWAY && prf().get_options().is( SNDOPT_MUTE_ON_AWAY ) )
+        if ( contacts().get_self().get_ostate() == COS_AWAY && prf_options().is( SNDOPT_MUTE_ON_AWAY ) )
             return;
-        if ( contacts().get_self().get_ostate() == COS_DND && prf().get_options().is( SNDOPT_MUTE_ON_DND ) )
+        if ( contacts().get_self().get_ostate() == COS_DND && prf_options().is( SNDOPT_MUTE_ON_DND ) )
             return;
     }
 

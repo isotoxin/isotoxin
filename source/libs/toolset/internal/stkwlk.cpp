@@ -27,7 +27,7 @@
 #include "toolset.h"
 #include "platform.h"
 
-#if !defined _FINAL || defined _CRASH_HANDLER
+#if (!defined _FINAL || defined _CRASH_HANDLER) && defined _WIN32
 
 #ifdef _WIN32
 #include "stkwlk.h"
@@ -415,7 +415,7 @@ private:
     pGMI = (tGMI) GetProcAddress( hPsapi, "GetModuleInformation" );
     if ( (pEPM == nullptr) || (pGMFNE == nullptr) || (pGMBN == nullptr) || (pGMI == nullptr) )
     {
-      // we couldn´t find all functions
+      // we couldn't find all functions
       FreeLibrary(hPsapi);
       return FALSE;
     }

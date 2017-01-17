@@ -66,42 +66,33 @@ struct proto_info_s
 {
     const char **strings = nullptr;
 
+    int   plugin_interface_ver = PLUGIN_INTERFACE_VER;
+
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   indicator = 0; // online indicator level
     int   features = 0;
     int   connection_features = 0;
-
 };
 
 struct contact_data_s
 {
-    /*
-        Base contact identifier.
-        MAIN RULE: id is not index! Delete contact must not shift values!
-        0 (zero) value reserved for self
-        Positive (>0) values - ids of contacts
-        Negative (<0) values - ids of conferences
+    const char *public_id; // set to "?" to tell to gui that pub id is unknown; empty value means not yet initialized
+    const char *name; // utf8
+    const char *status_message; // utf8
+    const char *details; // utf8 // json
+    contact_id_s *members; // cid's
+    const void *data;
 
-        id - stable identifier - must never be changed during contact lifetime
-        unused values (eg: deleted contacts or conferences) can be used with new ones
-    */
-    int id;
+    contact_id_s id;
 
     int mask; // valid fields
-    const char *public_id; // set to "?" to tell to gui that pub id is unknown; empty value means not yet initialized
     int public_id_len;
-    const char *name; // utf8
     int name_len;
-    const char *status_message; // utf8
     int status_message_len;
-    const char *details; // utf8 // json
     int details_len;
-
     int avatar_tag;
-
-    int *members; // cid's
     int members_count;
-
+    int data_size;
     int conference_permissions;
 
     contact_state_e state;
@@ -109,7 +100,7 @@ struct contact_data_s
     contact_gender_e gender;
 
 #ifdef __cplusplus
-    contact_data_s(int id, int mask):id(id), mask(mask)
+    contact_data_s(contact_id_s id, int mask):id(id), mask(mask)
     {
         state = CS_ROTTEN;
         ostate = COS_ONLINE;
@@ -176,7 +167,7 @@ enum long_operation_e
 enum send_av_ret_e
 {
     SEND_AV_OK,
-    SEND_AV_KEEP_VIDEO_DATA, // dont foget to call free_video_data to reuse video data buffer
+    SEND_AV_KEEP_VIDEO_DATA, // don't forget to call free_video_data to reuse video data buffer
 };
 
 struct host_functions_s // plugin can (or must) call these functions to do its job
@@ -185,7 +176,12 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         async answer
     */
     void(PROTOCALL *operation_result)(long_operation_e op, int rslt);
-    
+
+    /*
+        connection bits
+    */
+    void(PROTOCALL *connection_bits)(int cbits);
+
     /*
         main create/update contact function
     */
@@ -194,12 +190,12 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         Incoming message!
         mt  - see enum for possible values
-        gid - negative (conference id) when conference message received, 0 - normal message
-        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+        gid - conference id when conference message received, is_empty() - normal message
+        cid - contact id
         sendtime - message send time (sender should send it)
         msgbody_utf8, mlen - message itself
     */
-    void(PROTOCALL *message)(message_type_e mt, int gid, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
+    void(PROTOCALL *message)(message_type_e mt, contact_id_s gid, contact_id_s cid, u64 sendtime, const char *msgbody_utf8, int mlen);
 
     /*
         plugin MUST call this function to notify Isotoxin that message was delivered to other peer
@@ -225,13 +221,13 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         plugin should use this func to play audio or show video
         audio/video player will be automatically allocated for gid/cid client
 
-        gid - negative (conference id) when conference message received, 0 - normal message
-        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+        gid - conference id; if not conference, gid is empty
+        cid - unique contact id
 
         audio system automatically allocates unique audio channel for gid-cid pair
         and releases it when the audio buffer empties
     */
-    void(PROTOCALL *av_data)(int gid, int cid, const media_data_s *data);
+    void(PROTOCALL *av_data)(contact_id_s gid, contact_id_s cid, const media_data_s *data);
 
     /*
         call to free video data, passed to send_av
@@ -242,11 +238,11 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         stream options from peer
 
-        gid - negative (conference id) when conference message received, 0 - normal message
-        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+        gid - conference id; if not conference, gid is empty
+        cid - unique contact id
 
     */
-    void(PROTOCALL *av_stream_options)(int gid, int cid, const stream_options_s *so);
+    void(PROTOCALL *av_stream_options)(contact_id_s gid, contact_id_s cid, const stream_options_s *so);
 
     /*
         plugin tells to Isotoxin its current values
@@ -260,14 +256,14 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         plugin should increment tag value every time avatar changed
         plugin should store avatar tag into save
     */
-    void(PROTOCALL *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
+    void(PROTOCALL *avatar_data)(contact_id_s cid, int tag, const void *avatar_body, int avatar_body_size);
 
     /*
         plugin notifies Isotoxin about incoming file
-        cid - contact_data_s::id - unique client id
+        cid - unique contact id
         utag - unique 64-bit file transfer identifier. Plugin can simply generate 64-bit random value
     */
-    void(PROTOCALL *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
+    void(PROTOCALL *incoming_file)(contact_id_s cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 
     /* 
         there are three cases:
@@ -285,17 +281,24 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         plugin should call this function 1 per second for every typing client
 
-        gid - negative (conference id) when conference message received, 0 - normal message
-        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+        gid - conference id; if not conference, gid is empty
+        cid - unique contact id
 
     */
-    void(PROTOCALL *typing)(int gid, int cid);
+    void(PROTOCALL *typing)(contact_id_s gid, contact_id_s cid);
 
     /*
         plugin can call this func to inform gui
         see DEBUG_OPT_TELEMETRY
     */
     void( PROTOCALL *telemetry )( telemetry_e k, const void *data, int datasize );
+
+    //return id of contact not yet used
+    //also mark found id used
+    int (PROTOCALL *find_free_id)();
+
+    //mark id used
+    void (PROTOCALL *use_id)(int);
 };
 
 /*
@@ -304,56 +307,50 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
 #define PROTO_FUNCTIONS \
     FUNC1( void, tick,              int * ) \
-    FUNC0( void, goodbye ) \
     FUNC1( void, set_name,          const char* ) \
     FUNC1( void, set_statusmsg,     const char* ) \
     FUNC2( void, set_config,        const void*, int ) \
     FUNC2( void, set_avatar,        const void*, int ) \
     FUNC1( void, set_ostate,        int ) \
     FUNC1( void, set_gender,        int ) \
-    FUNC0( void, init_done ) \
-    FUNC0( void, online ) \
-    FUNC0( void, offline ) \
-    FUNC0( void, export_data ) \
+    FUNC1( void, app_signal,        app_signal_e ) \
     FUNC1( void, save_config,       void * ) \
+    FUNC1( void, contact,           const contact_data_s * ) \
     FUNC2( int,  add_contact,       const char*, const char* ) \
-    FUNC2( int,  resend_request,    int, const char* ) \
-    FUNC1( void, del_contact,       int ) \
-    FUNC1( void, refresh_details,   int ) \
-    FUNC2( void, send_message,      int, const message_s * ) \
+    FUNC2( int,  resend_request,    contact_id_s, const char* ) \
+    FUNC1( void, del_contact,       contact_id_s ) \
+    FUNC2( void, request,           contact_id_s, request_entity_e ) \
+    FUNC2( void, send_message,      contact_id_s, const message_s * ) \
     FUNC1( void, del_message,       u64 ) \
-    FUNC1( void, accept,            int ) \
-    FUNC1( void, reject,            int ) \
-    FUNC2( void, call,              int, const call_info_s * ) \
-    FUNC1( void, stop_call,         int ) \
-    FUNC1( void, accept_call,       int ) \
-    FUNC2( int,  send_av,           int, const call_info_s * ) \
-    FUNC2( void, stream_options,    int, const stream_options_s * ) \
-    FUNC2( void, file_send,         int, const file_send_info_s *) \
+    FUNC1( void, accept,            contact_id_s ) \
+    FUNC1( void, reject,            contact_id_s ) \
+    FUNC2( void, call,              contact_id_s, const call_info_s * ) \
+    FUNC1( void, stop_call,         contact_id_s ) \
+    FUNC1( void, accept_call,       contact_id_s ) \
+    FUNC2( int,  send_av,           contact_id_s, const call_info_s * ) \
+    FUNC2( void, stream_options,    contact_id_s, const stream_options_s * ) \
+    FUNC2( void, file_send,         contact_id_s, const file_send_info_s *) \
     FUNC2( void, file_accept,       u64, u64) \
     FUNC2( void, file_control,      u64, file_control_e) \
     FUNC2( bool, file_portion,      u64, const file_portion_s *) \
-    FUNC1( void, get_avatar,        int ) \
     FUNC2( void, create_conference, const char *, const char * ) \
-    FUNC2( void, ren_conference,    int, const char * ) \
-    FUNC2( void, join_conference,   int, int ) \
+    FUNC2( void, ren_conference,    contact_id_s, const char * ) \
+    FUNC2( void, join_conference,   contact_id_s, contact_id_s ) \
     FUNC1( void, del_conference,    const char * ) \
     FUNC1( void, enter_conference,  const char * ) \
-    FUNC2( void, leave_conference,  int, int ) \
-    FUNC1( void, typing,            int ) \
+    FUNC2( void, leave_conference,  contact_id_s, int ) \
+    FUNC1( void, typing,            contact_id_s ) \
     FUNC1( void, logging_flags,     unsigned int ) \
     FUNC1( void, telemetry_flags,   unsigned int ) \
     
 
 struct proto_functions_s
 {
-#define FUNC0( rt, fn ) rt (PROTOCALL * fn)();
 #define FUNC1( rt, fn, p0 ) rt (PROTOCALL * fn)(p0);
 #define FUNC2( rt, fn, p0, p1 ) rt (PROTOCALL * fn)(p0, p1);
 PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 };
 #pragma pack(pop)
 

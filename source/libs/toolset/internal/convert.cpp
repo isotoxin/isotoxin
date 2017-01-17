@@ -88,7 +88,7 @@ typedef ALIGN(16) uint8 uvec8[16];
 typedef ALIGN(16) int8 vec8[16];
 typedef ALIGN(32) int32 lvec32[8];
 
-
+#if 0
 // Shuffle table for converting BGRA to ARGB.
 static uvec8 kShuffleMaskBGRAToARGB = {
     3u, 2u, 1u, 0u, 7u, 6u, 5u, 4u, 11u, 10u, 9u, 8u, 15u, 14u, 13u, 12u
@@ -103,6 +103,7 @@ static uvec8 kShuffleMaskABGRToARGB = {
 static uvec8 kShuffleMaskRGBAToARGB = {
     1u, 2u, 3u, 0u, 5u, 6u, 7u, 4u, 9u, 10u, 11u, 8u, 13u, 14u, 15u, 12u
 };
+#endif
 
 typedef ALIGN(32) int8 lvec8[32];
 typedef ALIGN(32) int16 lvec16[16];
@@ -168,7 +169,7 @@ void I422ToARGBRow_SSSE3( const uint8* y_buf, const uint8* u_buf, const uint8* v
 
         __m128i unp = _mm_unpacklo_epi8( _mm_cvtsi32_si128( *(uint32*)u_buf ), _mm_cvtsi32_si128( *(uint32*)( u_buf + offset ) ) );
         __m128i unpx = _mm_unpacklo_epi16( unp, unp );
-        
+
         __m128i xx3 = _mm_loadl_epi64( ( __m128i* )y_buf );
         __m128i xx4 = _mm_mulhi_epu16( _mm_unpacklo_epi8( xx3, xx3 ), kYToRgb );
 

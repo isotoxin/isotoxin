@@ -9,6 +9,12 @@
 #include <winsock2.h>
 #include <tchar.h>
 #include <conio.h>
+#include "libsodium/src/libsodium/include/sodium.h"
+#endif
+
+#ifdef _NIX
+#include "win32emu/win32emu.h"
+#include <sodium.h>
 #endif
 
 #include <malloc.h>

@@ -66,6 +66,7 @@ struct udp_sender
 
 struct tcp_pipe : public socket_s
 {
+    typedef socket_s super;
     sockaddr_in addr;
     int creationtime = 0;
     byte rcvbuf[65536 * 2];
@@ -79,7 +80,7 @@ struct tcp_pipe : public socket_s
     void close()
     {
         rcvbuf_sz = 0;
-        __super::close();
+        super::close();
     }
 
     bool timeout() const
@@ -132,6 +133,8 @@ struct tcp_pipe : public socket_s
 
 struct tcp_listner : public socket_s
 {
+    typedef socket_s super;
+
     struct state_s
     {
         int port = 0;
@@ -231,7 +234,7 @@ struct datablock_s
     int sent;
 
     u64 create_time() const { ASSERT(BT_MESSAGE == bt); return *(u64 *)(this + 1); }
-    asptr text() const { ASSERT(BT_MESSAGE == bt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
+    std::asptr text() const { ASSERT(BT_MESSAGE == bt); return std::asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
     const byte *data() const {return (const byte *)(this + 1);}
 
     static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, aint datasize, const void *data1 = nullptr, aint datasize1 = 0);
@@ -261,7 +264,7 @@ class lan_engine : public packetgen
 
     time_t last_activity = now();
 
-    std::vector<byte> avatar;
+    byte_buffer avatar;
     bool avatar_set = false;
     bool media_data_transfer = false;
     bool fatal_error = false;
@@ -318,17 +321,19 @@ class lan_engine : public packetgen
             offset += size;
             return data + ofsstore;
         }
-        str_c reads()
+        std::string reads()
         {
             int sz = readus();
             const byte *p = read(sz);
-            if (!p) return str_c();
-            return str_c((const char *)p, sz);
+            if (!p) return std::string();
+            return std::string((const char *)p, sz);
         }
         int last() const { return maxlen - offset; }
     };
 
     void stop_encoder();
+
+    bool load_contact(contact_id_s cid, loader &ldr);
 public:
 
     static void video_encoder();
@@ -354,8 +359,8 @@ public:
         OpusDecoder *audio_decoder = nullptr;
         OpusEncoder *audio_encoder = nullptr;
         fifo_stream_c enc_fifo;
-        std::vector<byte> uncompressed;
-        std::vector<byte> compressed;
+        byte_buffer uncompressed;
+        byte_buffer compressed;
 
         stream_options_s local_so;
         stream_options_s remote_so;
@@ -395,7 +400,7 @@ public:
     struct delivery_data_s
     {
         size_t rcv_size = 0;
-        std::vector<byte> buf;
+        byte_buffer buf;
     };
 
     typedef std::unordered_map< u64, std::unique_ptr<delivery_data_s> > delivery_map_t;
@@ -412,7 +417,7 @@ public:
 
         tcp_pipe pipe;
 
-        i32 id;
+        contact_id_s id;
         int portshift = 0;
         int nextactiontime = 0;
         int call_stop_time = 0;
@@ -424,11 +429,11 @@ public:
 
         byte public_key[SIZE_PUBLIC_KEY];
         byte raw_public_id[SIZE_PUBID];
-        str_c public_id;
-        str_c name;
-        str_c statusmsg;
-        str_c invitemessage;
-        str_c client;
+        std::string public_id;
+        std::string name;
+        std::string statusmsg;
+        std::string invitemessage;
+        std::string client;
 
         contact_online_state_e ostate = COS_ONLINE;
         contact_gender_e gender = CSEX_UNKNOWN;
@@ -486,7 +491,7 @@ public:
         };
         spinlock::syncvar< dblist_s > sendblocks;
 
-        void send_message( u64 create_time, const asptr &text, u64 dtag)
+        void send_message( u64 create_time, const std::asptr &text, u64 dtag)
         {
             u64 create_time_net = my_htonll(create_time);
             send_block(BT_MESSAGE, dtag, &create_time_net, sizeof(u64), text.s, text.l);
@@ -510,58 +515,13 @@ public:
 
         void calculate_pub_id( const byte *pk );
 
-        void fill_data( contact_data_s &cd )
-        {
-            data_changed = false;
+        void fill_data(contact_data_s &cd, savebuffer *protodata);
 
-            cd.id = id;
-            cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG;
-            cd.public_id = public_id.cstr();
-            cd.public_id_len = (int)public_id.get_length();
-            cd.name = name.cstr();
-            cd.name_len = (int)name.get_length();
-            cd.status_message = statusmsg.cstr();
-            cd.status_message_len = (int)statusmsg.get_length();
-            cd.avatar_tag = 0;
-            switch (state)
-            {
-                case lan_engine::contact_s::SEARCH:
-                case lan_engine::contact_s::MEET:
-                case lan_engine::contact_s::INVITE_SEND:
-                    cd.state = CS_INVITE_SEND;
-                    break;
-                case lan_engine::contact_s::REJECTED:
-                    cd.state = CS_REJECTED;
-                    break;
-                case lan_engine::contact_s::INVITE_RECV:
-                case lan_engine::contact_s::TRAPPED:
-                case lan_engine::contact_s::REJECT:
-                case lan_engine::contact_s::ACCEPT_RESTORE_CONNECT:
-                    cd.state = CS_INVITE_RECEIVE;
-                    break;
-                case lan_engine::contact_s::ACCEPT:
-                    cd.state = CS_WAIT;
-                    break;
-                case lan_engine::contact_s::ONLINE:
-                    cd.state = CS_ONLINE;
-                    break;
-                case lan_engine::contact_s::OFFLINE:
-                case lan_engine::contact_s::BACKCONNECT:
-                    cd.state = CS_OFFLINE;
-                    break;
-                case lan_engine::contact_s::ROTTEN:
-                case lan_engine::contact_s::ALMOST_ROTTEN:
-                    cd.state = CS_ROTTEN;
-                    break;
-            }
-            cd.ostate = ostate;
-            cd.gender = gender;
-            cd.avatar_tag = avatar_tag;
-        }
-
-        contact_s(int id):id(id)
+        contact_s(contact_id_s id):id(id)
         {
             nextactiontime = time_ms() - 10000000;
+            if (id.is_self())
+                state = OFFLINE;
         }
         ~contact_s();
 
@@ -577,7 +537,7 @@ private:
         file_transfer_s *prev;
         file_transfer_s *next;
 
-        file_transfer_s(const asptr &fn);
+        file_transfer_s(const std::string &fn);
         virtual ~file_transfer_s();
         virtual void accepted(u64 /*offset*/) {}
         virtual void kill(bool /*from_self*/);
@@ -589,11 +549,11 @@ private:
         virtual void chunk_received( u64 /*offset*/, const void * /*d*/, aint /*dsz*/ ) {}; // incoming
         virtual bool delivered(u64 /*dtg*/) { return false; } // transmitting
 
-        u32 cid;    // client id
+        contact_id_s cid;    // client id
         u64 fsz;    // filesize
         u64 utag;   // unique tag
         u64 sid;    // stream id
-        str_c fn;   // filename
+        std::string fn;   // filename
     };
 
     file_transfer_s *first_ftr = nullptr;
@@ -608,7 +568,7 @@ private:
         bool stuck = false;
         bool is_accepted = false;
 
-        incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn);
+        incoming_file_s(contact_id_s cid_, u64 utag_, u64 fsz_, const std::string &fn);
         ~incoming_file_s() {}
 
         //void recv_data(u64 position, const byte *data, size_t datasz)
@@ -651,7 +611,7 @@ private:
         bool is_finished = false;
         bool last_chunk_delivered = false;
 
-        transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const asptr &fn);
+        transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const std::string &fn);
         ~transmitting_file_s() {}
 
         /*virtual*/ void accepted(u64 offset) override;
@@ -675,8 +635,8 @@ private:
     contact_s *last = nullptr;
 
     void del(contact_s *c);
-    contact_s *addnew(int id = 0);
-    contact_s *find(int id)
+    contact_s *addnew(contact_id_s id = contact_id_s());
+    contact_s *find(contact_id_s id)
     {
         for(contact_s *i = first; i; i = i->next)
             if (i->id == id) return i;
@@ -705,12 +665,10 @@ public:
     static void create( host_functions_s *hf );
     static lan_engine *get(bool rugacco = true) { if (rugacco) { ASSERT(engine != nullptr); } return engine; }
 
-#define FUNC0( rt, fn ) rt fn();
 #define FUNC1( rt, fn, p0 ) rt fn(p0);
 #define FUNC2( rt, fn, p0, p1 ) rt fn(p0, p1);
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 
 };

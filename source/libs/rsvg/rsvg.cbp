@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="rsvg" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../srsvgd" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-Wall" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+					<Add directory="$(PROJECTDIR).." />
+					<Add directory="$(PROJECTDIR)../../libs-external" />
+					<Add directory="$(PROJECTDIR)../../libs-external/cairo" />
+					<Add directory="$(PROJECTDIR)../../libs-external/zlib/src" />
+				</Compiler>
+				<Linker>
+					<Add option="-m64" />
+				</Linker>
+			</Target>
+			<Target title="Final">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../srsvg" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-O2" />
+					<Add option="-Wall" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-D_FINAL" />
+					<Add directory="$(PROJECTDIR).." />
+					<Add directory="$(PROJECTDIR)../../libs-external" />
+					<Add directory="$(PROJECTDIR)../../libs-external/cairo" />
+					<Add directory="$(PROJECTDIR)../../libs-external/zlib/src" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-m64" />
+				</Linker>
+			</Target>
+		</Build>
+		<Unit filename="_precompiled.cpp" />
+		<Unit filename="_precompiled.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg.cpp" />
+		<Unit filename="rsvg.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg_animation.cpp" />
+		<Unit filename="rsvg_animation.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg_cairo.cpp" />
+		<Unit filename="rsvg_cairo.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg_filter.cpp" />
+		<Unit filename="rsvg_filter.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg_internals.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Extensions>
+			<envvars set="default" />
+			<code_completion />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

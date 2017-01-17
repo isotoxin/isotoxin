@@ -92,13 +92,13 @@ void packetgen::pg_nonce(const byte *other_public_key, const byte *auth_key /* n
 
     log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
 
-    push(64, asptr("isotoxin/" SS(PLUGINVER)));
+    push(64, std::asptr("isotoxin/" SS(PLUGINVER)));
 
     encopy();
 
 }
 
-void packetgen::pg_invite(const asptr &inviter_name, const asptr& invite_message, const byte *crypt_packet_key)
+void packetgen::pg_invite(const std::asptr &inviter_name, const std::asptr& invite_message, const byte *crypt_packet_key)
 {
     push_pid( PID_INVITE );
     push( 64, inviter_name );
@@ -107,7 +107,7 @@ void packetgen::pg_invite(const asptr &inviter_name, const asptr& invite_message
     log_auth_key("PID_INVITE encoded", crypt_packet_key);
 }
 
-void packetgen::pg_accept(const asptr&name, const byte *auth_key, const byte *crypt_packet_key)
+void packetgen::pg_accept(const std::asptr&name, const byte *auth_key, const byte *crypt_packet_key)
 {
     push_pid( PID_ACCEPT );
     push(auth_key, SIZE_KEY);
@@ -122,7 +122,7 @@ void packetgen::pg_ready(const byte *raw_public_id, const byte *crypt_packet_key
     push_pid( PID_READY );
     push(raw_public_id, SIZE_PUBID);
 
-    push(64, asptr("isotoxin/" SS(PLUGINVER)) );
+    push(64, std::asptr("isotoxin/" SS(PLUGINVER)) );
 
     encode(crypt_packet_key);
     log_auth_key("PID_READY encoded", crypt_packet_key);

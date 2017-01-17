@@ -12,6 +12,10 @@
 // so we need not to check the version (because we only support _MSC_VER >= 1100)!
 #pragma once
 
+#ifdef _NIX
+#define _STACKWALKER_
+#endif
+
 #ifndef _STACKWALKER_
 #define _STACKWALKER_
 

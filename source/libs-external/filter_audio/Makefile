@@ -1,84 +1,105 @@
-BASE_NAME = libfilteraudio
-VERSION = 0.0.0
-PREFIX ?= /usr/local
-LIBDIR ?= lib
-INCLUDEDIR ?= include
+# Makefile for filteraudio
+# (C) 2016 Rotkaermota
 
-STATIC_LIB = $(BASE_NAME).a
-PC_FILE = filteraudio.pc
+LIBNAME = libfilteraudio
 
-SRC = $(wildcard aec/*.c) $(wildcard agc/*.c) $(wildcard ns/*.c) $(wildcard other/*.c) $(wildcard zam/*.c) $(wildcard vad/*.c) filter_audio.c
-OBJ = $(SRC:.c=.o)
-HEADER = filter_audio.h
-LDFLAGS += -lm -lpthread
-TARGET_ONLY = NO
+CC=gcc
+CFLAGS=-O3
+#CFLAGS=-O3  -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
+#CFLAGS=-O -DMAX_WBITS=14 -DMAX_MEM_LEVEL=7
+#CFLAGS=-g -DDEBUG
+#CFLAGS=-O3 -Wall -Wwrite-strings -Wpointer-arith -Wconversion \
+#           -Wstrict-prototypes -Wmissing-prototypes
 
-# Check on which system we are running
-UNAME_S = $(shell uname -s)
-ifeq ($(UNAME_S), Linux)
-    SHARED_EXT = so
-    TARGET = $(BASE_NAME).$(SHARED_EXT).$(VERSION)
-    SHARED_LIB = $(BASE_NAME).$(SHARED_EXT).$(shell echo $(VERSION) | rev | cut -d "." -f 1 | rev)
-    LDFLAGS += -Wl,-soname=$(SHARED_LIB)
-else ifeq ($(UNAME_S), FreeBSD)
-    SHARED_EXT = so
-    TARGET = $(BASE_NAME).$(SHARED_EXT).$(VERSION)
-    SHARED_LIB = $(BASE_NAME).$(SHARED_EXT).$(shell echo $(VERSION) | rev | cut -d "." -f 1 | rev)
-    LDFLAGS += -Wl,-soname=$(SHARED_LIB)
-    LIBDIR = lib
-else ifeq ($(UNAME_S), Darwin)
-    SHARED_EXT = dylib
-    TARGET = $(BASE_NAME).$(VERSION).$(SHARED_EXT)
-    SHARED_LIB = $(BASE_NAME).$(shell echo $(VERSION) | rev | cut -d "." -f 1 | rev).$(SHARED_EXT)
-    LDFLAGS += -Wl,-install_name,$(SHARED_LIB)
-else ifneq (, $(shell echo $(UNAME_S) | grep -E 'MSYS|MINGW|CYGWIN'))
-    SHARED_EXT = dll
-    TARGET = $(BASE_NAME).$(SHARED_EXT)
-    TARGET_ONLY = YES
-    NO_STATIC = 1
-    LDFLAGS += -Wl,--out-implib,$(TARGET).a
-endif
+LDFLAGS= 
+LDSHARED=gcc
+CPP=gcc -E
+
+AR=ar
+ARFLAGS=rc
+RANLIB=ranlib
+SHELL=/bin/sh
+
+garbage =$(GARBAGE)/__garbage/$(LIBNAME)
+libdir =$(GARBAGE)/__libs
+
+libs = $(LIBNAME).a
+
+srcs = aec/aec_core.c \
+aec/aec_core_sse2.c \
+aec/aec_rdft.c \
+aec/aec_rdft_sse2.c \
+aec/aec_resampler.c \
+aec/echo_cancellation.c \
+agc/analog_agc.c \
+agc/digital_agc.c \
+filter_audio.c \
+ns/noise_suppression.c \
+ns/noise_suppression_x.c \
+ns/nsx_core.c \
+ns/nsx_core_c.c \
+ns/ns_core.c \
+other/complex_bit_reverse.c \
+other/complex_fft.c \
+other/copy_set_operations.c \
+other/cross_correlation.c \
+other/delay_estimator.c \
+other/delay_estimator_wrapper.c \
+other/division_operations.c \
+other/dot_product_with_scale.c \
+other/downsample_fast.c \
+other/energy.c \
+other/fft4g.c \
+other/float_util.c \
+other/get_scaling_square.c \
+other/high_pass_filter.c \
+other/min_max_operations.c \
+other/randomization_functions.c \
+other/real_fft.c \
+other/resample_48khz.c \
+other/resample_by_2.c \
+other/resample_by_2_internal.c \
+other/resample_fractional.c \
+other/ring_buffer.c \
+other/speex_resampler.c \
+other/splitting_filter.c \
+other/spl_init.c \
+other/spl_sqrt.c \
+other/spl_sqrt_floor.c \
+other/vector_scaling_operations.c \
+vad/vad_core.c \
+vad/vad_filterbank.c \
+vad/vad_gmm.c \
+vad/vad_sp.c \
+vad/webrtc_vad.c \
+zam/filters.c
 
 
-all: $(TARGET)
+srcnames = $(notdir $(srcs))
+objs = $(srcnames:.c=.o)
 
-$(TARGET): $(OBJ)
-	@echo "  LD    $@"
-	@$(CC) $(LDFLAGS) -shared -o $@ $^
-	@if [ "$(NO_STATIC)" != "1" ]; then \
-		echo "  AR    $(STATIC_LIB)" ;\
-		ar rcs $(STATIC_LIB) $(OBJ) ;\
-	fi
+all: mkdirs static
 
-%.o: %.c
-	@echo "  CC    $@"
-	@$(CC) $(CFLAGS) -fPIC -c -o $@ $<
+static: $(libs)
 
-install: $(TARGET) $(HEADER) $(PC_FILE)
-	mkdir -p $(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)/pkgconfig)
-	mkdir -p $(abspath $(DESTDIR)/$(PREFIX)/$(INCLUDEDIR))
-	@echo "Installing $(TARGET)"
-	@install -m 0755 $(TARGET) $(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)/$(TARGET))
-	@echo "Installing $(HEADER)"
-	@install -m 0644 $(HEADER) $(abspath $(DESTDIR)/$(PREFIX)/$(INCLUDEDIR)/$(HEADER))
-	@echo "Installing $(PC_FILE)"
-	@install -m 0644 $(PC_FILE) $(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)/pkgconfig/$(PC_FILE))
-	@if [ "$(NO_STATIC)" != "1" -a -e "$(STATIC_LIB)" ]; then \
-		echo "Installing $(STATIC_LIB)" ;\
-		install -m 0644 $(STATIC_LIB) $(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)/$(STATIC_LIB)) ;\
-	fi
-	@if [ "$(TARGET_ONLY)" != "YES" ]; then \
-		cd $(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)) ;\
-		ln -sf $(TARGET) $(SHARED_LIB) ;\
-		ln -sf $(SHARED_LIB) $(BASE_NAME).$(SHARED_EXT) ;\
-	fi
-	@pc_file=$(abspath $(DESTDIR)/$(PREFIX)/$(LIBDIR)/pkgconfig/$(PC_FILE)) ;\
-	sed -e 's:__PREFIX__:'$(abspath $(PREFIX))':g' $$pc_file > temp_file && mv temp_file $$pc_file ;\
-	sed -e 's:__LIBDIR__:'$(abspath $(PREFIX)/$(LIBDIR))':g' $$pc_file > temp_file && mv temp_file $$pc_file ;\
-	sed -e 's:__INCLUDEDIR__:'$(abspath $(PREFIX)/$(INCLUDEDIR))':g' $$pc_file > temp_file && mv temp_file $$pc_file ;\
-	sed -e 's:__VERSION__:'$(VERSION)':g' $$pc_file > temp_file && mv temp_file $$pc_file
+$(LIBNAME).a: allobjs
+	$(AR) $(ARFLAGS) $(libdir)/$@ $(addprefix $(garbage)/, $(objs))
+	-@ ($(RANLIB) $@ || true) >/dev/null 2>&1
+
+mkdirs:
+	mkdir -p $(garbage)
+	mkdir -p $(libdir)
+
+allobjs: ;
+	@for f in $(srcs); do \
+    fn="$${f##*/}"; \
+    fno="$(garbage)/$${fn%.*}.o"; \
+    echo CC $$f; \
+    $(CC) -o $$fno -c $(CFLAGS) $$f; \
+    done
 
 clean:
-	rm -f $(TARGET) $(STATIC_LIB) $(OBJ)
+	rm -f $(libdir)/$(LIBNAME).a
+	rm -r -f $(garbage)/$(LIBNAME)
 
-.PHONY: all clean install
+print-%  : ; @echo $* = $($*)

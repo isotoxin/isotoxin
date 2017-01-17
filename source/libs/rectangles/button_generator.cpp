@@ -247,7 +247,7 @@ struct gb_circle_s : public generated_button_data_s
 
     /*virtual*/ void setup(button_desc_s &desc) override
     {
-        __super::setup(desc);
+        super::setup(desc);
     }
 };
 #endif

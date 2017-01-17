@@ -30,9 +30,8 @@ struct emoticon_s
 
 class emoticons_c
 {
-    struct match_point_s
+    struct match_point_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         const emoticon_s *e;
         ts::str_c s;
     };
@@ -117,7 +116,7 @@ class emoticons_c
         /*virtual*/ ts::bitmap_c &prepare_frame( const ts::ivec2 &sz, ts::irect &fr ) override
         {
             FORBIDDEN();
-            __assume( 0 );
+            UNREACHABLE();
         }
 
         /*virtual*/ bool animation_tick() override;

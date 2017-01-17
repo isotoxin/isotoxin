@@ -65,7 +65,7 @@ float    timerprocessor_c::takt(double dt)
     for (aint i = 0; i < cnt;)
     {
         timer_subscriber_entry_s * e = m_items.get(i);
-        if (timer_subscriber_c *t = e->hook.get())
+        if (nullptr != e->hook.get())
         {
             e->ttl -= dt;
             if (e->ttl < 0)
@@ -297,6 +297,7 @@ int generate_time_string( wchar *s, int capacity, const wstr_c& tmpl, const tm& 
     return GetDateFormatW( LOCALE_USER_DEFAULT, 0, &st, tmpl.cstr(), s, capacity ) - 1;
 #endif // _WIN32
 
+    return 0;
 }
 
 } // namespace ts

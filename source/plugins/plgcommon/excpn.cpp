@@ -3,7 +3,7 @@
 #include "excpn.h"
 
 exception_operator_c exception_operator_c::self;
-swstr_t<MAX_PATH> exception_operator_c::dump_filename;
+std::swstr_t<MAX_PATH> exception_operator_c::dump_filename;
 
 char* strerror_r(int errnum, char *buf, size_t n)
 {
@@ -145,7 +145,7 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 
 struct ints
 {
-    str_c ecallstack;
+    std::str_c ecallstack;
 };
 ints ss;
 
@@ -188,7 +188,7 @@ void WINAPI exception_operator_c::show_callstack(HANDLE hThread, const char* nam
     SIMPLELOCK(self.lock);
 	self.output.clear();
 	self.OnOutput1("\n=====================================================================\n");
-	sstr_t<256> stamp;
+    std::sstr_t<256> stamp;
 	int len = sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)(size_t)hThread));
 	self.OnOutput(stamp.cstr(), len);
 	self.ShowCallstack(hThread, NULL);
@@ -208,7 +208,7 @@ void exception_operator_c::OnOutput(LPCSTR szText, int len) const
 {
     int maxlen = output.get_capacity() - output.get_length();
     if (len > maxlen) len = maxlen;
-	output.append(asptr(szText, len));
+	output.append(std::asptr(szText, len));
 }
 
 exception_operator_c::exception_operator_c()
@@ -232,17 +232,17 @@ void exception_operator_c::create_dump(EXCEPTION_POINTERS* pExp/*=NULL*/, bool n
     {
         if (dump_filename.is_empty())
         {
-            swstr_t<MAX_PATH + 32> exename(MAX_PATH, false);
+            std::swstr_t<MAX_PATH + 32> exename(MAX_PATH, false);
             exename.set_length(MAX_PATH);
             GetModuleFileNameW(nullptr, exename.str(), MAX_PATH);
             exename.set_length();
-            int namei = exename.find_last_pos_of(CONSTWSTR("/\\"));
+            int namei = exename.find_last_pos_of(STD_WSTR("/\\"));
             int doti = exename.find_last_pos('.');
             if (doti > namei) exename.set_length(doti);
             exename.set_length(namei);
-            dump_filename.append(wsptr(exename.cstr()));
+            dump_filename.append(std::wsptr(exename.cstr()));
             dump_filename.append_char('\\');
-            dump_filename.append(wsptr(exename.cstr() + namei + 1));
+            dump_filename.append(std::wsptr(exename.cstr() + namei + 1));
         }
         HANDLE hFile = ::CreateFileW(dump_filename, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 

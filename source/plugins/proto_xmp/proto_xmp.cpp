@@ -52,7 +52,7 @@
 
 #include "../appver.inl"
 
-#define XMPP_SAVE_VERSION 1
+#define XMPP_SAVE_VERSION 2
 #define FEATURE_VERSION 2
 
 #define FE_INIT     (1<<0)
@@ -72,18 +72,25 @@
 #define AR_RCVD (1<<2)
 #define AR_RCVD_AND_ACCEPTED (2<<2)
 
-
-inline asptr xsptr( const std::string&s )
+static std::string json_value(const std::asptr&val) // replace \, \"
 {
-    return asptr( s.c_str(), (int)s.length() );
+    std::string v(val);
+    v.replace_all(STD_ASTR("\\"), STD_ASTR("\\\\"));
+    v.replace_all(STD_ASTR("\""), STD_ASTR("\\\""));
+    v.replace_all(STD_ASTR("\n"), STD_ASTR("\\\n"));
+    v.replace_all(STD_ASTR("\r"), STD_ASTR("\\\r"));
+    v.replace_all(STD_ASTR("\t"), STD_ASTR("\\\t"));
+    v.replace_all(STD_ASTR("\b"), STD_ASTR("\\\b"));
+    v.replace_all(STD_ASTR("\f"), STD_ASTR("\\\f"));
+    return v;
 }
 
 inline bool samejid( const gloox::JID& jid1, const gloox::JID& jid2 )
 {
-    asptr b1 = xsptr( jid1.bare() );
-    asptr b2 = xsptr( jid2.bare() );
+    std::asptr b1 = jid1.bare().as_sptr();
+    std::asptr b2 = jid2.bare().as_sptr();
     if ( b1.l != b2.l ) return false;
-    return CHARz_equal_ignore_case( b1.s, b2.s, b1.l );
+    return std::CHARz_equal_ignore_case( b1.s, b2.s, b1.l );
 }
 
 std::string decodeerror( gloox::StanzaError e )
@@ -201,7 +208,7 @@ class xmpp :
         gloox::JID jid;
         std::string fileid;
 
-        i32 cid;
+        contact_id_s cid;
 
         void die();
     };
@@ -221,13 +228,13 @@ class xmpp :
         u64 chunk_offset = 0;
         u64 next_recv_offset = 0;
         u64 position = 0;
-        std::vector<byte> chunk;
+        byte_buffer chunk;
 
-        str_c fn;
+        std::string fn;
 
         bool fin = false;
 
-        incoming_file_s( const gloox::JID &jid, i32 cid_, const std::string &fileid_, u64 fsz_, const asptr &fn );
+        incoming_file_s( const gloox::JID &jid, contact_id_s cid_, const std::string &fileid_, u64 fsz_, const std::string &fn );
         ~incoming_file_s();
 
         void recv_data( const byte *data, size_t datasz );
@@ -269,7 +276,7 @@ class xmpp :
     {
         transmitting_file_s *prev;
         transmitting_file_s *next;
-        str_c fn;
+        std::string fn;
 
         u64 next_offset_send = 0;
         static const u32 chunk_size = 4096;
@@ -279,7 +286,7 @@ class xmpp :
         bool is_finished = false;
         bool killed = false;
 
-        transmitting_file_s( const gloox::JID &jid_, u32 cid_, u64 utag_, const std::string &fileid_, u64 fsz_, const asptr &fn );
+        transmitting_file_s( const gloox::JID &jid_, contact_id_s cid_, u64 utag_, const std::string &fileid_, u64 fsz_, const std::string &fn );
         ~transmitting_file_s();
 
         /*virtual*/ void accepted() override;
@@ -482,7 +489,7 @@ class xmpp :
 
         void ontick();
 
-        /*virtual*/ void handleBytestreamData( gloox::Bytestream* /*ibs*/, const std::string& data ) override
+        /*virtual*/ void handleBytestreamData( gloox::Bytestream* /*ibs*/, const std::string& /*data*/ ) override
         {
         }
         /*virtual*/ void handleBytestreamError( gloox::Bytestream* /*ibs*/, const gloox::IQ& /*iq*/ ) override
@@ -544,31 +551,31 @@ class xmpp :
         gloox::JID jid;
         std::vector<u64> waiting_receipt;
 
-        byte gavatar_hash[crypto_generichash_BYTES_MIN]; // md5 hash of avatar
+        byte gavatar_hash[crypto_generichash_BYTES_MIN]; // blake2 hash of avatar
         std::string gavatar; // use string to keep binary data...
         int gavatar_tag = 0;
 
         struct resource_s
         {
             mses* session = nullptr;
-            str_c resname;
-            str_c cl_url;
-            str_c cl_name_ver;
-            str_c os;
+            std::string resname;
+            std::string cl_url;
+            std::string cl_name_ver;
+            std::string os;
             int id = 0;
             int features = 0;
             int priority = 0;
-            resource_s(const asptr& rn, int id, int pr):resname(rn), id(id), priority(pr) {}
+            resource_s(const std::string& rn, int id, int pr):resname(rn), id(id), priority(pr) {}
             resource_s() {}
         };
         std::vector<resource_s> resources;
 
-        str_c name;
-        str_c statusmsg;
+        std::string name;
+        std::string statusmsg;
 
         contact_state_e st = CS_UNKNOWN;
         contact_online_state_e ost = COS_ONLINE;
-        int cid = 0;
+        contact_id_s cid;
         int changed = CDM_PUBID | CDM_NAME | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG;
         int residpool = 1;
 
@@ -588,11 +595,13 @@ class xmpp :
         bool details_sent = false;
         bool rejected = false;
 
-        contact_descriptor_s( const gloox::JID& jid, int id ) :jid( jid ), cid(id) 
+        contact_descriptor_s( const gloox::JID& jid, contact_id_s id ) :jid( jid ), cid(id) 
         {
-            name.set( xsptr(jid.username()) );
+            ASSERT( !cid.is_empty() );
+
+            name = jid.username();
             memset( gavatar_hash, 0, sizeof( gavatar_hash ) );
-            if ( id == 0 )
+            if ( id.is_self() )
                 st = CS_OFFLINE;
         }
         ~contact_descriptor_s()
@@ -634,7 +643,7 @@ class xmpp :
             return changed != 0;
         }
 
-        void remove_resource( const asptr &rname )
+        void remove_resource( const std::asptr &rname )
         {
             for ( auto it = resources.begin(); it != resources.end(); ++it )
             {
@@ -648,7 +657,7 @@ class xmpp :
             changed |= CDM_DETAILS;
             details_sent = false;
         }
-        resource_s & getcreateres( const asptr &rname, int pr )
+        resource_s & getcreateres( const std::string &rname, int pr )
         {
             for ( auto it = resources.begin(); it != resources.end(); ++it )
             {
@@ -672,34 +681,34 @@ class xmpp :
             return false;
         }
 
-        void prepare_details( str_c &tmps, contact_data_s &cd )
+        void prepare_details(std::string &tmps, contact_data_s &desc )
         {
             if ( !details_sent )
             {
-                tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
-                tmps.append( xsptr(jid.full()) );
+                tmps.set(STD_ASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
+                tmps.append( jid.full() );
 
                 //tmps.append( asptr( "\",\"" CDET_CLIENT_CAPS "\":[" ) );
                 //for ( token<char> bbsupported( bbcodes_supported, ',' ); bbsupported; ++bbsupported )
                 //    tmps.append( CONSTASTR( "\"bb" ) ).append( *bbsupported ).append( CONSTASTR( "\"," ) );
 
-                tmps.append( CONSTASTR( "\",\"" CDET_CLIENT "\":[" ) );
+                tmps.append(STD_ASTR( "\",\"" CDET_CLIENT "\":[" ) );
                 for ( auto&r : resources )
                 {
-                    tmps.append( CONSTASTR( "\"" ) ).append( json_value(r.cl_name_ver) )
-                        .append( CONSTASTR( " (" ) ).append( json_value(r.cl_url)).append(CONSTASTR(")"));
+                    tmps.append(STD_ASTR( "\"" ) ).append( json_value(r.cl_name_ver) )
+                        .append(STD_ASTR( " (" ) ).append( json_value(r.cl_url)).append(STD_ASTR(")"));
                     if ( !r.os.is_empty() )
-                        tmps.append( CONSTASTR( " (" ) ).append( json_value( r.os ) ).append( CONSTASTR( ")" ) );
-                    tmps.append( CONSTASTR( "\"," ) );
+                        tmps.append(STD_ASTR( " (" ) ).append( json_value( r.os ) ).append(STD_ASTR( ")" ) );
+                    tmps.append(STD_ASTR( "\"," ) );
                 }
-                tmps.trunc_length().append( CONSTASTR( "]" ) );
+                tmps.trunc_length().append(STD_ASTR( "]" ) );
 
 
-                tmps.append( CONSTASTR( "}" ) );
+                tmps.append(STD_ASTR( "}" ) );
 
-                cd.mask |= CDM_DETAILS;
-                cd.details = tmps.cstr();
-                cd.details_len = (int)tmps.get_length();
+                desc.mask |= CDM_DETAILS;
+                desc.details = tmps.cstr();
+                desc.details_len = (int)tmps.get_length();
 
                 details_sent = true;
             }
@@ -751,7 +760,7 @@ class xmpp :
 
         void fix_bad_subscription_state( bool cancel_subscription = false );
 
-        void setup( const gloox::RosterItem& ritm, const asptr& resname, gloox::Presence::PresenceType presence )
+        void setup( const gloox::RosterItem& ritm, const std::asptr& resname, gloox::Presence::PresenceType presence )
         {
             if ( presence == gloox::Presence::Unavailable && rejected )
             {
@@ -772,9 +781,9 @@ class xmpp :
                 if ( n.empty() )
                     n = ritm.jidJID().username();
 
-                if ( !n.empty() && !name.equals( xsptr( n ) ) )
+                if ( !n.empty() && !name.equals( n ) )
                 {
-                    name.set( xsptr( n ) );
+                    name.set( n );
                     changed |= CDM_NAME;
                 }
             }
@@ -811,11 +820,14 @@ class xmpp :
 
         void prepare_session( xmpp * me )
         {
+            if (!resources.size())
+                getcreateres( std::string(), 0 );
+
             for ( resource_s &r : resources )
                 if ( !r.session )
                 {
                     gloox::JID rjid( jid );
-                    rjid.setResource( std::string(r.resname.cstr(),r.resname.get_length()) );
+                    rjid.setResource( r.resname );
                     r.session = new mses( this, me->j.get(), rjid );
                     r.session->registerMessageHandler( me );
                 }
@@ -846,10 +858,10 @@ class xmpp :
                 if ( need_recp && 0 != ( r.features & FE_XEP_0184 ) )
                 {
                     waiting_receipt.push_back( msg->utag );
-                    sstr_t<-32> id; id.set_as_num( msg->utag );
+                    std::sstr_t<-32> id; id.set_as_num( msg->utag );
                     gloox::StanzaExtensionList lst;
                     lst.push_back( new gloox::Receipt( gloox::Receipt::Request ) );
-                    r.session->send( std::string( msg->message, msg->message_len ), std::string( id.cstr(), id.get_length() ), lst );
+                    r.session->send( std::string( msg->message, msg->message_len ), std::string( id.as_sptr() ), lst );
                     need_recp = false;
                 }
                 else
@@ -863,31 +875,33 @@ class xmpp :
         }
 
         /*virtual*/ void handleDiscoInfo( const gloox::JID& from, const gloox::Disco::Info& info, int context ) override;
-        /*virtual*/ void handleDiscoItems( const gloox::JID& from, const gloox::Disco::Items& items, int context ) override
+        /*virtual*/ void handleDiscoItems( const gloox::JID& /*from*/, const gloox::Disco::Items& /*items*/, int /*context*/ ) override
         {
         }
-        /*virtual*/ void handleDiscoError( const gloox::JID& from, const gloox::Error* error, int context ) override
+        /*virtual*/ void handleDiscoError( const gloox::JID& /*from*/, const gloox::Error* /*error*/, int /*context*/ ) override
         {
 
         }
         /*virtual*/ void handleVCard( const gloox::JID& ijid, const gloox::VCard* vcard ) override;
-        /*virtual*/ void handleVCardResult( VCardContext context, const gloox::JID& ijid, gloox::StanzaError se ) override
+        /*virtual*/ void handleVCardResult( VCardContext /*context*/, const gloox::JID& /*ijid*/, gloox::StanzaError /*se*/ ) override
         {
         }
 
-        /*virtual*/ bool handleIq( const gloox::IQ& iq ) override { return false; }
+        /*virtual*/ bool handleIq( const gloox::IQ& /*iq*/ ) override { return false; }
         /*virtual*/ void handleIqID( const gloox::IQ& iq, int context ) override;
 
     };
     contact_descriptor_s *first = nullptr; // first points to zero contact - self
     contact_descriptor_s *last = nullptr;
 
+    contact_descriptor_s * load_descriptor( contact_id_s id, loader &l );
+
     void del( contact_descriptor_s * c )
     {
         LIST_DEL( c, first, last, prev, next );
         delete c;
     }
-    contact_descriptor_s *find( int id )
+    contact_descriptor_s *find(contact_id_s id)
     {
         for ( contact_descriptor_s *i = first; i; i = i->next )
             if ( i->cid == id ) return i;
@@ -909,16 +923,16 @@ class xmpp :
 
     struct nodefeatures_s
     {
-        str_c node;
+        std::string node;
         time_t crtime = 0;
         i32 features = 0;
         nodefeatures_s() {}
-        explicit nodefeatures_s( const asptr&s, time_t t = now() ):node(s), crtime(t) {}
-        nodefeatures_s( const asptr&s, time_t t, i32 f ) :node( s ), crtime( t ), features(f) {}
+        explicit nodefeatures_s( const std::string&s, time_t t = now() ):node(s), crtime(t) {}
+        nodefeatures_s( const std::asptr&s, time_t t, i32 f ) :node( s ), crtime( t ), features(f) {}
     };
     std::vector< nodefeatures_s > node2features;
 
-    nodefeatures_s & getcreatef( const asptr &node )
+    nodefeatures_s & getcreatef( const std::string &node )
     {
         for ( auto it = node2features.begin(); it != node2features.end(); ++it )
         {
@@ -933,51 +947,62 @@ class xmpp :
 
     time_t next_reconnect_time = 0;
 
-    int self_typing_contact = 0;
+    contact_id_s self_typing_contact;
     int self_typing_start_time = 0;
 
     struct other_typing_s
     {
-        int cid = 0;
+        contact_id_s cid;
         int time = 0;
         int totaltime = 0;
-        other_typing_s( int cid, int time ) :cid( cid ), time( time ), totaltime( time ) {}
+        other_typing_s(contact_id_s cid, int time ) :cid( cid ), time( time ), totaltime( time ) {}
     };
     std::vector<other_typing_s> other_typing;
 
     struct host_s
     {
-        str_c host;
+        std::string host;
         uint16_t port = 0;
         host_s() {}
     };
 
     i32 proxy_type = 0;
     host_s proxy;
-    void set_proxy_addr( const asptr& addr )
+    void set_proxy_addr( const std::asptr& addr )
     {
-        token<char> p( addr, ':' );
+        std::token<char> p( addr, ':' );
         proxy.host.clear();
         proxy.port = 0;
-        if ( p ) proxy.host = *p;
-        ++p; if ( p ) proxy.port = (uint16_t)p->as_uint();
+        if ( p ) proxy.host = p->as_sptr();
+        ++p; if ( p ) proxy.port = static_cast<uint16_t>(p->as_uint());
     }
 
     std::vector<gloox::StreamHost> bytestreamproxy;
 
-    bool restart_module = false;
-    bool connecting = false;
-    bool online_flag = false;
-    bool set_cfg_called = false;
-    bool reconnect = false;
-    bool dirty_vcard = true;
-    bool auth_failed = false;
+#define XFLAGS \
+    FLG( restart_module, 0 ) \
+    FLG( connecting, 0 ) \
+    FLG( online_state, 0 ) \
+    FLG( online_flag_by_gui, 0 ) \
+    FLG( online_flag_internal, 0 ) \
+    FLG( set_cfg_called, 0 ) \
+    FLG( reconnect, 0 ) \
+    FLG( dirty_vcard, 1 ) \
+    FLG( auth_failed, 0 ) \
+    FLG( trusted, 0 ) \
+    FLG( encrypted, 0 ) \
+    FLG( only_enc_allow, 1 ) \
+    FLG( only_trust_allow, 1 ) \
+
+
+#define FLG(n,v) unsigned n : 1;
+    XFLAGS
+#undef FLG
+
 
     enum chunks_e // HADR ORDER!!!!!!!!
     {
         chunk_magic,
-        //chunk_jid,
-        //chunk_password,
 
         chunk_features = 100,
         chunk_feature,
@@ -1002,15 +1027,24 @@ class xmpp :
         chunk_other = 240,
         chunk_proxy_type,
         chunk_proxy_address,
+        chunk_enc_only,
+        chunk_trust_only,
 
     };
 
     /*virtual*/ void onConnect() override
     {
+        online_state = true;
+        int cbits = 0;
+        SETUPFLAG(cbits, CB_TRUSTED, trusted);
+        SETUPFLAG(cbits, CB_ENCRYPTED, encrypted);
+
+        hf->connection_bits(cbits);
+
         connecting = false;
         first->st = CS_ONLINE;
         first->changed |= CDM_STATE;
-        update_contact(nullptr);
+        update_contact(nullptr, false);
         next_reconnect_time = 0;
 
         gloox::JID serverjid = first->jid;
@@ -1018,10 +1052,22 @@ class xmpp :
         serverjid.setResource( gloox::EmptyString );
 
         j->disco()->getDiscoItems( serverjid, gloox::EmptyString, this, 0 );
+
     }
 
-    /*virtual*/ void onDisconnect( gloox::ConnectionError ) override
+    /*virtual*/ void onDisconnect( gloox::ConnectionError rsn ) override
     {
+        if (connecting)
+        {
+            if (rsn == gloox::ConnTlsNotAvailable && only_enc_allow)
+                hf->operation_result(LOP_ONLINE, CR_NOT_ENCRYPTED_CONNECTION);
+            else if (rsn == gloox::ConnTlsFailed && only_trust_allow)
+                hf->operation_result(LOP_ONLINE, CR_UNTRUSTED_CONNECTION);
+            else
+                hf->operation_result(LOP_ONLINE, CR_SERVER_CLOSED_CONNECTION);
+            online_flag_internal = false;
+        }
+
         connecting = false;
 
         for ( contact_descriptor_s *f = first; f; f = f->next )
@@ -1030,17 +1076,25 @@ class xmpp :
             {
                 f->st = CS_OFFLINE;
                 f->changed |= CDM_STATE;
-                update_contact( f );
+                update_contact( f, true );
             }
             f->on_offline();
         }
+        online_state = false;
     }
-    /*virtual*/ bool onTLSConnect( const gloox::CertInfo&  ) override
+    /*virtual*/ bool onTLSConnect( const gloox::CertInfo& cert  ) override
     {
+        encrypted = true;
+        if (cert.status == gloox::CertOk)
+            trusted = true;
+
+        if (only_trust_allow && !trusted)
+            return false;
+
         return true;
     }
 
-    /*virtual*/ bool handleIq( const gloox::IQ& iq ) override
+    /*virtual*/ bool handleIq( const gloox::IQ& /*iq*/ ) override
     {
         return false;
     }
@@ -1059,7 +1113,7 @@ class xmpp :
         }
     }
 
-    /*virtual*/ void handleDiscoInfo( const gloox::JID& from, const gloox::Disco::Info& info, int context ) override
+    /*virtual*/ void handleDiscoInfo( const gloox::JID& from, const gloox::Disco::Info& info, int /*context*/ ) override
     {
         if ( info.hasFeature( gloox::XMLNS_BYTESTREAMS ) )
         {
@@ -1078,14 +1132,14 @@ class xmpp :
             j->send(t);
         }
     }
-    /*virtual*/ void handleDiscoItems( const gloox::JID& from, const gloox::Disco::Items& items, int context ) override
+    /*virtual*/ void handleDiscoItems( const gloox::JID& /*from*/, const gloox::Disco::Items& items, int /*context*/ ) override
     {
         for( const auto &itm : items.items() )
         {
             j->disco()->getDiscoInfo( itm->jid(), gloox::EmptyString, this, 1 );
         }
     }
-    /*virtual*/ void handleDiscoError( const gloox::JID& from, const gloox::Error* error, int context ) override
+    /*virtual*/ void handleDiscoError( const gloox::JID& /*from*/, const gloox::Error* /*error*/, int /*context*/ ) override
     {
 
     }
@@ -1098,9 +1152,9 @@ class xmpp :
         const gloox::Receipt *r = stanza.findExtension<gloox::Receipt>( gloox::ExtReceipt );
         if ( r && gloox::Receipt::Received == r->rcpt() )
         {
-            contact_descriptor_s &cd = getcreate_descriptor( stanza.from(), true );
-            u64 utag = pstr_c( xsptr( r->id() ) ).as_num<u64>();
-            if ( removeIfPresentFast( cd.waiting_receipt, utag ) )
+            contact_descriptor_s &desc = getcreate_descriptor( stanza.from(), true );
+            u64 utag = std::pstr_c( r->id().as_sptr() ).as_num<u64>();
+            if ( removeIfPresentFast( desc.waiting_receipt, utag ) )
                 hf->delivered( utag );
             return;
         }
@@ -1110,12 +1164,12 @@ class xmpp :
         if ( const gloox::DelayedDelivery *dd = stanza.when() )
         {
             //"2016-05-25T10:14:08.780Z"
-            str_c tstamp( xsptr( dd->stamp() ) );
+            std::string tstamp( dd->stamp() );
             tstamp.replace_all( 'T', '-' );
             tstamp.replace_all( ':', '-' );
             tstamp.replace_all( '.', '-' );
 
-            token<char> dt( tstamp, '-' );
+            std::token<char> dt( tstamp, '-' );
 
             tm tt = {};
             tt.tm_year = dt->as_int() - 1900; ++dt;
@@ -1142,22 +1196,22 @@ class xmpp :
             d = decodeerror( e->error() );
         }
 
-        contact_descriptor_s &cd = getcreate_descriptor( from, true );
-        if ( first == &cd ) return; // something wrong
-        cd.prepare_session( this );
+        contact_descriptor_s &desc = getcreate_descriptor( from, true );
+        if ( first == &desc ) return; // something wrong
+        desc.prepare_session( this );
 
         if ( from.username().empty() )
         {
             if ( !s.empty() || !b.empty() || !d.empty() )
             {
-                str_c msg( CONSTASTR( "{\"" SMF_SUBJECT "\":\"" ), json_value(xsptr( s )) );
-                msg.append( CONSTASTR( "\",\"" SMF_TEXT "\":\"" ) ).append( json_value(xsptr(b)) );
-                msg.append( CONSTASTR( "\",\"" SMF_DESCRIPTION "\":\"" ) ).append( json_value( xsptr( d ) ) );
+                std::string msg(STD_ASTR("{\"" SMF_SUBJECT "\":\""), json_value(s));
+                msg.append(STD_ASTR("\",\"" SMF_TEXT "\":\"")).append(json_value(b));
+                msg.append(STD_ASTR("\",\"" SMF_DESCRIPTION "\":\"")).append(json_value(d));
 
-                msg.append( CONSTASTR( "\"}" ) );
+                msg.append(STD_ASTR( "\"}" ) );
 
                 // message from server
-                hf->message( MT_SYSTEM_MESSAGE, 0, cd.cid, msgtime, msg.cstr(), msg.get_length() );
+                hf->message( MT_SYSTEM_MESSAGE, contact_id_s(), desc.cid, msgtime, msg.cstr(), msg.get_length() );
             }
             return;
         }
@@ -1168,7 +1222,7 @@ class xmpp :
 
             for ( auto it = other_typing.begin(); it != other_typing.end(); ++it )
             {
-                if ( it->cid == cd.cid )
+                if ( it->cid == desc.cid )
                 {
                     if ( !is_typing )
                         other_typing.erase( it );
@@ -1177,33 +1231,33 @@ class xmpp :
             }
 
             if ( is_typing )
-                other_typing.emplace_back( cd.cid, time_ms() );
+                other_typing.emplace_back( desc.cid, time_ms() );
         }
 
 
         if ( nn )
         {
-            if ( !cd.name.equals( xsptr( nn->nick() ) ) )
+            if ( !desc.name.equals( nn->nick() ) )
             {
-                cd.name = xsptr( nn->nick() );
-                cd.changed |= CDM_NAME;
-                update_contact( &cd );
+                desc.name = nn->nick();
+                desc.changed |= CDM_NAME;
+                update_contact( &desc, true );
             }
-            cd.nickname = true;
+            desc.nickname = true;
         }
 
         if ( !b.empty() )
         {
             for ( auto it = other_typing.begin(); it != other_typing.end(); ++it )
             {
-                if ( it->cid == cd.cid )
+                if ( it->cid == desc.cid )
                 {
                     other_typing.erase( it );
                     break;
                 }
             }
 
-            hf->message( MT_MESSAGE, 0, cd.cid, msgtime, b.c_str(), b.length() );
+            hf->message( MT_MESSAGE, contact_id_s(), desc.cid, msgtime, b.c_str(), static_cast<int>(b.length()) );
 
             if ( r )
             {
@@ -1230,7 +1284,7 @@ class xmpp :
                 c->setup_subscription( *ritm );
 
             if (c->init_state( c->st == CS_ONLINE ))
-                update_contact( c );
+                update_contact(c, true);
             hf->save();
         }
     }
@@ -1240,7 +1294,7 @@ class xmpp :
         handleItemUnsubscribed( jid );
     }
 
-    /*virtual*/ void handleItemUpdated( const gloox::JID& jid ) override
+    /*virtual*/ void handleItemUpdated( const gloox::JID& /*jid*/ ) override
     {
 
     }
@@ -1257,7 +1311,7 @@ class xmpp :
 
             c->slv_set_unsubscribed();
             if (c->init_state( c->st == CS_ONLINE ))
-                update_contact( c );
+                update_contact(c, true);
             hf->save();
         }
     }
@@ -1266,129 +1320,127 @@ class xmpp :
     {
         for ( gloox::Roster::const_iterator it = roster.begin(); it != roster.end(); ++it )
         {
-            contact_descriptor_s &cd = getcreate_descriptor( it->second->jidJID(), false );
-            if ( first == &cd ) continue;; // something wrong
-            cd.setup( *it->second, asptr(), gloox::Presence::Probe );
-            if (cd.changed) update_contact( &cd );
+            contact_descriptor_s &desc = getcreate_descriptor( it->second->jidJID(), false );
+            if ( first == &desc) continue;; // something wrong
+            desc.setup( *it->second, std::asptr(), gloox::Presence::Probe );
+            if (desc.changed) update_contact(&desc, true);
         }
     }
-    /*virtual*/ void handleRosterPresence( const gloox::RosterItem& item, const std::string& resource, gloox::Presence::PresenceType presence, const std::string& msg ) override
+    /*virtual*/ void handleRosterPresence( const gloox::RosterItem& item, const std::string& resource, gloox::Presence::PresenceType presence, const std::string& /*msg*/ ) override
     {
         if ( resource.empty() && presence == gloox::Presence::Unavailable )
             return; //wot?
 
-        contact_descriptor_s &cd = getcreate_descriptor( item.jidJID(), false );
-        if ( first == &cd ) return; // something wrong
-        cd.setup( item, xsptr( resource ), presence );
-        if ( cd.changed ) update_contact( &cd );
+        contact_descriptor_s &desc = getcreate_descriptor( item.jidJID(), false );
+        if ( first == &desc) return; // something wrong
+        desc.setup( item, resource, presence );
+        if (desc.changed) update_contact(&desc, true);
 
     }
     /*virtual*/ void handlePresence( const gloox::Presence& presence ) override
     {
-        if ( contact_descriptor_s *cd = find( presence.from() ) )
+        if ( contact_descriptor_s *desc = find( presence.from() ) )
         {
-            if ( cd == first )
+            if (desc == first )
                 return;
 
             if ( gloox::Presence::Unavailable != presence.presence() )
             {
-                contact_descriptor_s::resource_s &res = cd->getcreateres( xsptr( presence.from().resource() ), presence.priority() );
+                contact_descriptor_s::resource_s &res = desc->getcreateres( presence.from().resource(), presence.priority() );
                 if ( const gloox::Capabilities* caps = presence.capabilities() )
                 {
                     std::string n( caps->node() + '#' + caps->ver() );
-                    res.cl_url = xsptr( caps->node() );
-                    if ( res.cl_url.ends( CONSTASTR( "/caps" ) ) )
+                    res.cl_url = caps->node();
+                    if ( res.cl_url.ends( STD_ASTR( "/caps" ) ) )
                         res.cl_url.trunc_length(5);
-                    nodefeatures_s &f = getcreatef( xsptr(n) );
+                    nodefeatures_s &f = getcreatef( n );
                     res.features = f.features;
                     
 #ifndef _DEBUG
                     if ( 0 == ( f.features & FE_INIT ) )
 #endif // _DEBUG
-                        j->disco()->getDiscoInfo( presence.from(), n, cd, res.id );
+                        j->disco()->getDiscoInfo( presence.from(), n, desc, res.id );
                 }
                 if ( const gloox::Nickname *nn = presence.findExtension<gloox::Nickname>( gloox::ExtNickname ) )
                 {
-                    cd->name = xsptr(nn->nick());
-                    cd->changed |= CDM_NAME;
-                    cd->nickname = true;
+                    desc->name = nn->nick();
+                    desc->changed |= CDM_NAME;
+                    desc->nickname = true;
                 }
                 
-                if (!cd->statusmsg.equals( xsptr(presence.status() ) ))
+                if (!desc->statusmsg.equals(presence.status()))
                 {
-                    cd->statusmsg = xsptr( presence.status() );
-                    cd->changed |= CDM_STATUSMSG;
+                    desc->statusmsg = presence.status();
+                    desc->changed |= CDM_STATUSMSG;
                 }
 
-                cm->fetchVCard( cd->jid, cd );
+                cm->fetchVCard(desc->jid, desc);
 
                 {
-                    gloox::Tag* t = new gloox::Tag( "iq" );
-                    t->addAttribute( "from", j->jid().full() );
-                    t->addAttribute( "to", presence.from().full() );
+                    gloox::Tag* t = new gloox::Tag("iq");
+                    t->addAttribute("from", j->jid().full());
+                    t->addAttribute("to", presence.from().full());
                     std::string id = j->getID();
-                    t->addAttribute( "id", id );
-                    t->addAttribute( gloox::TYPE, "get" );
-                    gloox::Tag* q = new gloox::Tag( "query" );
-                    q->setXmlns( gloox::XMLNS_VERSION );
-                    t->addChild( q );
+                    t->addAttribute("id", id);
+                    t->addAttribute(gloox::TYPE, "get");
+                    gloox::Tag* q = new gloox::Tag("query");
+                    q->setXmlns(gloox::XMLNS_VERSION);
+                    t->addChild(q);
 
-                    j->add_iq_handler( id, cd, 4 );
+                    j->add_iq_handler(id, desc, 4);
 
                     j->send( t );
                 }
 
 
-                if (cd->changed)
-                    update_contact( cd );
+                if (desc->changed)
+                    update_contact(desc, true);
             }
         }
     }
 
-    /*virtual*/ void handleSelfPresence( const gloox::RosterItem& item, const std::string& resource, gloox::Presence::PresenceType presence, const std::string& msg ) override
+    /*virtual*/ void handleSelfPresence( const gloox::RosterItem& /*item*/, const std::string& /*resource*/, gloox::Presence::PresenceType /*presence*/, const std::string& /*msg*/ ) override
     {
 
     }
     /*virtual*/ bool handleSubscriptionRequest( const gloox::JID& jid, const std::string& msg ) override
     {
-        contact_descriptor_s &cd = getcreate_descriptor( jid, false );
-        if ( first == &cd ) return true; // something wrong
+        contact_descriptor_s &desc = getcreate_descriptor( jid, false );
+        if ( first == &desc) return true; // something wrong
 
         if (gloox::RosterItem *ritm = j->rosterManager()->getRosterItem( jid ))
-            cd.setup_subscription( *ritm );
+            desc.setup_subscription( *ritm );
 
-        if ( cd.slv_from_other() == 2 )
+        if (desc.slv_from_other() == 2)
         {
-            cd.fix_bad_subscription_state();
-            if ( cd.init_state( cd.st == CS_ONLINE ) )
-                update_contact( &cd );
+            desc.fix_bad_subscription_state();
+            if (desc.init_state(desc.st == CS_ONLINE))
+                update_contact(&desc, true);
             return true;
         }
 
-        if ( cd.slv_from_other() == 1 )
+        if (desc.slv_from_other() == 1 )
         {
             // already received request
             // so, notify app again
-            hf->message( MT_FRIEND_REQUEST, 0, cd.cid, now(), msg.c_str(), msg.length() );
+            hf->message( MT_FRIEND_REQUEST, contact_id_s(), desc.cid, now(), msg.c_str(), static_cast<int>(msg.length()) );
             return true;
         }
 
-        cd.slv_up_from_other(); // now set lv to 1
-        cd.fix_bad_subscription_state();
+        desc.slv_up_from_other(); // now set lv to 1
+        desc.fix_bad_subscription_state();
 
-        if ( cd.init_state( cd.st == CS_ONLINE ) )
-            update_contact( &cd );
+        if (desc.init_state(desc.st == CS_ONLINE))
+            update_contact(&desc, true);
 
-        if ( cd.st == CS_INVITE_RECEIVE )
-            hf->message( MT_FRIEND_REQUEST, 0, cd.cid, now(), msg.c_str(), msg.length() );
+        if (desc.st == CS_INVITE_RECEIVE)
+            hf->message(MT_FRIEND_REQUEST, contact_id_s(), desc.cid, now(), msg.c_str(), static_cast<int>(msg.length()));
 
         hf->save();
-
-
         return true;
     }
 
-    /*virtual*/ bool handleUnsubscriptionRequest( const gloox::JID& jid, const std::string& msg ) override
+    /*virtual*/ bool handleUnsubscriptionRequest( const gloox::JID& /*jid*/, const std::string& /*msg*/ ) override
     {
 
         return true;
@@ -1397,28 +1449,28 @@ class xmpp :
     {
         handlePresence( presence );
     }
-    /*virtual*/ void handleRosterError( const gloox::IQ& iq ) override
+    /*virtual*/ void handleRosterError( const gloox::IQ& /*iq*/ ) override
     {
     }
-    /*virtual*/ void handleTag( gloox::Tag* tag ) override
+    /*virtual*/ void handleTag( gloox::Tag* /*tag*/ ) override
     {
 
     }
 
-    /*virtual*/ void handleVCard( const gloox::JID& ijid, const gloox::VCard* vcard ) override
+    /*virtual*/ void handleVCard( const gloox::JID& /*ijid*/, const gloox::VCard* /*vcard*/ ) override
     {
         __debugbreak();
     }
 
-    /*virtual*/ void handleVCardResult( VCardContext context, const gloox::JID& ijid, gloox::StanzaError se ) override
+    /*virtual*/ void handleVCardResult( VCardContext /*context*/, const gloox::JID& /*ijid*/, gloox::StanzaError /*se*/ ) override
     {
 
     }
 
-    /*virtual*/ void handleFTRequest( const gloox::JID& from, const gloox::JID& to, const std::string& sid,
-        const std::string& name, long size, const std::string& hash,
-        const std::string& date, const std::string& mimetype,
-        const std::string& desc, int stypes ) override
+    /*virtual*/ void handleFTRequest( const gloox::JID& from, const gloox::JID& /*to*/, const std::string& sid,
+        const std::string& name, long size, const std::string& /*hash*/,
+        const std::string& /*date*/, const std::string& /*mimetype*/,
+        const std::string& /*desc*/, int stypes ) override
     {
         if ( 0 == (stypes & gloox::SIProfileFT::FTTypeIBB) )
             if ( bytestreamproxy.empty() )
@@ -1435,11 +1487,11 @@ class xmpp :
                 fm->declineFT( from, sid, gloox::SIManager::RequestRejected );
                 return;
             }
-            incoming_file_s *ifl = new incoming_file_s( from, cd->cid, sid, size, xsptr(name) );
+            incoming_file_s *ifl = new incoming_file_s( from, cd->cid, sid, size, name );
             hf->incoming_file( cd->cid, ifl->utag, ifl->fsz, ifl->fn.cstr(), ifl->fn.get_length() );
         }
     }
-    /*virtual*/ void handleFTRequestError( const gloox::IQ& iq, const std::string& sid ) override
+    /*virtual*/ void handleFTRequestError( const gloox::IQ& /*iq*/, const std::string& sid ) override
     {
         for ( transmitting_file_s *f = of_first; f; f = f->next )
             if ( f->fileid == sid )
@@ -1486,7 +1538,7 @@ class xmpp :
             }
 
     }
-    /*virtual*/ const std::string handleOOBRequestResult( const gloox::JID& from, const gloox::JID& to, const std::string& sid ) override
+    /*virtual*/ const std::string handleOOBRequestResult( const gloox::JID& /*from*/, const gloox::JID& /*to*/, const std::string& /*sid*/ ) override
     {
         return gloox::EmptyString;
     }
@@ -1497,13 +1549,13 @@ class xmpp :
         {
             if ( proxy_type & CF_PROXY_SUPPORT_HTTPS )
             {
-                //gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
-                //s->setConnectionImpl( new gloox::ConnectionHTTPProxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
+                gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
+                s->setConnectionImpl( new gloox::ConnectionHTTPProxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
 
             } else if ( proxy_type & ( CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5 ) )
             {
-                //gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
-                //s->setConnectionImpl( new gloox::ConnectionSOCKS5Proxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
+                gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
+                s->setConnectionImpl( new gloox::ConnectionSOCKS5Proxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
             }
         }
     }
@@ -1513,68 +1565,81 @@ class xmpp :
         if ( contact_descriptor_s *d = find( jid ) )
             return *d;
         
-        int newid = 1;
-        for ( ; find( newid ) != nullptr; ++newid ); // slooooow. but fast enough on current cpus
-        contact_descriptor_s *nc = new contact_descriptor_s( jid, newid );
-        LIST_ADD( nc, first, last, prev, next );
+        int newid = hf->find_free_id();
+        contact_descriptor_s *ndesc = new contact_descriptor_s( jid, contact_id_s(contact_id_s::CONTACT,newid) );
+        LIST_ADD(ndesc, first, last, prev, next);
 
         if ( update_if_new )
         {
             if ( !jid.resource().empty() )
-                nc->jid.setResource( gloox::EmptyString );
+                ndesc->jid.setResource( gloox::EmptyString );
 
-            update_contact( nc );
+            update_contact(ndesc, true);
         }
 
-        return *nc;
+        return *ndesc;
     }
 
-    void update_contact( contact_descriptor_s *cd )
+    void update_contact( contact_descriptor_s *desc, bool protodata )
     {
-        if ( nullptr == cd )
-            cd = first;
+        if ( nullptr == desc )
+            desc = first;
 
-        contact_data_s self( cd->cid, CDM_GENDER | cd->changed );
-        self.public_id = cd->jid.full().c_str();
-        self.public_id_len = cd->jid.full().length();
-        self.name = cd->name.cstr();
-        self.name_len = cd->name.get_length();
+        contact_data_s cd( desc->cid, CDM_GENDER | desc->changed );
+        cd.public_id = desc->jid.full().c_str();
+        cd.public_id_len = static_cast<int>(desc->jid.full().length());
+        cd.name = desc->name.cstr();
+        cd.name_len = desc->name.get_length();
 
-        if (cd->changed & CDM_NAME)
+        if (desc->changed & CDM_NAME)
         {
-            Log( "changed name for %i to <%s>", cd->cid, cd->name.cstr() );
+            Log( "changed name for %i to <%s>", desc->cid.id, desc->name.cstr() );
         }
 
-        self.status_message = cd->statusmsg.cstr();
-        self.status_message_len = cd->statusmsg.get_length();
-        self.state = cd->st;
-        self.ostate = cd->ost;
-        self.avatar_tag = cd->gavatar_tag;
+        cd.status_message = desc->statusmsg.cstr();
+        cd.status_message_len = desc->statusmsg.get_length();
+        cd.state = desc->st;
+        cd.ostate = desc->ost;
+        cd.avatar_tag = desc->gavatar_tag;
 
-        str_c tmps;
-        if ( cd == first )
+        std::string tmps;
+        if (desc == first )
         {
-            if ( !self.public_id_len )
-                self.public_id = "?", self.public_id_len = 1;
-            self.state = online_flag ? cd->st : CS_OFFLINE;
+            ASSERT( cd.id.is_self() );
+
+            protodata = false;
+
+            if ( !cd.public_id_len )
+                cd.public_id = "?", cd.public_id_len = 1;
+            cd.state = online_state ? desc->st : CS_OFFLINE;
         } else
         {
-            if ( self.state == CS_UNKNOWN && 0 != ( self.mask & CDM_STATE ) )
-                self.mask |= CDF_ALLOW_INVITE;
+            if (cd.state == CS_UNKNOWN && 0 != (cd.mask & CDM_STATE))
+                cd.id.allowinvite = true, cd.id.unknown = true;
 
-            if ( cd->jid.username().empty() )
+            if ( desc->jid.username().empty() )
             {
                 // system user
-                self.mask |= CDF_SYSTEM_USER;
+                cd.id.sysuser = true;
 
             } else
             {
-                cd->prepare_details( tmps, self );
+                desc->prepare_details( tmps, cd );
             }
         }
 
-        hf->update_contact( &self );
-        cd->changed = 0;
+        savebuffer cdata;
+        if (protodata)
+        {
+            chunk s(cdata);
+            s << *desc;
+            cd.data = cdata.data();
+            cd.data_size = static_cast<int>(cdata.size());
+            cd.mask |= CDM_DATA;
+        }
+
+        hf->update_contact( &cd );
+        desc->changed = 0;
     }
 
     gloox::VCard *build_vcard()
@@ -1596,20 +1661,31 @@ class xmpp :
 
     void send_configurable()
     {
-        const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR };
-        str_c svalues[ 2 ];
+        const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, copname<auto_co_enc_only>::name().s, copname<auto_co_trust_only>::name().s };
+        std::string svalues[ 4 ];
         svalues[ 0 ].set_as_int( proxy_type );
         if ( proxy_type ) svalues[ 1 ].set( proxy.host ).append_char( ':' ).append_as_uint( proxy.port );
-        const char * values[] = { svalues[ 0 ].cstr(), svalues[ 1 ].cstr() };
+        svalues[2].set_as_int(only_enc_allow ? 1 : 0);
+        svalues[3].set_as_int(only_trust_allow ? 1 : 0);
+
+        const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr() };
 
         static_assert( ARRAY_SIZE( fields ) == ARRAY_SIZE( values ) && ARRAY_SIZE( values ) == ARRAY_SIZE( svalues ), "check len" );
 
-        hf->configurable( 2, fields, values );
+        hf->configurable(ARRAY_SIZE(fields), fields, values );
     }
 
     void letsconnect();
 
 public:
+
+    xmpp()
+    {
+#define FLG(n,v) n = v;
+        XFLAGS
+#undef FLG
+    }
+
     ~xmpp()
     {
         cm.reset();
@@ -1625,19 +1701,17 @@ public:
         hf = hf_;
     }
 
-#define FUNC0( rt, fn ) rt fn();
 #define FUNC1( rt, fn, p0 ) rt fn(p0);
 #define FUNC2( rt, fn, p0, p1 ) rt fn(p0, p1);
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 
 };
 
 static xmpp cl;
 
-xmpp::incoming_file_s::incoming_file_s( const gloox::JID &jid_, i32 cid_, const std::string &fileid_, u64 fsz_, const asptr &fn ) :fn( fn )
+xmpp::incoming_file_s::incoming_file_s( const gloox::JID &jid_, contact_id_s cid_, const std::string &fileid_, u64 fsz_, const std::string &fn ) :fn( fn )
 {
     jid = jid_;
     fsz = fsz_;
@@ -1727,7 +1801,7 @@ void xmpp::incoming_file_s::recv_data( const byte *data, size_t datasz )
 }
 
 
-xmpp::transmitting_file_s::transmitting_file_s( const gloox::JID &jid_, u32 cid_, u64 utag_, const std::string &fileid_, u64 fsz_, const asptr &fn ) :fn( fn )
+xmpp::transmitting_file_s::transmitting_file_s( const gloox::JID &jid_, contact_id_s cid_, u64 utag_, const std::string &fileid_, u64 fsz_, const std::string &fn ) :fn( fn )
 {
     jid = jid_;
     fsz = fsz_;
@@ -1835,8 +1909,8 @@ void  xmpp::transmitting_file_s::app_req_s::clear()
 
 void xmpp::contact_descriptor_s::on_offline()
 {
-    if ( cl.self_typing_contact && cl.self_typing_contact == cid )
-        cl.self_typing_contact = 0;
+    if ( !cl.self_typing_contact.is_empty() && cl.self_typing_contact == cid )
+        cl.self_typing_contact.clear();
 
     for ( auto it = cl.other_typing.begin(); it != cl.other_typing.end(); ++it )
     {
@@ -1886,9 +1960,9 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
 {
     ASSERT( jid == ijid );
 
-    str_c onn = name;
+    std::string onn = name;
     if ( !vcard->nickname().empty() )
-        name = xsptr( vcard->nickname() ), nickname = true;
+        name = vcard->nickname(), nickname = true;
     if ( !onn.equals( name ) )
         changed |= CDM_NAME;
     const gloox::VCard::Photo& phi = vcard->photo();
@@ -1914,10 +1988,10 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
     changed |= CDM_AVATAR_TAG; // always send avatar tag
 
     if ( changed )
-        cl.update_contact( this );
+        cl.update_contact(this, true);
 
     if ( getavatar )
-        cl.hf->avatar_data( cid, gavatar_tag, gavatar.data(), gavatar.size() ), getavatar = false;
+        cl.hf->avatar_data( cid, gavatar_tag, gavatar.data(), static_cast<int>(gavatar.size()) ), getavatar = false;
 }
 
 /*virtual*/ void xmpp::contact_descriptor_s::handleIqID( const gloox::IQ& iq, int context )
@@ -1926,12 +2000,12 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
     {
         if ( const gloox::SoftwareVersion *sv = iq.findExtension<gloox::SoftwareVersion>( gloox::ExtVersion ) )
         {
-            resource_s &r = getcreateres( xsptr( iq.from().resource() ), -1 );
-            r.cl_name_ver.set( xsptr( sv->name() ) ).append_char( '/' ).append( xsptr( sv->version() ) );
-            r.os = xsptr( sv->os() );
+            resource_s &r = getcreateres( iq.from().resource(), -1 );
+            r.cl_name_ver.set( sv->name() ).append_char( '/' ).append( sv->version() );
+            r.os = sv->os();
             details_sent = false;
             changed |= CDM_DETAILS;
-            cl.update_contact( this );
+            cl.update_contact( this, true );
         }
     }
 }
@@ -1957,26 +2031,19 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
             r.features = f;
             break;
         }
-    cl.getcreatef( xsptr(info.node()) ).features = f;
+    cl.getcreatef( info.node() ).features = f;
     cl.hf->save();
-}
-
-void xmpp::offline()
-{
-    if ( !online_flag )
-        return;
-
-    online_flag = false;
-    if (j)
-    {
-        j->disconnect();
-    }
 }
 
 void xmpp::letsconnect()
 {
+    trusted = false;
+    encrypted = false;
+
     if ( j )
     {
+        j->setTls(only_enc_allow ? gloox::TLSRequired : gloox::TLSOptional);
+
         connecting = true;
 
         if ( proxy_type & (CF_PROXY_SUPPORT_HTTP|CF_PROXY_SUPPORT_HTTPS) )
@@ -1995,35 +2062,25 @@ void xmpp::letsconnect()
         j->connect( false );
     }
 }
-void xmpp::online()
-{
-    if ( online_flag )
-        return;
 
-    online_flag = true;
-    next_reconnect_time = now() + 5;
-    letsconnect();
-}
-
-
-void xmpp::call(int id, const call_info_s *ci)
+void xmpp::call(contact_id_s id, const call_info_s *ci)
 {
 }
 
 
-void xmpp::stop_call(int id)
+void xmpp::stop_call(contact_id_s id)
 {
 }
 
-void xmpp::accept_call(int id)
+void xmpp::accept_call(contact_id_s id)
 {
 }
 
-void xmpp::stream_options(int id, const stream_options_s * so)
+void xmpp::stream_options(contact_id_s id, const stream_options_s * so)
 {
 }
 
-int xmpp::send_av(int id, const call_info_s * ci)
+int xmpp::send_av(contact_id_s id, const call_info_s * ci)
 {
     return SEND_AV_OK;
 }
@@ -2037,17 +2094,19 @@ void xmpp::tick(int *sleep_time_ms)
         return;
     }
 
-    if ( !online_flag || !j )
+    if ( !(online_flag_by_gui&&online_flag_internal) || !j )
     {
         *sleep_time_ms = 100;
         reconnect = false;
         return;
     }
 
-    if ( reconnect )
+    if (reconnect)
     {
-        offline();
-        online();
+        hf->operation_result(LOP_ONLINE, CR_OK);
+
+        app_signal(APPS_OFFLINE);
+        app_signal(APPS_ONLINE);
         *sleep_time_ms = 1;
         reconnect = false;
         return;
@@ -2062,14 +2121,14 @@ void xmpp::tick(int *sleep_time_ms)
 
         // self typing
         // may be time to stop typing?
-        if ( self_typing_contact )
+        if ( !self_typing_contact.is_empty() )
         {
             int typing_time = ( curt - self_typing_start_time );
 
             if ( contact_descriptor_s *cd = find( self_typing_contact ) )
             {
                 if ( typing_time > 3500 )
-                    self_typing_contact = 0, cd->chat_state( this, gloox::ChatStateActive );
+                    self_typing_contact.clear(), cd->chat_state( this, gloox::ChatStateActive );
                 else if ( typing_time > 1500 )
                     cd->chat_state( this, gloox::ChatStatePaused );
             }
@@ -2082,7 +2141,7 @@ void xmpp::tick(int *sleep_time_ms)
             if ( ( curt - ot.time ) > 0 )
             {
                 if ( contact_descriptor_s *desc = find( ot.cid ) )
-                    hf->typing( 0, desc->cid );
+                    hf->typing(contact_id_s(), desc->cid );
                 ot.time += 1000;
             }
         }
@@ -2100,15 +2159,17 @@ void xmpp::tick(int *sleep_time_ms)
 
     switch( j->recv( 1000 ) )
     {
-    case gloox::ConnProxyAuthRequired:
-    case gloox::ConnProxyAuthFailed:
     case gloox::ConnIoError:
     case gloox::ConnDnsError:
     case gloox::ConnConnectionRefused:
         hf->operation_result( LOP_ONLINE, CR_NETWORK_ERROR );
+        online_flag_internal = false;
         break;
     case gloox::ConnAuthenticationFailed:
+    case gloox::ConnProxyAuthRequired:
+    case gloox::ConnProxyAuthFailed:
         hf->operation_result( LOP_ONLINE, CR_AUTHENTICATIONFAILED );
+        online_flag_internal = false;
         break;
     case gloox::ConnNotConnected:
         {
@@ -2158,22 +2219,10 @@ void xmpp::tick(int *sleep_time_ms)
     if ( auth_failed )
     {
         hf->operation_result( LOP_ONLINE, CR_AUTHENTICATIONFAILED );
-        offline();
+        app_signal(APPS_OFFLINE);
     }
 
     *sleep_time_ms = 20;
-}
-
-void xmpp::goodbye()
-{
-    set_cfg_called = false;
-
-    while ( first )
-        del(first);
-
-    cm.reset();
-    fm.reset();
-    j.reset();
 }
 
 void xmpp::set_name(const char*utf8name)
@@ -2181,8 +2230,8 @@ void xmpp::set_name(const char*utf8name)
     if ( first )
     {
         ASSERT( j );
-        first->name.set( asptr(utf8name) );
-        j->addPresenceExtension( new gloox::Nickname( std::string(utf8name) ) );
+        first->name.set( std::asptr(utf8name) );
+        j->addPresenceExtension( new gloox::Nickname(first->name) );
         
         if (cm) cm->storeVCard( build_vcard(), this );
 
@@ -2197,7 +2246,7 @@ void xmpp::set_name(const char*utf8name)
                     for ( const auto& r : cd->resources )
                     {
                         gloox::StanzaExtensionList lst;
-                        lst.push_back( new gloox::Nickname( std::string( utf8name ) ) );
+                        lst.push_back( new gloox::Nickname(first->name) );
                         r.session->send( gloox::EmptyString, j->getID(), lst );
                     }
                 }
@@ -2210,11 +2259,11 @@ void xmpp::set_statusmsg(const char*utf8status)
     if ( first )
     {
         ASSERT( j );
-        first->statusmsg.set( asptr( utf8status ) );
+        first->statusmsg.set( std::asptr( utf8status ) );
         if ( first->statusmsg.is_empty() )
             j->presence().resetStatus();
         else
-            j->presence().addStatus( std::string( first->statusmsg.cstr(), first->statusmsg.get_length() ) );
+            j->presence().addStatus(first->statusmsg);
         if ( first->st == CS_ONLINE )
             j->send( j->presence() );
     }
@@ -2249,18 +2298,6 @@ void xmpp::set_gender(int /*gender*/)
 {
 }
 
-void xmpp::get_avatar(int id)
-{
-    if ( contact_descriptor_s *c = find( id ) )
-    {
-        if ( c->gavatar.size() )
-            hf->avatar_data( id, c->gavatar_tag, c->gavatar.data(), c->gavatar.size() );
-        else
-            c->getavatar = true;
-    }
-    
-}
-
 void xmpp::set_avatar(const void*data, int isz)
 {
     if ( !first ) return;
@@ -2290,12 +2327,84 @@ void xmpp::set_avatar(const void*data, int isz)
 
 }
 
+xmpp::contact_descriptor_s * xmpp::load_descriptor(contact_id_s idd, loader &l)
+{
+    contact_descriptor_s *c = nullptr;
+
+    if (int contact_size = l(chunk_contact))
+    {
+        loader lc(l.chunkdata(), contact_size);
+        if (lc(chunk_contact_id))
+        {
+            u32 idi = lc.get_u32();
+            contact_id_s id;
+            if (idi & 0xff000000)
+                *(u32 *)&id = idi;
+            else
+                id = contact_id_s(contact_id_s::CONTACT, idi);
+
+            ASSERT(idd.is_empty() || idd == id);
+
+            hf->use_id(id.id);
+
+            if (id.is_self())
+                return nullptr;
+
+            gloox::JID jid;
+            if (lc(chunk_contact_jid))
+            {
+                std::asptr js = lc.get_astr();
+                jid.setJID(std::string(js));
+            }
+
+            c = find(jid);
+            if (!c)
+            {
+                c = new contact_descriptor_s(jid, id);
+                LIST_ADD(c, first, last, prev, next);
+            }
+        }
+
+        if (c)
+        {
+            if (lc(chunk_contact_name))
+                c->name.set(lc.get_astr());
+
+            if (lc(chunk_contact_nickname))
+                c->nickname = lc.get_byte() != 0;
+
+            if (lc(chunk_contact_subscription))
+                c->subscription_flags = lc.get_i32();
+            else
+                c->slv_set_subscribed();
+
+            c->init_state(false);
+
+            if (lc(chunk_contact_avatar_tag))
+                c->gavatar_tag = lc.get_i32();
+
+            if (c->gavatar_tag)
+            {
+                if (int ahsz = lc(chunk_contact_avatar_hash))
+                {
+                    loader ahl(lc.chunkdata(), ahsz);
+                    int dsz;
+                    if (const void *ah = ahl.get_data(dsz))
+                        if (ASSERT(dsz == 16))
+                            memcpy(c->gavatar_hash, ah, 16);
+                }
+            }
+        }
+    }
+
+    return c;
+}
+
 void xmpp::set_config(const void*data, int isz)
 {
     std::string cfg_password;
     gloox::JID cfg_jid;
 
-    bool login_present = false;
     bool password_present = false;
 
     if ( first )
@@ -2313,6 +2422,8 @@ void xmpp::set_config(const void*data, int isz)
         j->registerPresenceHandler( this );
         j->rosterManager()->registerRosterListener( this, false );
 
+        j->setCompression(true);
+
         j->registerStanzaExtension( new gloox::DelayedDelivery() );
         j->registerStanzaExtension( new gloox::Receipt( gloox::Receipt::Request ) );
         j->registerStanzaExtension( new gloox::Nickname( gloox::EmptyString ) );
@@ -2326,7 +2437,9 @@ void xmpp::set_config(const void*data, int isz)
         d->addFeature( gloox::XMLNS_IBB );
         //d->addFeature( XMLNS_AVATARS );
 
+#ifdef _FINAL
         d->setVersion( "isotoxin", SS( PLUGINVER ) );
+#endif
 
         gloox::Capabilities *caps = new gloox::Capabilities( d );
         caps->setNode( HOME_SITE );
@@ -2344,43 +2457,50 @@ void xmpp::set_config(const void*data, int isz)
 
     };
 
-    auto parsev = [&]( const pstr_c &field, const pstr_c &val )
+    auto parsev = [&]( const std::pstr_c &field, const std::pstr_c &val )
     {
-        if ( field.equals( CONSTASTR( CFGF_LOGIN ) ) )
+        if ( field.equals( STD_ASTR( CFGF_LOGIN ) ) )
         {
             gloox::JID o = cfg_jid;
-            cfg_jid.setJID( std::string( val.as_sptr().s, val.get_length() ) );
+            cfg_jid.setJID( std::string( val ) );
             if ( o != cfg_jid )
-                reconnect = true;
-            login_present = true;
+                reconnect = cfg_jid, online_flag_internal = online_flag_by_gui;
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_PASSWORD ) ) )
+        if ( field.equals(STD_ASTR( CFGF_PASSWORD ) ) )
         {
-            if ( !val.equals( xsptr( cfg_password ) ) )
-                cfg_password = std::string( val.as_sptr().s, val.get_length() ), reconnect = true;;
+            if ( !val.equals( cfg_password ) )
+                cfg_password = std::string( val ), reconnect = true, online_flag_internal = online_flag_by_gui;
             password_present = true;
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_PROXY_TYPE ) ) )
+        if ( field.equals(STD_ASTR( CFGF_PROXY_TYPE ) ) )
         {
             int new_proxy_type = val.as_int();
             if ( new_proxy_type != proxy_type )
-                proxy_type = new_proxy_type, reconnect = true;
+                proxy_type = new_proxy_type, reconnect = true, online_flag_internal = online_flag_by_gui;
             proxy_settings_ok = true;
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_PROXY_ADDR ) ) )
+        if ( field.equals(STD_ASTR( CFGF_PROXY_ADDR ) ) )
         {
-            str_c paddr( proxy.host ); paddr.append_char( ':' ).append_as_uint( proxy.port );
+            std::string paddr( proxy.host ); paddr.append_char( ':' ).append_as_uint( proxy.port );
             if ( !paddr.equals( val ) )
             {
                 set_proxy_addr( val );
                 reconnect = true;
+                online_flag_internal = online_flag_by_gui;
             }
             proxy_settings_ok = true;
             return;
         }
+        handle_cop< SETBIT(auto_co_enc_only) | SETBIT(auto_co_trust_only) >(field.as_sptr(), val.as_sptr(),[&](auto_conn_options_e co, bool vv) {
+            unsigned v = vv ? 1 : 0;
+            if (auto_co_enc_only == co && only_enc_allow != v)
+                only_enc_allow = v, reconnect |= !encrypted || !online_state, online_flag_internal = online_flag_by_gui;
+            else if (auto_co_trust_only == co && only_trust_allow != v)
+                only_trust_allow = v, reconnect |= !trusted || !online_state, online_flag_internal = online_flag_by_gui;
+        });
     };
 
     proxy_settings_ok = false;
@@ -2388,9 +2508,11 @@ void xmpp::set_config(const void*data, int isz)
     config_accessor_s ca( data, isz );
 
     if ( ca.params.l )
-        parse_values( ca.params, parsev ); // parse params
+        std::parse_values( ca.params, parsev ); // parse params
 
-    auth_failed = login_present && !password_present;
+    auth_failed = !cfg_jid || !password_present;
+    if (auth_failed)
+        reconnect = false, online_flag_internal = false;
 
     if ( reconnect )
     {
@@ -2404,9 +2526,10 @@ void xmpp::set_config(const void*data, int isz)
             }
             if (j->jid() != cfg_jid)
                 prepare_j();
-            update_contact( nullptr );
+            update_contact( nullptr, false );
         }
     }
+
 
     if ( !ca.native_data && !ca.protocol_data && j )
         return;
@@ -2414,6 +2537,11 @@ void xmpp::set_config(const void*data, int isz)
     set_cfg_called = true;
     loader ldr( ca.protocol_data, ca.protocol_data_len );
     time_t n = now();
+
+    size_t version = 0;
+    if (ldr(chunk_magic, false))
+        version = static_cast<size_t>(ldr.get_u64() - 0x123BADF00D2C0FE6ull);
+
     if ( int sz = ldr( xmpp::chunk_features ) )
     {
         node2features.clear();
@@ -2438,7 +2566,7 @@ void xmpp::set_config(const void*data, int isz)
 
                         if ( lf( chunk_feature_node ) )
                         {
-                            str_c ns = lf.get_astr();
+                            std::string ns(lf.get_astr());
                             if ( !ns.is_empty() )
                                 node2features.emplace_back( ns, crtime, flags );
                         }
@@ -2449,67 +2577,17 @@ void xmpp::set_config(const void*data, int isz)
     }
 
     if ( !first )
-        first = last = new contact_descriptor_s( cfg_jid, 0 );
+        first = last = new contact_descriptor_s( cfg_jid, contact_id_s::make_self() );
 
+    while (first->next)
+        del(first->next);
+
+    if (version == 1)
     if ( int sz = ldr( chunk_contacts ) )
     {
-        while ( first->next )
-            del( first->next );
-
         loader l( ldr.chunkdata(), sz );
-        for ( int cnt = l.read_list_size(); cnt > 0; --cnt )
-            if ( int contact_size = l( chunk_contact ) )
-            {
-                contact_descriptor_s *c = nullptr;
-
-                loader lc( l.chunkdata(), contact_size );
-                if ( lc( chunk_contact_id ) )
-                {
-                    int id = lc.get_i32();
-                    if (id)
-                    {
-                        gloox::JID jid;
-                        if ( lc( chunk_contact_jid ) )
-                        {
-                            asptr js = lc.get_astr();
-                            jid.setJID( std::string( js.s, js.l ) );
-                        }
-                        c = new contact_descriptor_s( jid, id );
-                        LIST_ADD( c, first, last, prev, next );
-                    }
-                }
-
-                if ( c )
-                {
-                    if ( lc( chunk_contact_name ) )
-                        c->name = lc.get_astr();
-
-                    if ( lc( chunk_contact_nickname ) )
-                        c->nickname = lc.get_byte() != 0;
-
-                    if ( lc( chunk_contact_subscription ) )
-                        c->subscription_flags = lc.get_i32();
-                    else
-                        c->slv_set_subscribed();
-
-                    c->init_state( false );
-
-                    if ( lc( chunk_contact_avatar_tag ) )
-                        c->gavatar_tag = lc.get_i32();
-
-                    if ( c->gavatar_tag )
-                    {
-                        if ( int ahsz = lc( chunk_contact_avatar_hash ) )
-                        {
-                            loader ahl( lc.chunkdata(), ahsz );
-                            int dsz;
-                            if ( const void *ah = ahl.get_data( dsz ) )
-                                if ( ASSERT( dsz == 16 ) )
-                                    memcpy( c->gavatar_hash, ah, 16 );
-                        }
-                    }
-                }
-            }
+        for (int cnt = l.read_list_size(); cnt > 0; --cnt)
+            load_descriptor(contact_id_s(), l);
     }
 
     if ( !proxy_settings_ok )
@@ -2524,39 +2602,84 @@ void xmpp::set_config(const void*data, int isz)
     if ( ldr( chunk_proxy_address ) )
         set_proxy_addr( ldr.get_astr() );
 
+    only_enc_allow = true;
+    only_trust_allow = true;
+
+    if (ldr(chunk_enc_only))
+        only_enc_allow = ldr.get_i32() != 0;
+    if (ldr(chunk_trust_only))
+        only_trust_allow = ldr.get_i32() != 0;
+
     prepare_j();
     send_configurable();
     hf->operation_result( LOP_SETCONFIG, cfg_jid.full().empty() || auth_failed ? CR_AUTHENTICATIONFAILED : CR_OK );
 }
-void xmpp::init_done()
+
+void xmpp::app_signal(app_signal_e s)
 {
-    for ( contact_descriptor_s *c = first; c; c = c->next )
-        update_contact( c );
+    switch (s)
+    {
+    case APPS_INIT_DONE:
+        for (contact_descriptor_s *c = first; c; c = c->next)
+            update_contact(c, true);
+        break;
+    case APPS_ONLINE:
+        if (online_flag_by_gui&&online_flag_internal)
+            return;
+
+        online_flag_by_gui = true;
+        online_flag_internal = true;
+        next_reconnect_time = now() + 5;
+        letsconnect();
+        break;
+    case APPS_OFFLINE:
+        if (!(online_flag_by_gui&&online_flag_internal))
+            return;
+
+        connecting = false;
+        online_flag_by_gui = false;
+        online_state = false;
+        if (j)
+        {
+            j->disconnect();
+        }
+        break;
+    case APPS_GOODBYE:
+        set_cfg_called = false;
+
+        while (first)
+            del(first);
+
+        cm.reset();
+        fm.reset();
+        j.reset();
+        break;
+    }
 }
 
 void operator<<( chunk &chunkm, const xmpp::nodefeatures_s &f )
 {
     chunk cc( chunkm.b, xmpp::chunk_feature );
 
-    chunk( chunkm.b, xmpp::chunk_feature_version ) << (i32)FEATURE_VERSION;
-    chunk( chunkm.b, xmpp::chunk_feature_crtime ) << (u64)f.crtime;
+    chunk( chunkm.b, xmpp::chunk_feature_version ) << static_cast<i32>(FEATURE_VERSION);
+    chunk( chunkm.b, xmpp::chunk_feature_crtime ) << static_cast<u64>(f.crtime);
     chunk( chunkm.b, xmpp::chunk_feature_flags ) << f.features;
     chunk( chunkm.b, xmpp::chunk_feature_node ) << f.node;
 }
 
 void operator<<( chunk &chunkm, const xmpp::contact_descriptor_s &c )
 {
-    if ( c.cid == 0 )
+    if ( c.cid.is_empty() || c.cid.is_self() )
         return;
 
     chunk cc( chunkm.b, xmpp::chunk_contact );
 
-    chunk( chunkm.b, xmpp::chunk_contact_id ) << (i32)c.cid;
-    chunk( chunkm.b, xmpp::chunk_contact_jid ) << xsptr(c.jid.full());
+    chunk( chunkm.b, xmpp::chunk_contact_id ) << c.cid;
+    chunk( chunkm.b, xmpp::chunk_contact_jid ) << c.jid.full();
     chunk( chunkm.b, xmpp::chunk_contact_name ) << c.name;
-    chunk( chunkm.b, xmpp::chunk_contact_nickname ) << (byte)(c.nickname ? 1 : 0);
-    chunk( chunkm.b, xmpp::chunk_contact_subscription ) << (i32)c.subscription_flags;
-    chunk( chunkm.b, xmpp::chunk_contact_avatar_tag ) << (i32)c.gavatar_tag;
+    chunk( chunkm.b, xmpp::chunk_contact_nickname ) << static_cast<byte>(c.nickname ? 1 : 0);
+    chunk( chunkm.b, xmpp::chunk_contact_subscription ) << static_cast<i32>(c.subscription_flags);
+    chunk( chunkm.b, xmpp::chunk_contact_avatar_tag ) << static_cast<i32>(c.gavatar_tag);
     if ( c.gavatar_tag != 0 )
     {
         chunk( chunkm.b, xmpp::chunk_contact_avatar_hash ) << bytes( c.gavatar_hash, 16 );
@@ -2570,20 +2693,35 @@ void xmpp::save_config(void * param)
         savebuffer b;
         chunk( b, chunk_magic ) << (u64)( 0x123BADF00D2C0FE6ull + XMPP_SAVE_VERSION );
         chunk( b, chunk_features ) << servec<nodefeatures_s>( node2features );
-        chunk( b, chunk_contacts ) << serlist<contact_descriptor_s>( first );
+
+        // dont save in version 2
+        //chunk( b, chunk_contacts ) << serlist<contact_descriptor_s, nonext<contact_descriptor_s> >( first );
 
         chunk( b, chunk_proxy_type ) << proxy_type;
-        chunk( b, chunk_proxy_address ) << ( str_c( proxy.host ).append_char( ':' ).append_as_uint( proxy.port ) );
+        chunk( b, chunk_proxy_address ) << (std::string( proxy.host ).append_char( ':' ).append_as_uint( proxy.port ) );
 
-        hf->on_save( b.data(), (int)b.size(), param );
+        chunk(b, chunk_enc_only) << static_cast<i32>(only_enc_allow ? 1 : 0);
+        chunk(b, chunk_trust_only) << static_cast<i32>(only_trust_allow ? 1 : 0);
+
+        hf->on_save( b.data(), static_cast<int>(b.size()), param );
     }
 }
 
-int xmpp::resend_request(int id, const char* invite_message_utf8)
+int xmpp::resend_request(contact_id_s id, const char* invite_message_utf8)
 {
     if ( contact_descriptor_s *c = find( id ) )
         return add_contact( c->jid.bare().c_str(), invite_message_utf8 );
     return CR_FUNCTION_NOT_FOUND;
+}
+
+void xmpp::contact(const contact_data_s * cdata)
+{
+    if (cdata->data_size)
+    {
+        loader ldr(cdata->data, cdata->data_size);
+        if (contact_descriptor_s *desc = load_descriptor(cdata->id, ldr))
+            update_contact(desc, false);
+    }
 }
 
 int xmpp::add_contact(const char* public_id, const char* invite_message_utf8)
@@ -2597,25 +2735,25 @@ int xmpp::add_contact(const char* public_id, const char* invite_message_utf8)
 
     jidreq.setResource( gloox::EmptyString );
 
-    contact_descriptor_s &cd = getcreate_descriptor( jidreq, false );
-    if (&cd == first)
+    contact_descriptor_s &desc = getcreate_descriptor( jidreq, false );
+    if (&desc == first)
         return CR_ALREADY_PRESENT;
 
     if ( nullptr == invite_message_utf8 )
     {
-        update_contact( &cd );
+        update_contact(&desc, true);
         return CR_OK;
     }
 
-    if (cd.slv_from_self() == 2 )
+    if (desc.slv_from_self() == 2 )
         return CR_ALREADY_PRESENT;
 
-    cd.slv_set_sentrequest();
+    desc.slv_set_sentrequest();
 
-    cd.fix_bad_subscription_state();
+    desc.fix_bad_subscription_state();
 
-    if (cd.init_state( false ))
-        update_contact( &cd );
+    if (desc.init_state( false ))
+        update_contact(&desc, true);
 
     //j->rosterManager()->subscribe( jidreq, gloox::EmptyString, gloox::StringList(), invite_message_utf8 );
 
@@ -2627,12 +2765,27 @@ int xmpp::add_contact(const char* public_id, const char* invite_message_utf8)
     return CR_OK;
 }
 
-void xmpp::refresh_details( int id )
+void xmpp::request(contact_id_s id, request_entity_e re)
 {
-
+    switch (re)
+    {
+    case RE_DETAILS:
+        break;
+    case RE_AVATAR:
+        if (contact_descriptor_s *c = find(id))
+        {
+            if (c->gavatar.size())
+                hf->avatar_data(id, c->gavatar_tag, c->gavatar.data(), static_cast<int>(c->gavatar.size()));
+            else
+                c->getavatar = true;
+        }
+        break;
+    case RE_EXPORT_DATA:
+        break;
+    }
 }
 
-void xmpp::del_contact(int id)
+void xmpp::del_contact(contact_id_s id)
 {
     if ( contact_descriptor_s *c = find( id ) )
     {
@@ -2643,7 +2796,7 @@ void xmpp::del_contact(int id)
     }
 }
 
-void xmpp::send_message(int id, const message_s *msg)
+void xmpp::send_message(contact_id_s id, const message_s *msg)
 {
     if ( contact_descriptor_s *c = find( id ) )
         c->send( this, msg );
@@ -2653,7 +2806,7 @@ void xmpp::del_message( u64 utag )
 {
 }
 
-void xmpp::accept(int id)
+void xmpp::accept(contact_id_s id)
 {
     if ( contact_descriptor_s *c = find( id ) )
     {
@@ -2670,13 +2823,13 @@ void xmpp::accept(int id)
 
         c->fix_bad_subscription_state();
 
-        if ( c->init_state( c->st == CS_ONLINE ) )
-            update_contact( c );
+        if (c->init_state(c->st == CS_ONLINE))
+            update_contact(c, true);
         hf->save();
     }
 }
 
-void xmpp::reject(int id)
+void xmpp::reject(contact_id_s id)
 {
     if ( contact_descriptor_s *c = find( id ) )
     {
@@ -2687,7 +2840,7 @@ void xmpp::reject(int id)
     }
 }
 
-void xmpp::file_send(int cid, const file_send_info_s *finfo)
+void xmpp::file_send(contact_id_s cid, const file_send_info_s *finfo)
 {
     for ( incoming_file_s *f = if_first; f; f = f->next )
         if ( f->utag == finfo->utag )
@@ -2706,20 +2859,19 @@ void xmpp::file_send(int cid, const file_send_info_s *finfo)
     }
 
 
-    if ( contact_descriptor_s *cd = find( cid ) )
+    if ( contact_descriptor_s *desc = find( cid ) )
     {
-        str_c fnc;
         std::string fn( finfo->filename, finfo->filename_len );
 
-        gloox::JID jid = cd->jid;
+        gloox::JID jid = desc->jid;
 
         int pr = -10000;
-        for ( const auto& r : cd->resources )
+        for ( const auto& r : desc->resources )
         {
             if ( pr < r.priority )
             {
                 pr = r.priority;
-                jid.setResource( std::string( r.resname.cstr(), r.resname.get_length() ) );
+                jid.setResource( r.resname );
             }
         }
 
@@ -2729,7 +2881,7 @@ void xmpp::file_send(int cid, const file_send_info_s *finfo)
             hf->file_control( finfo->utag, FIC_DISCONNECT ); // put it to send queue: assume transfer broken
             return;
         }
-        /*transmitting_file_s *f =*/ new transmitting_file_s( jid, cd->cid, finfo->utag, sid, finfo->filesize, asptr( finfo->filename, finfo->filename_len ) ); // not memleak
+        /*transmitting_file_s *f =*/ new transmitting_file_s( jid, desc->cid, finfo->utag, sid, finfo->filesize, std::string( finfo->filename, finfo->filename_len ) ); // not memleak
     }
 
 }
@@ -2804,13 +2956,13 @@ bool xmpp::file_portion(u64 utag, const file_portion_s *portion)
     return false;
 }
 
-void xmpp::create_conference(const char *groupaname, const char *options )
+void xmpp::create_conference(const char *groupaname, const char *options)
 {
 }
-void xmpp::ren_conference(int gid, const char *groupaname)
+void xmpp::ren_conference(contact_id_s gid, const char *groupaname)
 {
 }
-void xmpp::join_conference(int gid, int cid)
+void xmpp::join_conference(contact_id_s gid, contact_id_s cid)
 {
 }
 void xmpp::del_conference( const char *conference_id )
@@ -2819,12 +2971,12 @@ void xmpp::del_conference( const char *conference_id )
 void xmpp::enter_conference( const char *conference_id )
 {
 }
-void xmpp::leave_conference( int gid, int keep_leave )
+void xmpp::leave_conference(contact_id_s /*gid*/, int /*keep_leave*/ )
 {
 }
-void xmpp::typing( int cid )
+void xmpp::typing( contact_id_s cid )
 {
-    if ( cid < 0 )
+    if ( cid.is_conference() )
     {
         // group typing notification...
         return;
@@ -2834,7 +2986,7 @@ void xmpp::typing( int cid )
     {
         if ( c->st == CS_ONLINE )
         {
-            if ( !self_typing_contact )
+            if ( self_typing_contact.is_empty() )
             {
                 self_typing_contact = cid;
                 c->chat_state( this, gloox::ChatStateComposing );
@@ -2845,46 +2997,39 @@ void xmpp::typing( int cid )
 
     }
 }
-void xmpp::export_data()
+void xmpp::logging_flags(unsigned int /*f*/)
 {
 }
-void xmpp::logging_flags(unsigned int f)
-{
-}
-void xmpp::telemetry_flags( unsigned int f )
+void xmpp::telemetry_flags(unsigned int /*f*/)
 {
 }
 
-#define FUNC0( rt, fn ) rt __stdcall static_##fn() { return cl.fn(); }
-#define FUNC1( rt, fn, p0 ) rt __stdcall static_##fn(p0 pp0) { return cl.fn(pp0); }
-#define FUNC2( rt, fn, p0, p1 ) rt __stdcall static_##fn(p0 pp0, p1 pp1) { return cl.fn(pp0, pp1); }
+#define FUNC1( rt, fn, p0 ) rt PROTOCALL static_##fn(p0 pp0) { return cl.fn(pp0); }
+#define FUNC2( rt, fn, p0, p1 ) rt PROTOCALL static_##fn(p0 pp0, p1 pp1) { return cl.fn(pp0, pp1); }
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 
 proto_functions_s funcs =
 {
-#define FUNC0( rt, fn ) &static_##fn,
 #define FUNC1( rt, fn, p0 ) &static_##fn,
 #define FUNC2( rt, fn, p0, p1 ) &static_##fn,
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 };
 
-proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
+proto_functions_s* PROTOCALL api_handshake(host_functions_s *hf_)
 {
     cl.on_handshake(hf_);
     return &funcs;
 }
 
 
-void __stdcall api_getinfo( proto_info_s *info )
+void PROTOCALL api_getinfo( proto_info_s *info )
 {
-    sstr_t<1024> vers( "plugin: " SS( PLUGINVER ) ", gloox: " );
-    vers.append( xsptr( gloox::GLOOX_VERSION ) );
+    std::sstr_t<1024> vers( "plugin: " SS( PLUGINVER ) ", gloox: " );
+    vers.append( gloox::GLOOX_VERSION );
 
 #define  NL "\n"
 
@@ -2914,7 +3059,7 @@ void __stdcall api_getinfo( proto_info_s *info )
     info->priority = 500;
     info->indicator = 1000;
     info->features = PF_UNAUTHORIZED_CHAT | PF_UNAUTHORIZED_CONTACT | PF_AVATARS | PF_NEW_REQUIRES_LOGIN | PF_OFFLINE_MESSAGING | PF_AUTH_NICKNAME | PF_SEND_FILE; // | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_GROUP_CHAT | PF_INVITE_NAME;
-    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5; // | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_enc_only | CF_trust_only; // | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
 
 }
 

@@ -22,44 +22,6 @@ roundval		dq	0000200000002000h, 0000200000002000h
 
 	.code
 
-VDSAVEXMM128 macro n1, n2
-endm
-
-VDRESTOREXMM128 macro n1, n2
-endm
-
-;%macro VDSAVEXMM128	2
-;%assign	%%count		%2 + 1 - %1
-;%assign %%stkoffset	0
-;%assign %%reg		%1
-;
-;	sub rsp, %%count*16+8
-;	[allocstack %%count*16]
-;
-;	%rep %%count
-;		movdqa	oword [rsp+%%stkoffset], xmm %+ %%reg
-;		[savexmm128 xmm %+ %%reg, %%stkoffset]
-;
-;		%assign	%%stkoffset	%%stkoffset + 16
-;		%assign %%reg		%%reg + 1
-;	%endrep
-;%endmacro
-
-;%macro VDRESTOREXMM128	2
-;%assign	%%count		%2+1-%1
-;%assign	%%stkoffset	%%count*16
-;%assign	%%reg		%2
-;
-;	%rep	%%count
-;		%assign %%stkoffset %%stkoffset-16
-;		movdqa xmm %+ %%reg, oword [rsp+%%stkoffset]
-;
-;		%assign %%reg %%reg-1
-;	%endrep
-;
-;	add rsp, %%count*16+8
-;%endmacro
-
 ;-------------------------------------------------------------------------
 ;
 ;	long vdasm_resize_table_row_SSE2(
@@ -87,8 +49,6 @@ vdasm_resize_table_row_SSE2:
 	sub rsp, 32+8 ; +8 - align
 	movdqa	oword ptr [rsp], xmm6
 	movdqa	oword ptr [rsp+16], xmm7
-
-	;VDSAVEXMM128	6, 15
 
 parms equ rsp+64+32+8
 
@@ -268,7 +228,6 @@ coeffloop_even_pairs:
 	jnz			pixelloop_even_pairs
 
 xit1:
-	;VDRESTOREXMM128	6, 15
 	movdqa	xmm6, oword ptr [rsp]
 	movdqa	xmm7, oword ptr [rsp+16]
 	add rsp, 32+8
@@ -397,7 +356,6 @@ vdasm_resize_table_col_SSE2:
 	push r14
 	push r15
 
-	;VDSAVEXMM128	6, 15
 	sub rsp, 32+8
 	movdqa	oword ptr [rsp], xmm6
 	movdqa	oword ptr [rsp+16], xmm7
@@ -459,7 +417,6 @@ coeffloop:
 	jne			pixelloop
 
 xit2:
-	;VDRESTOREXMM128	6, 15
 	movdqa	xmm6, oword ptr [rsp]
 	movdqa	xmm7, oword ptr [rsp+16]
 	add rsp, 32+8

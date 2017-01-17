@@ -66,7 +66,7 @@ struct theme_rect_s : ts::shared_object
 {
 	ts::bitmap_c src;
 	ts::irect sis[SI_count];
-    struct  
+    struct
     {
         ts::TSCOLOR fillcolor = 0; // if (ALPHA(fillcolor) != 0)
         ts::TSCOLOR filloutcolor = 0;
@@ -92,9 +92,9 @@ struct theme_rect_s : ts::shared_object
     ts::TSCOLOR deftextcolor;
     ts::tbuf0_t<ts::TSCOLOR> colors;
     ts::abp_c addition;
-	
+
     mutable ts::packed_buf_c< 2, SI_count > alphablend; // cache
-	
+
     int sbwidth() const {return ts::tmax(sis[SI_SBREP].width(), sis[SI_SMREP].width());}
 
 	void load_params(ts::bp_t<char> * block, const colors_map_s &colsmap);
@@ -171,7 +171,7 @@ struct generated_button_data_s
     virtual ~generated_button_data_s() {}
 
     bool is_valid() const {return num_states > 0 && src.info().sz >> 0;}
-    
+
     virtual rsvg_svg_c *get_svg( ts::ivec2 & ) { return nullptr; }
 
     generated_button_data_s(const generated_button_data_s&) UNUSED;
@@ -266,7 +266,7 @@ struct theme_image_s : ts::image_extbody_c
     {
     }
 
-    ts::bmpcore_exbody_s extbody() const { return __super::extbody(rect); }
+    ts::bmpcore_exbody_s extbody() const { return ts::image_extbody_c::extbody(rect); }
 
     void set_animated(rsvg_svg_c *asvg, const ts::ivec2 &shift)
     {
@@ -291,9 +291,8 @@ class theme_c
 
 	const ts::bitmap_c &loadimage( const ts::wsptr &name );
 
-    struct theme_font_s
+    struct theme_font_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::str_c fontname;
         ts::font_params_s fontparam;
         theme_font_s(const ts::str_c &fontname, const ts::font_params_s &fontparam):fontname(fontname), fontparam(fontparam) {}

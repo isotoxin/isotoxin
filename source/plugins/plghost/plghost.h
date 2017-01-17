@@ -24,7 +24,7 @@ struct ph_allocator : public std::allocator<char>
 };
 
 
-struct ipcw : public std::vector<byte, ph_allocator>
+struct ipcw : public byte_buffer
 {
     template<typename T> struct reservation
     {
@@ -66,20 +66,41 @@ struct ipcw : public std::vector<byte, ph_allocator>
         memcpy(data() + offset, d, sz);
     }
 
-    void add( const asptr& s )
+    void add( const std::asptr& s )
     {
-        add<unsigned short>() = (unsigned short)s.l;
+        add<unsigned short>() = static_cast<unsigned short>(s.l);
         if (s.l) add( s.s, s.l );
     }
 
-    void add(const wsptr& s)
+    void add(const std::wsptr& s)
     {
-        add<unsigned short>() = (unsigned short)s.l;
-        if (s.l) add(s.s, s.l * sizeof(wchar_t));
+        add<unsigned short>() = static_cast<unsigned short>(s.l);
+        if (s.l) add(s.s, s.l * sizeof(std::widechar));
     }
 
-    template<typename T> ipcw & operator<<(const T &v) { static_assert(std::is_pod<T>::value, "T is not pod"); add<T>() = v; return *this; }
-    template<> ipcw & operator<<(const asptr &s) { add(s); return *this; }
-    template<> ipcw & operator<<(const wsptr &s) { add(s); return *this; }
+    template<typename T> struct adder_t
+    {
+        static void a(ipcw & w, const T &v)
+        {
+            static_assert(std::is_pod<T>::value, "T is not pod");
+            w.add<T>() = v;
+        }
+    };
+    template<> struct adder_t<std::asptr>
+    {
+        static void a(ipcw & w, const std::asptr &s)
+        {
+            w.add(s);
+        }
+    };
+    template<> struct adder_t<std::wsptr>
+    {
+        static void a(ipcw & w, const std::wsptr &s)
+        {
+            w.add(s);
+        }
+    };
+
+    template<typename T> ipcw & operator<<(const T &v) { adder_t<T>::a(*this, v); return *this; }
 
 };

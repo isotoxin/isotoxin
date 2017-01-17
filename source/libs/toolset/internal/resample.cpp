@@ -23,8 +23,10 @@
 
 #include <xmmintrin.h>
 
+#ifdef _MSC_VER
 #pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
 #pragma warning (disable:4458) // declaration of 'xxx' hides class member
+#endif
 
 void VDCPUCleanupExtensions() {
 #ifndef MODE64
@@ -1543,7 +1545,7 @@ bool resample(tmp_buf_c &bb, const uint8 * ibuf, long iw, long ih, uint8 * obuf,
 	h_count  = (long*) bb.use(ow * sizeof(int)); /* how may contributions for the target pixel */
 	h_wsum   = (double *)bb.use(ow * sizeof(double)); /* sum of the weights for the target pixel */
 	
-	if ( !( h_weight && h_pixel || h_count || h_wsum) ) goto Cleanup;
+	if ( !( (h_weight && h_pixel) || h_count || h_wsum) ) goto Cleanup;
 
 	/* Pre-calculate weights contribution for a row */
 	for (i = 0; i < ow; i++)

@@ -11,6 +11,47 @@
 
 namespace ts
 {
+    template < typename T1, typename T2 > struct minmax2
+    {
+        static typename biggest<T1, T2>::type calcmax( const T1 & v1, const T2 & v2 )
+        {
+            return (v1 > v2) ? static_cast< typename biggest<T1, T2>::type >(v1) : static_cast< typename biggest<T1, T2>::type >(v2);
+        }
+        static typename biggest<T1, T2>::type calcmin( const T1 & v1, const T2 & v2 )
+        {
+            return (v1 < v2) ? static_cast<typename biggest<T1, T2>::type>(v1) : static_cast<typename biggest<T1, T2>::type>(v2);
+        }
+    };
+
+    template<> struct minmax2<float, float>
+    {
+        static float calcmax( float x, float y )
+        {
+            float r;
+            _mm_store_ss( &r, _mm_max_ss( _mm_load_ss( &x ), _mm_load_ss( &y ) ) );
+            return r;
+        }
+        static float calcmin( float x, float y )
+        {
+            float r;
+            _mm_store_ss( &r, _mm_min_ss( _mm_load_ss( &x ), _mm_load_ss( &y ) ) );
+            return r;
+        }
+    };
+
+    /// Max, 2 arguments
+    template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmax( const T1 & v1, const T2 & v2 )
+    {
+        return minmax2<T1, T2>::calcmax( v1, v2 );
+    }
+
+    /// Min, 2 arguments
+    template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmin( const T1 & v1, const T2 & v2 )
+    {
+        return minmax2<T1, T2>::calcmin( v1, v2 );
+    }
+
+
 	INLINE const float fastsqrt(const float x)
 	{
 		//	return x * inversesqrt(max(x, limits<float>::min()));//3x times faster than _mm_sqrt_ss with accuracy of 22 bits (but compiler optimize this not so well, and sqrtss works faster)
@@ -194,7 +235,7 @@ namespace ts
 		vec2& operator[](aint i)
 		{
 			return reinterpret_cast<vec2&>(e[i][0]);
-		}		
+		}
 
 		static mat22 Identity()
 		{
@@ -223,7 +264,7 @@ namespace ts
 			return T;
 		}
 
-		mat22 operator * (const mat22& M) const 
+		mat22 operator * (const mat22& M) const
 		{
 			mat22 T;
 
@@ -235,7 +276,7 @@ namespace ts
 			return T;
 		}
 
-		mat22 operator ^ (const mat22& M) const 
+		mat22 operator ^ (const mat22& M) const
 		{
 			mat22 T;
 
@@ -288,7 +329,6 @@ namespace ts
 
 	struct irect //-V690
 	{
-        MOVABLE( true );
         ivec2 lt;
 		ivec2 rb;
 
@@ -314,9 +354,8 @@ namespace ts
             r.rb = r.lt + sz;
             return r;
         }
-        
 
-		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
+		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;}
 		auto height() const -> decltype(rb.y - lt.y) {return rb.y - lt.y;};
 		irect &setheight(aint h) {rb.y = (int)(lt.y + h); return *this;}
 		irect &setwidth(aint w) {rb.x = (int)(lt.x + w); return *this;}
@@ -356,7 +395,7 @@ namespace ts
                 lt.y += addy;
                 rb.y += addy;
             }
-            
+
             if (rb.x > r.rb.x)
             {
                 int subx = rb.x - r.rb.x;
@@ -399,7 +438,7 @@ namespace ts
             if ( lt.y > rb.y ) SWAP( lt.y, rb.y );
             return *this;
         }
-        
+
         bool intersected(const irect &i) const;
         int intersect_area(const irect &i) const;
 		irect & intersect(const irect &i);
@@ -423,6 +462,9 @@ namespace ts
             return *this;
         }
 	};
+
+    namespace internals { template <> struct movable<irect> : public movable_customized_yes {}; }
+
     INLINE irect operator+(const irect &r, const ivec2 &p) {return irect( r.lt + p, r.rb + p );}
     INLINE irect operator-(const irect &r, const ivec2 &p) {return irect( r.lt - p, r.rb - p );}
 
@@ -580,7 +622,7 @@ INLINE float ROLL_FLOAT(float v, float vmax)
     return fmod((vmax + fmod(v, vmax)), vmax);
 }
 
-INLINE bool check_aspect_ratio(int width,int height, int x_ones, int y_ones) 
+INLINE bool check_aspect_ratio(int width,int height, int x_ones, int y_ones)
 {
     bool ost = 0 == ((width % x_ones) + (height % y_ones));
     bool divs = (width / x_ones) == (height / y_ones);
@@ -590,7 +632,7 @@ INLINE bool check_aspect_ratio(int width,int height, int x_ones, int y_ones)
 ivec2 TSCALL calc_best_coverage( int width,int height, int x_ones, int y_ones );
 
 /*
-INLINE int CeilPowerOfTwo(int x) 
+INLINE int CeilPowerOfTwo(int x)
 {
     --x;
     x |= x >> 1;
@@ -613,7 +655,7 @@ template<typename T> T LERP(const T&a, const T&b, float t)
 
 
 #define ISWAP(a,b) {a^=b^=a^=b;}
-#define LERPFLOAT(a, b, t) ( (a) * (1.0f  - (t) ) + (t) * (b) )
+#define LERPFLOAT(a, b, t) ( static_cast<float>(a) * (1.0f  - (t) ) + (t) * static_cast<float>(b) )
 #define LERPDOUBLE(a, b, t) ( double(a) * (1.0  - double(t) ) + double(t) * double(b) )
 #define DOUBLESCALEADD(a, b, s0, s1) (a * s0 + b * s1)
 #define HAS_ALL_BITS(code, bits) (((code) & (bits)) == (bits))
@@ -641,7 +683,7 @@ double erf(double x);
 #define IEEE_FLT_EXPONENT_BITS	8
 #define IEEE_FLT_EXPONENT_BIAS	127
 #define IEEE_FLT_SIGN_BIT		31
-INLINE int ilog2(float f) 
+INLINE int ilog2(float f)
 {
     return (((*reinterpret_cast<int *>(&f)) >> IEEE_FLT_MANTISSA_BITS) & ((1 << IEEE_FLT_EXPONENT_BITS) - 1)) - IEEE_FLT_EXPONENT_BIAS;
 }
@@ -656,15 +698,15 @@ INLINE int ilog2(float f)
     r = r * (2.0f - (p) * r);                                                \
 }
 
-INLINE unsigned char FP_NORM_TO_BYTE2(float p)                                                 
-{                                                                            
-  float fpTmp = p + 1.0f;                                                      
+INLINE unsigned char FP_NORM_TO_BYTE2(float p)
+{
+  float fpTmp = p + 1.0f;
   return (uint8)(((*(unsigned long*)&fpTmp) >> 15) & 0xFF);
 }
 
-INLINE unsigned char FP_NORM_TO_BYTE3(float p)     
+INLINE unsigned char FP_NORM_TO_BYTE3(float p)
 {
-  float ftmp = p + 12582912.0f;                                                      
+  float ftmp = p + 12582912.0f;
   return (uint8)((*(unsigned long *)&ftmp) & 0xFF);
 }
 
@@ -701,7 +743,7 @@ INLINE aint TruncDouble( double x )
 #pragma warning (disable: 4035)
 #endif
 
-INLINE aint RoundToInt(float x) 
+INLINE aint RoundToInt(float x)
 {
     //union {
     //    float f;
@@ -713,13 +755,13 @@ INLINE aint RoundToInt(float x)
     return _mm_cvtss_si32(_mm_load_ss(&x));
 }
 
- INLINE int RoundToIntFullRange(double x) 
+ INLINE int RoundToIntFullRange(double x)
  {
      union {
          double f;
          int i[2];
      } u = {x + 6755399441055744.0f};		// 2^51+2^52
- 
+
      return (int)u.i[0];
  }
 
@@ -734,8 +776,8 @@ INLINE aint Float2Int( float x )
 
 INLINE aint Double2Int( double x )
 {
-    _asm 
-    { 
+    _asm
+    {
         fld x
         push eax
         fistp dword ptr [esp]
@@ -743,11 +785,11 @@ INLINE aint Double2Int( double x )
     }
     //return (int)( x + ( (x >= 0) ? 0.5 : (-0.5)) );
     //return floor( x + 0.5f );
- 
+
     //return RoundToIntFullRange( x );
  }
 #endif
- 
+
 //Fast floor and ceil ("Fast Rounding of Floating Point Numbers in C/C++ on Wintel Platform" - http://ldesoras.free.fr/doc/articles/rounding_en.pdf)
 //valid input: |x| < 2^30, wrong results: lfloor(-1e-8) = lceil(1e-8) = 0
 INLINE long int lfloor(float x) //http://www.masm32.com/board/index.php?topic=9515.0
@@ -886,7 +928,7 @@ template<typename T> INLINE T isign(T x)
 	const unsigned bshift = (sizeof(T) * 8 - 1); //-V103
 	return (T)((x >> bshift) | (unsignedT(-x) >> bshift));
 }
- 
+
 INLINE int slround(int v1, int v2)
 {
     int v3 = v1 / v2;
@@ -917,19 +959,6 @@ template < typename T1, typename T2 > INLINE T1 absmin(const T1 & v1, const T2 &
 template < typename T1, typename T2 > INLINE T1 absmax(const T1 & v1, const T2 & v2)
 {
     return (tabs(v1) > tabs(v2)) ? v1 : v2;
-}
-
-/// Min, 2 arguments
-template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmin ( const T1 & v1, const T2 & v2 )
-{
-    return ( v1 < v2 ) ? v1 : v2;
-}
-
-template <> INLINE float tmin<float, float>(const float &x, const float &y)
-{
-    float r;
-    _mm_store_ss(&r, _mm_min_ss(_mm_load_ss(&x), _mm_load_ss(&y)));
-    return r;
 }
 
 /// Min, 3 arguments
@@ -966,19 +995,6 @@ template <typename T, char N> INLINE vec_t<T, N> tmin(const vec_t<T, N> &x, cons
 {
     vec_t<T, N> r;
     EACH_COMPONENT(i) r[i] = tmin(x[i], y[i]);
-    return r;
-}
-
-/// Max, 2 arguments
-template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmax ( const T1 & v1, const T2 & v2 )
-{
-    return ( v1 > v2 ) ? v1 : v2;
-}
-
-template <> INLINE float tmax<float, float>(const float &x, const float &y)
-{
-    float r;
-    _mm_store_ss(&r, _mm_max_ss(_mm_load_ss(&x), _mm_load_ss(&y)));
     return r;
 }
 
@@ -1086,7 +1102,7 @@ private:
             m_keys[i].~key_s();
         }
     }
-    
+
 public:
     time_value_c( const time_value_c &v ):m_keys(nullptr), m_keys_count(0)
     {
@@ -1119,15 +1135,15 @@ public:
         }
         return m_keys;
     }
-   
+
     V get_linear( float t ) const
     {
         ASSERT (m_keys_count >= 2);
         const key_s *s = m_keys + 1;
         const key_s *e = m_keys + m_keys_count;
-    
+
         if (t < m_keys[0].time) return m_keys[0].val;
-    
+
         for (;s < e;)
         {
             const key_s *f = s - 1;
@@ -1139,7 +1155,7 @@ public:
             }
             ++s;
         }
-    
+
         return m_keys[m_keys_count-1].val;
     }
 

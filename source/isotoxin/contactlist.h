@@ -79,6 +79,8 @@ namespace rbtn
 class gui_contact_item_c : public gui_clist_base_c
 {
     DUMMY(gui_contact_item_c);
+    typedef gui_clist_base_c super;
+
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     
     ts::wstr_c typing_buf;
@@ -92,17 +94,15 @@ class gui_contact_item_c : public gui_clist_base_c
 
     bool redraw_now(RID, GUIPARAM);
 
-    static const ts::flags32_s::BITS  F_PROTOHIT = FLAGS_FREEBITSTART_LABEL << 0;
-    static const ts::flags32_s::BITS  F_NOPROTOHIT = FLAGS_FREEBITSTART_LABEL << 1;
-    static const ts::flags32_s::BITS  F_LBDN = FLAGS_FREEBITSTART_LABEL << 2;
-    static const ts::flags32_s::BITS  F_DNDDRAW = FLAGS_FREEBITSTART_LABEL << 3;
-    static const ts::flags32_s::BITS  F_SHOWTYPING = FLAGS_FREEBITSTART_LABEL << 4;
+    static const ts::flags32_s::BITS  F_LBDN = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS  F_DNDDRAW = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS  F_SHOWTYPING = FLAGS_FREEBITSTART_LABEL << 2;
 
-    static const ts::flags32_s::BITS  F_VIS_FILTER = FLAGS_FREEBITSTART_LABEL << 5;
-    static const ts::flags32_s::BITS  F_VIS_GROUP = FLAGS_FREEBITSTART_LABEL << 6;
+    static const ts::flags32_s::BITS  F_VIS_FILTER = FLAGS_FREEBITSTART_LABEL << 3;
+    static const ts::flags32_s::BITS  F_VIS_GROUP = FLAGS_FREEBITSTART_LABEL << 4;
 
 protected:
-    static const ts::flags32_s::BITS  FLAGS_FREEBITSTART_CITM = FLAGS_FREEBITSTART_LABEL << 7;
+    static const ts::flags32_s::BITS  FLAGS_FREEBITSTART_CITM = FLAGS_FREEBITSTART_LABEL << 5;
 
     ts::shared_ptr<contact_root_c> contact;
 
@@ -142,8 +142,6 @@ public:
     void target(bool tgt); // d'n'd target
     void on_drop(gui_contact_item_c *ondr);
 
-    bool is_protohit() const {return flags.is(F_PROTOHIT);}
-    bool is_noprotohit() const {return flags.is(F_NOPROTOHIT);}
     int sort_power() const
     {
         if (!contact)
@@ -156,18 +154,8 @@ public:
             return contact->subonlinecount() + 3;
         }
 
-        if (!is_protohit())
-        {
-            auto state = contact->get_meta_state();
-            if (CS_INVITE_RECEIVE == state || CS_INVITE_SEND == state) return 2;
-
-            return -100;
-        }
-        if (is_noprotohit()) return 1;
         return 2;
     }
-
-    void protohit();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
@@ -199,7 +187,10 @@ class gui_conversation_header_c : public gui_contact_item_c
 
     void set_default_proto( const ts::str_c&ost );
 
-    bool audio_call( RID, GUIPARAM );
+    bool createvcallnow(RID, GUIPARAM);
+    bool deletevcallnow(RID, GUIPARAM);
+    bool avbinout(RID, GUIPARAM);
+    bool av_call( RID, GUIPARAM );
     bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr );
     bool apply_edit( RID r = RID(), GUIPARAM p = nullptr );
 
@@ -218,7 +209,8 @@ class gui_conversation_header_c : public gui_contact_item_c
     RID bconfirm;
     RID bcancel;
     ts::str_c curedit; // utf8
-    ts::safe_ptr<gui_button_c> call_button;
+    ts::safe_ptr<gui_button_c> acall_button;
+    ts::safe_ptr<gui_button_c> vcall_button;
     ts::safe_ptr<gui_button_c> b1;
     ts::safe_ptr<gui_button_c> b2;
     ts::safe_ptr<gui_button_c> b3;
@@ -276,6 +268,7 @@ template<> struct MAKE_CHILD<gui_contact_separator_c> : public _PCHILD( gui_cont
 class gui_contact_separator_c : public gui_clist_base_c
 {
     DUMMY( gui_contact_separator_c );
+    typedef gui_clist_base_c super;
 
     static const ts::flags32_s::BITS  F_COLLAPSED = FLAGS_FREEBITSTART_LABEL << 0;
 
@@ -338,8 +331,9 @@ template<> struct MAKE_CHILD<gui_contactlist_c> : public _PCHILD(gui_contactlist
 class gui_contactlist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_contactlist_c);
+    typedef gui_vscrollgroup_c super;
 
-    GM_RECEIVER(gui_contactlist_c, ISOGM_PROFILE_TABLE_SAVED);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_PROFILE_TABLE_SL);
     GM_RECEIVER(gui_contactlist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);

@@ -117,7 +117,7 @@ int proc_upd(const ts::wstrings_c & pars)
 
     if (curl) curl_easy_cleanup(curl);
 
-    d.save_to_file(L"isotoxin.0.2.371.zip");
+    d.save_to_file(CONSTWSTR("isotoxin.0.2.371.zip"));
 
     return 0;
 }
@@ -163,7 +163,7 @@ int proc_sign(const ts::wstrings_c & pars)
     };
 
     b.load_from_disk_file( pa(CONSTASTR("ver")) );
-    ts::str_c ver = b.cstr();
+    ts::str_c ver( b.cstr() );
     ver.replace_all('/','.').trim();
 
     ts::str_c ss(CONSTASTR("ver="));
@@ -197,7 +197,7 @@ int proc_sign(const ts::wstrings_c & pars)
         rebuild:
         crypto_sign_keypair(pk, sk);
 
-        FILE *f = _wfopen(pa(CONSTASTR("sk")), L"wb");
+        FILE *f = fopen(ts::to_utf8(pa(CONSTASTR("sk"))), "wb");
         fwrite(sk, 1, sizeof(sk), f);
         fclose(f);
 
@@ -206,7 +206,7 @@ int proc_sign(const ts::wstrings_c & pars)
             spk.append(CONSTASTR("0x")).append_as_hex(pk[i]).append(CONSTASTR(", "));
         spk.trunc_length(2);
 
-        f = _wfopen(pa(CONSTASTR("pk")), L"wb");
+        f = fopen(to_utf8(pa(CONSTASTR("pk"))), "wb");
         fwrite(spk.cstr(), 1, spk.get_length(), f);
         fclose(f);
     } else
@@ -222,7 +222,7 @@ int proc_sign(const ts::wstrings_c & pars)
             if (n >= sizeof(pk)) goto rebuild;
             ts::str_c nx(*t);
             nx.trim();
-            if (pk[n] != (byte)nx.as_uint())
+            if (pk[n] != (uint8_t)nx.as_uint())
                 goto rebuild;
         }
         if (n < sizeof(pk)) goto rebuild;
@@ -230,7 +230,7 @@ int proc_sign(const ts::wstrings_c & pars)
 
     unsigned char sig[crypto_sign_BYTES];
     unsigned long long siglen;
-    crypto_sign_detached(sig,&siglen, (const byte *)ss.cstr(), ss.get_length(), sk);
+    crypto_sign_detached(sig,&siglen, (const uint8_t *)ss.cstr(), ss.get_length(), sk);
 
     ss.append(CONSTASTR("\r\nsign="));
     ss.append_as_hex(sig, (int)siglen);
@@ -243,7 +243,7 @@ int proc_sign(const ts::wstrings_c & pars)
         ss.append(CONSTASTR("`<br>\r\n[end]<br>\r\n"));
     }
 
-    FILE *f = _wfopen(pa(CONSTASTR("result")), L"wb");
+    FILE *f = fopen(ts::to_utf8(pa(CONSTASTR("result"))), "wb");
     fwrite(ss.cstr(), 1, ss.get_length(), f);
     fclose(f);
 

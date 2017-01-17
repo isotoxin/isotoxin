@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -71,7 +71,7 @@ namespace gloox
     if( m_subtype == Invalid )
       return 0;
 
-    Tag* t = new Tag( "message", XMLNS, XMLNS_CLIENT );
+    Tag* t = new Tag( "message" );
     if( m_to )
       t->addAttribute( "to", m_to.full() );
     if( m_from )

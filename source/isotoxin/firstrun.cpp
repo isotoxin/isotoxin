@@ -346,7 +346,7 @@ void dialog_firstrun_c::go2page(int page_)
 /*virtual*/ void dialog_firstrun_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
 
     set_defaults();
 
@@ -360,7 +360,7 @@ void dialog_firstrun_c::go2page(int page_)
 
 void dialog_firstrun_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
     if (bcr.tag == 0)
     {
         bcr.tooltip = TOOLTIP( TTT("Do nothing. Exit.",12) );
@@ -414,7 +414,7 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
 
 /*virtual*/ bool dialog_firstrun_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -482,7 +482,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     make_path( path_by_choice(choice1), 0 );
     ts::wstr_c config_fn = ts::fn_join(path_by_choice(choice1), CONSTWSTR("config.db"));
 
-    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn, nullptr, g_app->F_READONLY_MODE ))
+    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn, nullptr, g_app->F_READONLY_MODE() ))
     {
         config_c::prepare_conf_table(db);
         db->close();
@@ -494,7 +494,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     {
         ts::wstr_c n = profilename;
         cfg().profile(n);
-        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), nullptr, g_app->F_READONLY_MODE);
+        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), nullptr, g_app->F_READONLY_MODE());
     }
 
     cfg().language( deflng );

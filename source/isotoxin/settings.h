@@ -56,6 +56,7 @@ template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup
 
 class dialog_setup_network_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     guirect_watch_c watch;
     dialog_protosetup_params_s params;
     int addh = 0;
@@ -69,10 +70,12 @@ class dialog_setup_network_c : public gui_isodialog_c
     bool login_edit( const ts::wstr_c &t, bool );
     bool password_edit( const ts::wstr_c &t, bool );
 
+#define COPDEF( nnn, dv ) bool network_##nnn(RID, GUIPARAM p);
+    CONN_OPTIONS
+#undef COPDEF
+
     bool network_importfile(const ts::wstr_c & t, bool );
     bool network_serverport(const ts::wstr_c & t, bool );
-    bool network_ipv6(RID, GUIPARAM p);
-    bool network_udp(RID, GUIPARAM p);
     bool network_connect(RID, GUIPARAM p);
     void set_proxy_type_handler(const ts::str_c&);
     bool set_proxy_addr_handler(const ts::wstr_c & t, bool );
@@ -103,36 +106,8 @@ public:
 
 
 
-
-
-
-class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
+namespace settings
 {
-    NUMGEN_START( ctlm, 0 );
-    enum ctlmask
-    {
-        MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_CLIST          = SETBIT( NUMGEN_NEXT( ctlm ) ),
-        MASK_PROFILE_NOTIFICATIONS  = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_CONFERENCE          = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_MSGSNHIST      = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_SYSTEM     = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_COMMON     = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_ADVANCED_TOOLS         = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_ADVANCED_MISC          = SETBIT( NUMGEN_NEXT( ctlm ) ),
-
-        MASK_ADVANCED_DEBUG = SETBIT(NUMGEN_NEXT(ctlm)),
-    };
-
-    ts::shared_ptr<theme_rect_s> shadow;
-
     struct value_watch_s
     {
         const void *underedit;
@@ -154,17 +129,48 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         virtual bool changed() const { return ts::tabs( original - (*(const float *)underedit) ) > 0.0001f; }
     };
 
+}
+
+
+class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
+{
+    typedef gui_isodialog_c super;
+    NUMGEN_START( ctlm, 0 );
+    enum ctlmask
+    {
+        MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_CLIST          = SETBIT( NUMGEN_NEXT( ctlm ) ),
+        MASK_PROFILE_NOTIFICATIONS  = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_CONFERENCE     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_MSGSNHIST      = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_SYSTEM     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_COMMON     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_TOOLS         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_MISC          = SETBIT( NUMGEN_NEXT( ctlm ) ),
+
+        MASK_ADVANCED_DEBUG = SETBIT(NUMGEN_NEXT(ctlm)),
+    };
+
+    ts::shared_ptr<theme_rect_s> shadow;
+
     int force_change = 0;
-    ts::array_del_t<value_watch_s, 32> watch_array;
+    ts::array_del_t<settings::value_watch_s, 32> watch_array;
 
     template <typename T> void watch(const T&t)
     {
-        watch_array.add( TSNEW( value_watch_t<T>, t ) );
+        watch_array.add( TSNEW( settings::value_watch_t<T>, t ) );
     }
 
     template <typename T> bool is_changed(const T&t) const
     {
-        for( const value_watch_s *w : watch_array )
+        for( const settings::value_watch_s *w : watch_array )
             if (w->underedit == &t)
                 return w->changed();
         return false;
@@ -187,7 +193,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int video_bitrate = 0;
     bool encoding_quality_set(RID, GUIPARAM);
     bool advv_handler(RID, GUIPARAM);
-    
+
     void videocodecs_tab_selected();
     menu_c codecctxmenu(const ts::str_c& param, bool activation);
     void codecselected(const ts::str_c& prm);
@@ -223,9 +229,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     ts::str_c date_msg_tmpl;
     ts::str_c date_sep_tmpl;
 
-    struct sound_preset_s
+    struct sound_preset_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::wstr_c path;
         ts::wstr_c name;
         ts::abp_c preset;
@@ -238,13 +243,13 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool sndselhandler( RID, GUIPARAM );
     bool sndplayhandler( RID, GUIPARAM );
     bool sndvolhandler( RID, GUIPARAM );
-    
+
     menu_c get_list_avaialble_sound_presets();
     bool applysoundpreset( RID, GUIPARAM );
     void soundpresetselected(const ts::str_c&);
     bool addlistsound( RID, GUIPARAM );
-    
-    
+
+
     ts::wstr_c sndfn[snd_count];
     float sndvol[snd_count];
     ts::wstr_c sndselctl[snd_count];
@@ -257,11 +262,17 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void set_startopts();
 
     int backupopt = 0;
+    int backup_clean_days = 0;
+    int backup_clean_size = 0;
+    int backup_clean_count = 0;
     ts::wstr_c backuppath;
     bool backupopt_handler( RID, GUIPARAM );
     bool backuppath_handler( const ts::wstr_c &, bool );
-    
-    
+    bool backup_clean_days_handler(const ts::wstr_c &, bool);
+    bool backup_clean_size_handler(const ts::wstr_c &, bool);
+    bool backup_clean_count_handler(const ts::wstr_c &, bool);
+
+
     ts::uint8 passwhash[32];
     ts::safe_ptr<rectengine_c> epdlg;
     enum rekey_e
@@ -352,7 +363,7 @@ private:
 
     } bgroups[BGROUP_count];
 
-    
+
     int load_history_count = 0;
     int load_history_count_addition = 0;
     int set_away_on_timer_minutes_value_last = 0;
@@ -416,7 +427,7 @@ private:
     void proxy_handler( const ts::str_c& );
     bool proxy_addr_handler( const ts::wstr_c & t, bool );
     bool useproxy_handler(RID, GUIPARAM);
-    
+
     const protocol_description_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
     bool encrypt_handler( RID, GUIPARAM );
@@ -443,9 +454,8 @@ private:
     ts::wstr_c smilepack;
     void smile_pack_selected(const ts::str_c&);
 
-    struct theme_info_s
+    struct theme_info_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::wstr_c folder;
         ts::wstr_c name;
         bool current;
@@ -455,9 +465,8 @@ private:
     void select_theme( const ts::str_c& prm );
     menu_c list_themes();
 
-    struct sound_device_s
+    struct sound_device_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         s3::DEVICE deviceid;
         ts::wstr_c desc;
     };
@@ -474,13 +483,13 @@ private:
     bool test_talk_device( RID, GUIPARAM );
     bool test_signal_device( RID, GUIPARAM );
 
-    static int __stdcall enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
-    void enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
+    static bool S3CALL enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext);
+    void enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule);
     void select_audio_capture_device( const ts::str_c& prm );
     menu_c list_audio_capture_devices();
 
-    static int __stdcall enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
-    void enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
+    static bool S3CALL enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext);
+    void enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule);
     menu_c list_talk_devices();
     menu_c list_signal_devices();
 

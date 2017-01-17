@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
-#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+#ifdef _WIN32
+#if defined (_M_AMD64) || defined (WIN64)
 #define LIBSUFFIX "64.lib"
 #else
 #define LIBSUFFIX ".lib"
@@ -14,9 +15,11 @@
 #define USELIB(ln) comment(lib, #ln "d" LIBSUFFIX)
 #endif
 
+#ifdef _MSC_VER
 #pragma USELIB( toolset )
 #pragma USELIB( memspy )
-#pragma USELIB(rsvg)
+#pragma USELIB( rsvg )
+#pragma USELIB( ipc )
 
 #pragma comment(lib, "freetype.lib")
 #pragma comment(lib, "zlib.lib")
@@ -36,6 +39,8 @@
 
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
+#endif
+#endif // _MSC_VER
 #endif
 
 using namespace ts;
@@ -61,6 +66,8 @@ int proc_dos2unix(const wstrings_c & pars);
 int proc_unix2dos(const wstrings_c & pars);
 int proc_grab(const wstrings_c & pars);
 int proc_test(const wstrings_c & pars);
+int proc_ut(const wstrings_c & pars);
+int proc_utp(const wstrings_c & pars);
 int proc_rgbi420(const wstrings_c & pars);
 int proc_i420rgb(const wstrings_c & pars);
 int proc_bsdl(const wstrings_c & pars);
@@ -87,37 +94,39 @@ int proc_lochange_(const wstrings_c & pars)
 
 struct command_s
 {
-    const wchar_t *cmd;
-    const wchar_t *help;
+    const ts::wchar *cmd;
+    const ts::wchar *help;
     cmdproc proc;
 
-    command_s(const wchar_t *_c, const wchar_t *_h, cmdproc _p) :cmd(_c), help(_h), proc(_p) {}
+    command_s(const ts::wchar *_c, const ts::wchar *_h, cmdproc _p) :cmd(_c), help(_h), proc(_p) {}
 } commands[] =
 {
-    command_s(L"help", L"Show this help", proc_help),
-    command_s(L"show", L"Show params for debug purpose", proc_show),
-    command_s(L"loc", L"Generate Locale [path-to-source] [path-to-locale]", proc_loc_),
-    command_s(L"changeloc", L"Change Locale [path-to-source] [path-to-locale] [locale default en]", proc_lochange_),
-    command_s(L"trunc", L"Truncate [file] at [offset-from-begining]", proc_trunc),
-    command_s(L"antic99", L"Remove C99 dependence [c-file]", proc_antic99),
-    command_s( L"fxml", L"format [xml-file]", proc_fxml ),
-    command_s(L"nodes", L"Grab nodes list from https://wiki.tox.chat/users/nodes", proc_grabnodes),
-    command_s(L"http", L"Do some http ops", proc_http),
+    command_s(WIDE2( "help" ), WIDE2("Show this help"), proc_help),
+    command_s(WIDE2( "show" ), WIDE2("Show params for debug purpose"), proc_show),
+    command_s(WIDE2( "loc" ), WIDE2("Generate Locale [path-to-source] [path-to-locale]"), proc_loc_),
+    command_s(WIDE2( "changeloc" ), WIDE2("Change Locale [path-to-source] [path-to-locale] [locale default en]"), proc_lochange_),
+    command_s(WIDE2( "trunc" ), WIDE2("Truncate [file] at [offset-from-begining]"), proc_trunc),
+    command_s(WIDE2( "antic99" ), WIDE2("Remove C99 dependence [c-file]"), proc_antic99),
+    command_s(WIDE2( "fxml" ), WIDE2("format [xml-file]"), proc_fxml ),
+    command_s(WIDE2( "nodes" ), WIDE2("Grab nodes list from https://wiki.tox.chat/users/nodes"), proc_grabnodes ),
+    command_s(WIDE2( "http" ), WIDE2("Do some http ops"), proc_http),
 #ifdef _WIN32
-    command_s(L"toxrelay", L"Just run TOX relay", proc_toxrelay),
+    command_s( WIDE2( "toxrelay"), WIDE2( "Just run TOX relay"), proc_toxrelay),
 #endif
-    command_s(L"hgver", L"Prints current hg revision", proc_hgver),
-    //command_s(L"upd", L"Load isotoxin update", proc_upd),
-    command_s(L"sign", L"Sign archive", proc_sign),
-    command_s(L"emoji", L"Create emoji table", proc_emoji),
-    command_s(L"dos2unix", L"Convert CRLF to LF", proc_dos2unix),
-    command_s(L"unix2dos", L"Convert LF to CRLF", proc_unix2dos),
-    command_s(L"grab", L"grab monitor 0 to png", proc_grab),
-    command_s(L"test", L"internal tests, do not use", proc_test),
-    command_s(L"rgbi420", L"convert image [file] to i420", proc_rgbi420),
-    command_s(L"i420rgb", L"convert image [file] to png", proc_i420rgb),
-    command_s(L"bsdl", L"Build spelling dictionary list of [path] with *.aff and *.dic files", proc_bsdl),
-    command_s( L"rsvg", L"Render [svg-file] to png", proc_rsvg ),
+    command_s( WIDE2( "hgver"), WIDE2( "Prints current hg revision"), proc_hgver),
+    //command_s(WIDE2( "upd"), WIDE2( "Load isotoxin update"), proc_upd),
+    command_s( WIDE2("sign"), WIDE2( "Sign archive"), proc_sign),
+    command_s( WIDE2("emoji"), WIDE2( "Create emoji table"), proc_emoji),
+    command_s( WIDE2("dos2unix"), WIDE2( "Convert CRLF to LF"), proc_dos2unix),
+    command_s( WIDE2("unix2dos"), WIDE2( "Convert LF to CRLF"), proc_unix2dos),
+    command_s( WIDE2("grab"), WIDE2( "grab monitor 0 to png"), proc_grab),
+    command_s( WIDE2("test"), WIDE2( "internal tests, do not use"), proc_test),
+    command_s( WIDE2("ut"), WIDE2("unit tests, do not use"), proc_ut),
+    command_s( WIDE2("utp"), WIDE2("unit tests params, do not use"), proc_utp),
+    command_s( WIDE2("rgbi420"), WIDE2( "convert image [file] to i420"), proc_rgbi420),
+    command_s( WIDE2("i420rgb"), WIDE2( "convert image [file] to png"), proc_i420rgb),
+    command_s( WIDE2("bsdl"), WIDE2( "Build spelling dictionary list of [path] with *.aff and *.dic files"), proc_bsdl),
+    command_s( WIDE2("rsvg"), WIDE2( "Render [svg-file] to png"), proc_rsvg ),
 };
 
 
@@ -174,14 +183,13 @@ void Print(const char *format, ...)
 #endif
     printf("%s", buf.cstr());
 }
-extern "C" { void sodium_init(); }
 
-bool ts::app_preinit( const wchar_t *cmdl )
+bool TSCALL ts::app_preinit( const ts::wchar *cmdl )
 {
     return true;
 }
 
-int main(int argc, _TCHAR* argv[])
+int main(int argc, char* argv[])
 {
     sodium_init();
 #ifdef _WIN32
@@ -191,8 +199,15 @@ int main(int argc, _TCHAR* argv[])
 
     MEMT( MEMT_LAST + 1 );
 
-    wchar_t *cmdlb = GetCommandLineW();
-    wstrings_c ql; ql.qsplit( cmdlb );
+    wstrings_c ql;
+#ifdef _WIN32
+    wchar *cmdlb = GetCommandLineW();
+    ql.qsplit( cmdlb );
+#endif // _WIN32
+#ifdef _NIX
+    for( int i=0;i<argc;++i )
+        ql.add( from_utf8(argv[i]) );
+#endif
 
     if (ql.size() < 2)
     {
@@ -208,20 +223,45 @@ int main(int argc, _TCHAR* argv[])
                 return commands[i].proc( ql );
             }
         }
-        wstr_c er(L"Unknown command: "); er.append( ql.get(1) );
-        wprintf(L"%s\n",er.cstr());
+        Print("Unknown command : %s\n",to_utf8( ql.get( 1 ) ).cstr());
     }
 	return 1;
 }
 
+#define HOME_SITE "http://isotoxin.im"
+
+#if 0
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
+
 int proc_help(const wstrings_c & pars)
 {
-#ifdef MODE64
-    printf("Isotoxin Rasp (x64, %s)\n", __DATE__);
-#else
-    printf( "Isotoxin Rasp (%s)\n", __DATE__ );
+#if 0
+    int pagesize = sysconf(_SC_PAGESIZE);
+    int l = shm_open("rasp_shared_block", O_CREAT|O_RDWR, 0666 );
+    ftruncate(l, pagesize * 33);
+
+    void *ptr = mmap(nullptr, pagesize * 33, PROT_READ|PROT_WRITE, MAP_SHARED, l, 0 );
+    close(l);
+    munmap(ptr, pagesize * 33);
 #endif
-    printf("  Commands:\n");
+
+
+
+    //ts::wstr_c title;
+    //title.append( CONSTWSTR("<a href=\"" HOME_SITE "\">Isotoxin</a>") );
+
+#ifdef MODE64
+    Print("Isotoxin Rasp (x64, %s)\n", __DATE__);
+    #ifdef _NIX
+        //Print( "%s\n", ts::to_utf8(title).cstr() );
+    #endif
+#else
+    Print( "Isotoxin Rasp (%s)\n", __DATE__ );
+#endif
+    Print("  Commands:\n");
 
     wstr_c cmn;
     int maxl = 0;
@@ -235,7 +275,7 @@ int proc_help(const wstrings_c & pars)
     {
         cmn.fill(maxl + 1, ' ');
         memcpy(cmn.str(), commands[i].cmd, CHARz_len(commands[i].cmd) * sizeof(wchar));
-        wprintf(L"    %s - %s\n", cmn.cstr(), commands[i].help);
+        Print("    %s - %s\n", to_utf8(cmn).cstr(), to_utf8(commands[i].help).cstr());
     }
 
     return 0;
@@ -246,7 +286,7 @@ int proc_show(const wstrings_c & pars)
     ts::aint cnt = pars.size();
     for( int i=0;i<cnt;++i)
     {
-        printf("#%i: [%s]\n", i, to_str(pars.get(i)).cstr());
+        Print("#%i: [%s]\n", i, to_str(pars.get(i)).cstr());
     }
     return 0;
 }
@@ -255,6 +295,7 @@ int proc_trunc(const wstrings_c & pars)
 {
     if (pars.size() == 3)
     {
+#ifdef _WIN32
         Print("Open: %s\n", to_str(pars.get(1)).cstr());
         HANDLE f = CreateFileW(pars.get(1), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (f != INVALID_HANDLE_VALUE)
@@ -272,16 +313,19 @@ int proc_trunc(const wstrings_c & pars)
 
             CloseHandle(f);
         }
-
-    
+#endif
     }
     return 0;
 }
 
+#ifdef _NIX
+int GetEnvironmentVariableW(const ts::wsptr &name, ts::wchar *buf, int bufl);
+#endif
+
 int proc_hgver(const wstrings_c & pars)
 {
     ts::wstr_c buf(16385,false);
-    GetEnvironmentVariableW(L"path", buf.str(), (int)buf.get_capacity()-1);
+    GetEnvironmentVariableW(ts::wstr_c(CONSTWSTR("path")), buf.str(), (int)buf.get_capacity()-1);
     buf.set_length();
     ts::wstrings_c paths(buf,';');
     paths.trim();
@@ -314,8 +358,10 @@ int proc_hgver(const wstrings_c & pars)
 
 int proc_grab(const wstrings_c & pars)
 {
-    Sleep(5000);
+    ts::sys_sleep(5000);
+    #ifdef _WIN32
     Beep(1000,100);
+    #endif
     int monitor = 0;
     irect gr = monitor_get_max_size_fs(monitor);
 
@@ -329,7 +375,7 @@ int proc_grab(const wstrings_c & pars)
     grabbuff.render_cursor(gr.lt, cursorcachedata);
 
     grabbuff.fill_alpha(255);
-    grabbuff.save_as_png( L"m0.png" );
+    grabbuff.save_as_png( CONSTWSTR("m0.png") );
 
     return 0;
 }
@@ -344,7 +390,7 @@ int proc_rgbi420(const wstrings_c & pars)
 
     buf_c buf;
     bmp.convert_to_yuv( ivec2(0), bmp.info().sz, buf, YFORMAT_I420);
-    buf.save_to_file( L"i420.bin" );
+    buf.save_to_file( CONSTWSTR("i420.bin") );
     return 0;
 }
 
@@ -374,7 +420,7 @@ int proc_i420rgb(const wstrings_c & pars)
     bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420);
     //bmp.save_as_png(L"i420.png");
     bmp.save_as_png(fn_get_name( pars.get(1) ).append(CONSTWSTR(".png")));
-    
+
 
     bmp.create_ARGB(ivec2(w/2, h/2));
     bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420x2);
@@ -384,8 +430,7 @@ int proc_i420rgb(const wstrings_c & pars)
     return 0;
 }
 
-
-
+#ifdef _WIN32
 // dlmalloc -----------------
 #define SLASSERT ASSERTO
 #define SLERROR ERROR
@@ -408,3 +453,4 @@ extern "C"
 {
 #include "dlmalloc/dlmalloc.c"
 }
+#endif

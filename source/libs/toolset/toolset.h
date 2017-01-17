@@ -10,7 +10,12 @@
 #define WINDOWS_ONLY
 #else
 #define WINDOWS_ONLY __error
+#include <stddef.h>
 #endif
+#ifdef _NIX
+#define _FILE_OFFSET_BITS 64
+#define _LARGEFILE64_SOURCE 1
+#endif // _NIX
 
 #pragma pack (push, 1)
 
@@ -46,7 +51,7 @@
 
 #define DELEGATE(a,method) fastdelegate::MakeDelegate((a), &ts::clean_type<decltype(a)>::type::method)
 
-#if defined _MSC_VER
+#ifdef _MSC_VER
 #define ALIGN(n) __declspec( align( n ) )
 #define THREADLOCAL __declspec(thread)
 #define TSCALL __cdecl
@@ -78,12 +83,13 @@
 #endif
 
 #if defined __linux__
+#undef _NIX
 #define _NIX
 #endif
 
 #define UPAR(p) { (p) = (p); }
 
-#if DLMALLOC_USED
+#if defined DLMALLOC_USED && DLMALLOC_USED
 extern "C"
 {
 	void* dlmalloc(size_t);
@@ -109,6 +115,7 @@ extern "C"
 #define MM_FREE(ptr) dlfree(ptr)
 #define MM_SIZE(ptr) dlmalloc_usable_size(ptr)
 #else
+extern int THREADLOCAL g_current_memt;
 #define MM_ALLOC(sz) mspy_malloc(__FILE__, __LINE__, g_current_memt, sz)
 #define MM_RESIZE(ptr,sz) mspy_realloc(__FILE__, __LINE__, g_current_memt, ptr,sz)
 #define MM_ALLOC_T(t, sz) mspy_malloc(__FILE__, __LINE__, t, sz)
@@ -165,7 +172,6 @@ enum mem_e
 };
 
 #ifdef _DEBUG
-extern int THREADLOCAL g_current_memt;
 struct memory_type_setup
 {
     int oldmemt;
@@ -226,6 +232,8 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #define STUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
 #define STOPSTUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
 #define NOP() ASSERT((1,true))
+#define UNREACHABLE() __assume(0)
+#define HINT(cond) __assume(cond)
 
 #define UNSAFE_BLOCK_BEGIN __try {
 #define UNSAFE_BLOCK_END } __except ( -1 ) {}
@@ -234,10 +242,12 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #define NOWARNING(n,...) __VA_ARGS__
 #define DEBUG_BREAK() __builtin_trap()
 #define DO_PRAGMA(x) _Pragma (#x)
-#define UNFINISHED(s) DO_PRAGMA(message (__LOC__ "unfinished function: " __FUNCTION__ ": " s))
-#define STUB(...) _Pragma(message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ ))
-#define STOPSTUB(...) _Pragma(message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ ))
+#define UNFINISHED(s) _Pragma( "GCC warning \"unfinished code here\"")
+#define STUB(...) _Pragma( "GCC warning \"unfinished function here\""); WARNING( __LOC__ "unfinished function: %s: %s", __func__, "" __VA_ARGS__ )
+#define STOPSTUB(...) _Pragma( "GCC warning \"unfinished function here\""); ERROR( __LOC__ "unfinished function: %s: %s", __func__, "" __VA_ARGS__ )
 #define NOP() ASSERT((1,true))
+#define UNREACHABLE() __builtin_unreachable()
+#define HINT(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
 
 #define UNSAFE_BLOCK_BEGIN try {
 #define UNSAFE_BLOCK_END } catch ( ... ) {}
@@ -247,7 +257,7 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 
 #ifndef _FINAL
 #define DEBUGCODE(...) __VA_ARGS__
-#define FINALCODE(...) 
+#define FINALCODE(...)
 #else
 #define DEBUGCODE(...)
 #define FINALCODE(...) __VA_ARGS__
@@ -297,7 +307,7 @@ template<typename NUM> struct minimum
 #define SEC_PER_YEAR    (SEC_PER_DAY * 365U)
 
 /// Swap two varibales
-template<class T> INLINE void SWAP(T& first, T& second) 
+template<class T> INLINE void SWAP(T& first, T& second)
 {
     T temp = std::move(first);
     first = std::move(second);
@@ -511,34 +521,33 @@ template <typename T> INLINE T sz_cast( size_t p ) {return (T)p;}
 #pragma warning (pop)
 #endif
 
+template<bool f> struct movable_flag
+{
+};
+
 namespace internals
 {
-    template<typename T, bool ispod> struct is_movable__
+    struct movable_customized_yes
     {
-        static const bool xvalue = true;
+        static const bool value = true;
+        static const bool explicitly = true;
     };
-    template<typename T> struct is_movable__ < T, false >
+    struct movable_customized_no
     {
-        static const bool xvalue = T::__movable;
+        static const bool value = false;
+        static const bool explicitly = true;
     };
 
-    template <typename T> struct movable_predefined
+    template <typename T> struct movable
     {
-        static const bool value = std::is_pod<T>::value || std::is_pointer<T>::value;
-    };
-    template <typename T, typename D> struct movable_predefined< std::unique_ptr< T, D > >
-    {
-        static const bool value = true;
-    };
-    template <typename T, typename D> struct movable_predefined< str_t< T, D > >
-    {
-        static const bool value = true;
+        static const bool value = !std::is_base_of< movable_flag<false>, T >::value
+            && (std::is_pod<T>::value || std::is_pointer<T>::value || std::is_base_of< movable_flag<true>, T >::value);
+        static const bool explicitly = std::is_base_of< movable_flag<true>, T >::value || std::is_base_of< movable_flag<false>, T >::value;
     };
 
-    template <typename T> struct movable_predefined< fastdelegate::FastDelegate< T > >
-    {
-        static const bool value = true;
-    };
+    template <typename T, typename D> struct movable< std::unique_ptr< T, D > > : public movable_customized_yes {};
+    template <typename T, typename D> struct movable< str_t< T, D > > : public movable_customized_yes {};
+    template <typename T> struct movable< fastdelegate::FastDelegate< T > > : public movable_customized_yes {};
 
     template<typename T1, typename T2, bool t1_bigger_t2> struct biggest__;
     template<typename T1, typename T2> struct biggest__<T1, T2, true>
@@ -563,10 +572,11 @@ namespace internals
 
 template<typename T> struct is_movable
 {
-    static const bool value = internals::is_movable__<T, internals::movable_predefined<T>::value >::xvalue;
+    static const bool value = internals::movable<T>::value;
+    TS_STATIC_CHECK(value || internals::movable<T>::explicitly, "define movable flag explicitly");
 };
 
-#define MOVABLE(b) template<typename TTT, bool ZZZ> friend struct ts::internals::is_movable__; static const bool __movable = (b)
+#define DECLARE_MOVABLE(T, f) namespace ts { namespace internals { template <> struct movable<T> { static const bool value = f; static const bool explicitly = true; }; } }
 
 template<typename T1, typename T2> struct biggest
 {
@@ -579,8 +589,6 @@ template<class _Ty1, class _Ty2> struct pair_s
     typedef pair_s<_Ty1, _Ty2> me_type;
     typedef _Ty1 first_type;
     typedef _Ty2 second_type;
-
-    MOVABLE( is_movable<_Ty1>::value && is_movable<_Ty2>::value );
 
     pair_s() : first(_Ty1()), second(_Ty2())
     {	// construct from defaults
@@ -603,6 +611,15 @@ template<class _Ty1, class _Ty2> struct pair_s
     _Ty2 second;	// the second stored value
 };
 
+namespace internals
+{
+    template <class _Ty1, class _Ty2> struct movable< pair_s< _Ty1, _Ty2 > >
+    {
+        static const bool value = movable<_Ty1>::value && movable<_Ty2>::value;
+        static const bool explicitly = movable<_Ty1>::explicitly && movable<_Ty2>::explicitly;
+    };
+}
+
 #define PTR_TO_UNSIGNED( p ) ((size_t)p)
 
 namespace staticnumgen
@@ -618,6 +635,7 @@ namespace staticnumgen
 #define NUMGEN_PREV( ngn ) (numgen_##ngn##_s::N - __COUNTER__)
 
 INLINE uint8 as_byte(int aa) {return static_cast<uint8>(aa & 0xFF);}
+INLINE uint8 as_byte(long int aa) {return static_cast<uint8>(aa & 0xFF);}
 INLINE uint8 as_byte( uint aa ) { return static_cast<uint8>( aa & 0xFF ); }
 INLINE uint8 as_byte( uint32 aa) {return static_cast<uint8>(aa & 0xFF);}
 INLINE uint8 as_byte( uint64 aa ) { return static_cast<uint8>( aa & 0xFF ); }
@@ -659,7 +677,7 @@ public:
 protected:
     INLINE char* addr() const {
         return (char*)(
-            ((size_t)&store_ + factor -1) - 
+            ((size_t)&store_ + factor -1) -
             ((size_t)&store_ + factor -1) % factor);
     }
 };
@@ -878,8 +896,6 @@ public:
 
 struct TMP_ALLOCATOR
 {
-    MOVABLE( true );
-
     tmpbuf_s *curbuf;
 
     TMP_ALLOCATOR():curbuf( tmpalloc_c::get() )
@@ -902,6 +918,8 @@ struct TMP_ALLOCATOR
         return curbuf->resize(sz);
     }
 };
+
+namespace internals { template <> struct movable<TMP_ALLOCATOR> : public movable_customized_yes {}; }
 
 typedef str_t<ZSTRINGS_ANSICHAR, str_core_copy_on_demand_c<ZSTRINGS_ANSICHAR, TMP_ALLOCATOR> > tmp_str_c;
 typedef str_t<ZSTRINGS_WIDECHAR, str_core_copy_on_demand_c<ZSTRINGS_WIDECHAR, TMP_ALLOCATOR> > tmp_wstr_c;
@@ -952,6 +970,7 @@ template<> INLINE TSCOLOR &make_dummy<TSCOLOR>(bool quiet) { static TSCOLOR t = 
 template<> INLINE str_c &make_dummy<str_c>(bool quiet) { static str_c t; DUMMY_USED_WARNING(quiet); return t; }
 template<> INLINE wstr_c &make_dummy<wstr_c>(bool quiet) { static wstr_c t; DUMMY_USED_WARNING(quiet); return t; }
 
+int INLINE ptr2int(const void *ptr) { return static_cast<int>(reinterpret_cast<aint>(ptr)); }
 
 template<typename Tout, typename Tin> Tout &ref_cast(Tin & t)
 {
@@ -1284,6 +1303,10 @@ extern "C" { void * __cdecl _exception_info( void ); }
 #define UNSTABLE_CODE_PROLOG __try {
 //#define UNSTABLE_CODE_EPILOG } __except(crash_exception_filter(GetExceptionInformation())){}
 #define UNSTABLE_CODE_EPILOG } __except(crash_exception_filter((_EXCEPTION_POINTERS *)_exception_info())){}
+#endif
+#ifdef _NIX
+#define UNSTABLE_CODE_PROLOG try {
+#define UNSTABLE_CODE_EPILOG } catch (...) {}
 #endif
 #else
 #define UNSTABLE_CODE_PROLOG ;

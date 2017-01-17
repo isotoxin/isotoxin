@@ -9,7 +9,7 @@ namespace ts
     {
         struct regex_internal_s
         {
-            std::wregex templ;
+            std::basic_regex<ts::wchar> templ;
             regex_internal_s( const wsptr& s ) :templ( s.s, s.l, std::regex_constants::egrep | std::regex_constants::optimize | std::regex_constants::icase )
             {
             }
@@ -32,7 +32,7 @@ namespace ts
     bool regex_c::present( const wsptr&s ) const
     {
         regex_internal_s *d = (regex_internal_s *)data;
-        return std::regex_search( std::basic_string<wchar_t>(s.s, s.l), d->templ );
+        return std::regex_search( std::basic_string<ts::wchar>(s.s, s.l), d->templ );
     }
 
 } // namespace ts

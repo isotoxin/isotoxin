@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="rasp" />
+		<Option platforms="Unix;" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../../../tools/rasp" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="$(PROJECTDIR)/../../../tools" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+					<Add option="-D_NIX" />
+					<Add directory="$(PROJECTDIR)../../libs" />
+					<Add directory="$(PROJECTDIR)../../libs-external" />
+					<Add directory="$(PROJECTDIR)../../libs-external/cairo" />
+					<Add directory="$(PROJECTDIR)../../libs-external/zlib/src" />
+				</Compiler>
+				<Linker>
+					<Add option="-m64" />
+					<Add library="srsvgd" />
+					<Add library="memspyd" />
+					<Add library="toolsetd" />
+					<Add library="ipcd" />
+					<Add library="sodium" />
+					<Add library="freetype" />
+					<Add library="curl" />
+					<Add library="pthread" />
+					<Add library="rt" />
+					<Add library="pngstatic" />
+					<Add library="zstatic" />
+					<Add library="minizipstatic" />
+					<Add library="toxcorestatic" />
+					<Add library="qrencode" />
+					<Add library="gifstatic" />
+					<Add library="jpegstatic" />
+					<Add library="cairostatic" />
+					<Add directory="$(GARBAGE)/__libs/" />
+					<Add directory="$(PROJECTDIR)../../libs/" />
+				</Linker>
+			</Target>
+			<Target title="Final">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../../../tools/rasp" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="$(PROJECTDIR)/../../../tools" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-D_FINAL" />
+					<Add option="-DNDEBUG" />
+					<Add option="-D_NIX" />
+					<Add directory="$(PROJECTDIR)../../libs" />
+					<Add directory="$(PROJECTDIR)../../libs-external" />
+					<Add directory="$(PROJECTDIR)../../libs-external/cairo" />
+					<Add directory="$(PROJECTDIR)../../libs-external/zlib/src" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add library="toolset" />
+					<Add library="memspy" />
+					<Add library="srsvg" />
+					<Add library="sodium" />
+					<Add library="curl" />
+					<Add library="zstatic" />
+					<Add library="minizipstatic" />
+					<Add library="toxcorestatic" />
+					<Add directory="$(PROJECTDIR)../../libs" />
+					<Add directory="$(GARBAGE)/__libs" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fexceptions" />
+		</Compiler>
+		<Unit filename="anti_c99.cpp" />
+		<Unit filename="bsdl.cpp" />
+		<Unit filename="client.cpp" />
+		<Unit filename="client.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="grabnodes.cpp" />
+		<Unit filename="httpops.cpp" />
+		<Unit filename="loc.cpp" />
+		<Unit filename="perftest.cpp" />
+		<Unit filename="rasp.cpp" />
+		<Unit filename="rasp.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="rsvg.cpp" />
+		<Unit filename="stdafx.cpp" />
+		<Unit filename="stdafx.h">
+			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="tests.cpp" />
+		<Unit filename="tox-bootstrapd.cpp" />
+		<Unit filename="update.cpp" />
+		<Extensions>
+			<envvars set="default" />
+			<code_completion />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

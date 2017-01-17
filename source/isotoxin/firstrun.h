@@ -2,6 +2,7 @@
 
 class dialog_firstrun_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     bool refresh_current_page( RID, GUIPARAM );
     bool start( RID, GUIPARAM );
     bool prev_page( RID, GUIPARAM );

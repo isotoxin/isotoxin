@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2005-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2005-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -94,7 +94,8 @@ namespace gloox
   ClientBase::ClientBase( const std::string& ns, const std::string& server, int port )
     : m_connection( 0 ), m_encryption( 0 ), m_compression( 0 ), m_disco( 0 ), m_namespace( ns ),
       m_xmllang( "en" ), m_server( server ), m_compressionActive( false ), m_encryptionActive( false ),
-      m_compress( true ), m_authed( false ), m_block( false ), m_sasl( true ), m_tls( TLSOptional ), m_port( port ),
+      m_compress( true ), m_authed( false ), m_resourceBound( false ), m_block( false ), m_sasl( true ),
+      m_tls( TLSOptional ), m_port( port ),
       m_availableSaslMechs( SaslMechAll ), m_smContext( CtxSMInvalid ), m_smHandled( 0 ),
       m_statisticsHandler( 0 ), m_mucInvitationHandler( 0 ),
       m_messageSessionHandlerChat( 0 ), m_messageSessionHandlerGroupchat( 0 ),
@@ -113,8 +114,9 @@ namespace gloox
     : m_connection( 0 ), m_encryption( 0 ), m_compression( 0 ), m_disco( 0 ), m_namespace( ns ),
       m_password( password ),
       m_xmllang( "en" ), m_server( server ), m_compressionActive( false ), m_encryptionActive( false ),
-      m_compress( true ), m_authed( false ), m_block( false ), m_sasl( true ), m_tls( TLSOptional ),
-      m_port( port ), m_availableSaslMechs( SaslMechAll ), m_smContext( CtxSMInvalid ), m_smHandled( 0 ),
+      m_compress( true ), m_authed( false ), m_resourceBound( false ), m_block( false ), m_sasl( true ),
+      m_tls( TLSOptional ), m_port( port ),
+      m_availableSaslMechs( SaslMechAll ), m_smContext( CtxSMInvalid ), m_smHandled( 0 ),
       m_statisticsHandler( 0 ), m_mucInvitationHandler( 0 ),
       m_messageSessionHandlerChat( 0 ), m_messageSessionHandlerGroupchat( 0 ),
       m_messageSessionHandlerHeadline( 0 ), m_messageSessionHandlerNormal( 0 ),
@@ -935,7 +937,7 @@ namespace gloox
     return true;
   }
 
-  void ClientBase::add_iq_handler( const std::string&id, IqHandler* ih, int context )
+  void ClientBase::add_iq_handler( const std::string&id, IqHandler* ih, int context ) /* isotoxin.im */
   {
         TrackStruct track;
         track.ih = ih;
@@ -946,7 +948,7 @@ namespace gloox
         m_iqHandlerMapMutex.unlock();
   }
 
-    void ClientBase::send( IQ& iq, IqHandler* ih, int context, bool del )
+  void ClientBase::send( IQ& iq, IqHandler* ih, int context, bool del )
   {
     if( ih && ( iq.subtype() == IQ::Set || iq.subtype() == IQ::Get ) )
     {

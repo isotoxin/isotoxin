@@ -160,7 +160,7 @@ namespace
 class win32_wnd_c : public wnd_c
 {
     friend HWND wnd2hwnd( const wnd_c * w );
-    static const wchar_t *classname() { return L"REW013"; }
+    static const ts::wchar *classname() { return WIDE2("REW013"); }
 
     static LRESULT CALLBACK wndhandler( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
@@ -780,40 +780,6 @@ public:
         return hwnd == WindowFromPoint( (POINT &)screenpos );
     }
 
-    static int get_max_sz( const irect&fr, irect&r )
-    {
-        int mc = monitor_count();
-        int maxia = -1;
-        int fm = -1;
-
-        ts::ivec2 fc = fr.center();
-        int dst = maximum<int>::value;
-        int fmdst = -1;
-
-        for( int i=0;i<mc; ++i )
-        {
-            irect rr = monitor_get_max_size(i);
-            int ia = fr.intersect_area(rr);
-            if (ia > maxia )
-            {
-                fm = i;
-                maxia = ia;
-                r = rr;
-            }
-            if (fm < 0)
-            {
-                int d = ( fc - rr.center() ).sqlen();
-                if (d < dst)
-                {
-                    dst = d;
-                    fmdst = i;
-                    r = rr;
-                }
-            }
-        }
-        return fm < 0 ? fmdst : fm;
-    }
-
     virtual void make_hole( const ts::irect &holerect ) override
     {
         if (holerect)
@@ -895,8 +861,12 @@ public:
                 update_frame |= changed;
             }
 
-            irect fssz;
-            int m = get_max_sz( ref_cast<irect>( shp->rect ), fssz );
+            int m = 0;
+            irect fssz(shp->maxrect);
+            if (fssz.area() == 0)
+                m = monitor_find_max_sz(ref_cast<irect>(shp->rect), fssz);
+            else
+                m = monitor_find(fssz.center());
 
             bool rebuf = false;
             bool reminimization = shp->collapsed() != ( odp == D_MIN || odp == D_MICRO );
@@ -982,7 +952,7 @@ public:
                     EndDeferWindowPos( dwp );
                 }
 
-                if ( GetCapture() == hwnd ) ReleaseCapture();
+                //if ( GetCapture() == hwnd ) ReleaseCapture();
                 scmd = shp->collapsed() ? SW_MINIMIZE : ( shp->d == D_MAX ? SW_MAXIMIZE : SW_RESTORE );
                 bool curmin = is_collapsed();
                 bool curmax = maxmon >= 0 && is_maximized();
@@ -1072,8 +1042,14 @@ public:
         if ( shp ) normal_rect = shp->rect;
 
         ts::irect wrect = normal_rect;
-        if ( shp && shp->d == D_MAX )
-            maxmon = get_max_sz( ref_cast<irect>( shp->rect ), wrect );
+        if (shp && shp->d == D_MAX)
+        {
+            wrect = shp->maxrect;
+            if (wrect.area() == 0)
+                maxmon = monitor_find_max_sz(ref_cast<irect>(shp->rect), wrect);
+            else
+                maxmon = monitor_find(wrect.center());
+        }
 
         master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
         creation_data_s cd;

@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2004-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2004-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -26,7 +26,8 @@
 #include "util.h"
 
 #ifdef __MINGW32__
-# include <winsock.h>
+# include <winsock2.h>
+# include <ws2tcpip.h>
 #endif
 
 #if ( !defined( _WIN32 ) && !defined( _WIN32_WCE ) ) || defined( __SYMBIAN32__ )
@@ -43,7 +44,8 @@
 #endif
 
 #if defined( _WIN32 ) && !defined( __SYMBIAN32__ )
-# include <winsock.h>
+# include <winsock2.h>
+# include <ws2tcpip.h>
 #elif defined( _WIN32_WCE )
 # include <winsock2.h>
 #endif
@@ -154,6 +156,7 @@ namespace gloox
 #endif
 
     int status = 0;
+    int err = 0;
     struct addrinfo hints;
     struct addrinfo *res;
 
@@ -161,16 +164,19 @@ namespace gloox
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    status = getaddrinfo( m_server.c_str(), util::int2string( m_port ).c_str(), &hints, &res );
+    status = getaddrinfo( m_server.empty() ? 0 : m_server.c_str(), util::int2string( m_port ).c_str(), &hints, &res );
     if( status != 0 )
     {
+      err = errno;
       std::string message = "getaddrinfo() for " + ( m_server.empty() ? std::string( "*" ) : m_server )
           + " (" + util::int2string( m_port ) + ") failed. "
 #if defined( _WIN32 ) && !defined( __SYMBIAN32__ )
-      "WSAGetLastError: " + util::int2string( ::WSAGetLastError() );
+          "WSAGetLastError: " + util::int2string( ::WSAGetLastError() );
 #else
-      "errno: " + util::int2string( errno );
+          + strerror( err ) + " (errno: " + util::int2string( err ) + ")";
 #endif
+      m_logInstance.dbg( LogAreaClassConnectionTCPServer, message );
+
       return ConnIoError;
     }
 
@@ -178,29 +184,33 @@ namespace gloox
 
     if( bind( m_socket, res->ai_addr, res->ai_addrlen ) < 0 )
     {
+      err = errno;
       std::string message = "bind() to " + ( m_server.empty() ? std::string( "*" ) : m_server )
           + " (" + /*inet_ntoa( local.sin_addr ) + ":" +*/ util::int2string( m_port ) + ") failed. "
 #if defined( _WIN32 ) && !defined( __SYMBIAN32__ )
           "WSAGetLastError: " + util::int2string( ::WSAGetLastError() );
 #else
-          "errno: " + util::int2string( errno );
+          + strerror( err ) + " (errno: " + util::int2string( err ) + ")";
 #endif
       m_logInstance.dbg( LogAreaClassConnectionTCPServer, message );
 
+      DNS::closeSocket( m_socket, m_logInstance );
       return ConnIoError;
     }
 
     if( listen( m_socket, 10 ) < 0 )
     {
-      std::string message = "listen on " + ( m_server.empty() ? std::string( "*" ) : m_server )
+      err = errno;
+      std::string message = "listen() on " + ( m_server.empty() ? std::string( "*" ) : m_server )
           + " (" + /*inet_ntoa( local.sin_addr ) +*/ ":" + util::int2string( m_port ) + ") failed. "
 #if defined( _WIN32 ) && !defined( __SYMBIAN32__ )
           "WSAGetLastError: " + util::int2string( ::WSAGetLastError() );
 #else
-          "errno: " + util::int2string( errno );
+          + strerror( err ) + " (errno: " + util::int2string( err ) + ")";
 #endif
       m_logInstance.dbg( LogAreaClassConnectionTCPServer, message );
 
+      DNS::closeSocket( m_socket, m_logInstance );
       return ConnIoError;
     }
 
@@ -238,7 +248,7 @@ namespace gloox
     char portstr[NI_MAXSERV];
     int err = getnameinfo( (struct sockaddr*)&they, addr_size, buffer, sizeof( buffer ),
                            portstr, sizeof( portstr ), NI_NUMERICHOST | NI_NUMERICSERV );
-    if( !err )
+    if( err )
       return ConnIoError;
 
     ConnectionTCPClient* conn = new ConnectionTCPClient( m_logInstance, buffer,

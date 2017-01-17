@@ -9,7 +9,7 @@ MAKE_ROOT<fullscreenvideo_c>::~MAKE_ROOT()
 /*virtual*/ void fullscreenvideo_c::created()
 {
     set_theme_rect(CONSTASTR("fullscreen"), false);
-    __super::created();
+    super::created();
 
     gui->register_kbd_callback(DELEGATE(this, esc_handler), ts::SSK_ESC, 0);
 
@@ -53,7 +53,7 @@ fullscreenvideo_c::~fullscreenvideo_c()
     switch (qp)
     {
     case SQ_DRAW:
-        __super::sq_evt(qp, rid, data);
+        super::sq_evt(qp, rid, data);
         
         if (common.display)
         {
@@ -133,7 +133,7 @@ fullscreenvideo_c::~fullscreenvideo_c()
         return true;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 

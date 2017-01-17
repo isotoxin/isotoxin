@@ -1,5 +1,10 @@
 #include "stdafx.h"
+#ifdef _WIN32
 #include "curl/include/curl/curl.h"
+#endif
+#ifdef _NIX
+#include <curl/curl.h>
+#endif // _NIX
 
 using namespace ts;
 
@@ -55,7 +60,7 @@ int proc_grabnodes(const wstrings_c & pars)
     {
         pstr_c row = get_tag_inner( offset, rslt.cstr(), CONSTASTR("tr") );
         if (row.get_length() == 0) break;
-    
+
         int roffset = 0;
         pstr_c ipv4 = get_tag_inner( roffset, row, CONSTASTR("td") );
 
@@ -120,9 +125,9 @@ int proc_emoji(const wstrings_c & pars)
     r1.insert(0, CONSTASTR("U+"));
     r2.insert(0, CONSTASTR("U+"));
 
-    make_path(CONSTWSTR("emoji_apple"), 0);
-    make_path(CONSTWSTR("emoji_google"), 0);
-    make_path(CONSTWSTR("emoji_1"), 0);
+    make_path(ts::wstr_c(CONSTWSTR("emoji_apple")), 0);
+    make_path(ts::wstr_c(CONSTWSTR("emoji_google")), 0);
+    make_path(ts::wstr_c(CONSTWSTR("emoji_1")), 0);
 
     for (;;)
     {
@@ -142,7 +147,7 @@ int proc_emoji(const wstrings_c & pars)
         if (utf8 >= r1 && utf8 <= r2)
         {
             ts::str_c lnk = get_image_link( CONSTASTR("http://unicodey.com/emoji-data/"), google_link );
-            
+
             buf_c imgb;
             httpsclient.get(lnk, imgb);
             imgb.save_to_file( fn_join(wstr_c(CONSTWSTR("emoji_google")),CONSTWSTR("0x") + to_wstr(utf8.substr(2).as_sptr())).append(CONSTWSTR(".png")) );

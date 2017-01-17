@@ -18,14 +18,14 @@ dialog_addcontact_c::~dialog_addcontact_c()
 /*virtual*/ ts::wstr_c dialog_addcontact_c::get_name() const
 {
     if (!inparam.title.is_empty()) return inparam.title;
-    return __super::get_name();
+    return super::get_name();
 }
 
 
 /*virtual*/ void dialog_addcontact_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
     if (!networks_available)
         ctlenable(CONSTASTR("dialog_button_1"), false);
@@ -39,7 +39,7 @@ dialog_addcontact_c::~dialog_addcontact_c()
 
 void dialog_addcontact_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 }
 
 void dialog_addcontact_c::network_selected( const ts::str_c &prm )
@@ -51,6 +51,7 @@ void dialog_addcontact_c::network_selected( const ts::str_c &prm )
         set_edit_value( CONSTASTR("msg"), rtext() );
         ctldesc( CONSTASTR( "idfield" ), idname());
     }
+    update_auth_checkbox();
 }
 
 menu_c dialog_addcontact_c::networks()
@@ -59,10 +60,10 @@ menu_c dialog_addcontact_c::networks()
     menu_c nm;
     prf().iterate_aps([&](const active_protocol_c &ap)
     {
-        int mif = 0;
-        if (ap.get_current_state() != CR_OK)
+        int mif = 0, rin;
+        if (ap.get_current_state(rin) != CR_OK)
             mif |= MIF_DISABLED;
-        else 
+        else
         {
             if ( apid == 0 )
             {
@@ -153,7 +154,7 @@ ts::wstr_c dialog_addcontact_c::idname() const
 
     if (!resend)
     {
-        dm().checkb( L"", DELEGATE( this, authorization_handler ), send_authorization_request ? 1 : 0 ).setname(CONSTASTR("arq")).setmenu(
+        dm().checkb( ts::wsptr(), DELEGATE( this, authorization_handler ), send_authorization_request ? 1 : 0 ).setname(CONSTASTR("arq")).setmenu(
             menu_c().add( TTT("Send authorization request",456), 0, MENUHANDLER(), CONSTASTR("1") ) );
     }
 
@@ -161,7 +162,7 @@ ts::wstr_c dialog_addcontact_c::idname() const
         .setname(CONSTASTR("msg"))
         .focus(resend);
     dm().vspace(5);
-    dm().hiddenlabel(L"1", true).setname(CONSTASTR("err"));
+    dm().hiddenlabel(CONSTWSTR("1"), true).setname(CONSTASTR("err"));
 
     return 0;
 }
@@ -239,13 +240,23 @@ void dialog_addcontact_c::draw_resolve_process()
 }
 
 
-/*virtual*/ void dialog_addcontact_c::tabselected( ts::uint32 /*mask*/ )
+/*virtual*/ void dialog_addcontact_c::tabselected(ts::uint32 /*mask*/)
+{
+    update_auth_checkbox();
+}
+
+void dialog_addcontact_c::update_auth_checkbox()
 {
     bool allow_unauthorized_contact = false;
     if ( active_protocol_c *ap = prf().ap( apid ) )
         allow_unauthorized_contact = ( 0 != ( ap->get_features() & PF_UNAUTHORIZED_CONTACT ) );
 
-    ctlenable( CONSTASTR( "arq1" ), allow_unauthorized_contact );
+    if (!allow_unauthorized_contact)
+    {
+        send_authorization_request = true;
+        set_check_value(CONSTASTR("arq1"), true);
+    }
+    ctlenable(CONSTASTR("arq1"), allow_unauthorized_contact);
 }
 
 bool dialog_addcontact_c::authorization_handler( RID, GUIPARAM p )
@@ -271,12 +282,12 @@ bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid, bool )
 {
     if ( resolve_process && qp == SQ_DRAW && rid == getrid() )
     {
-        __super::sq_evt( qp, rid, data );
+        super::sq_evt( qp, rid, data );
         draw_resolve_process();
         return true;
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -295,13 +306,13 @@ bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid, bool )
     {
         bool resend = !inparam.pubid.is_empty();
         if (resend)
-            ap->resend_request(inparam.key.contactid, invitemessage);
+            ap->resend_request(inparam.key.gidcid(), invitemessage);
         else if (send_authorization_request)
             ap->add_contact(publicid, invitemessage);
         else
             ap->add_contact( publicid );
     } else
-        __super::on_confirm();
+        super::on_confirm();
 }
 
 bool dialog_addcontact_c::hidectl(RID,GUIPARAM p)
@@ -322,7 +333,7 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
         }
         if (r.rslt == CR_OK)
         {
-            __super::on_confirm();
+            super::on_confirm();
 
         } else
         {
@@ -357,7 +368,7 @@ dialog_addconference_c::~dialog_addconference_c()
     set_theme_rect(CONSTASTR("main"), false);
     networks();
     update_options();
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
     if (!networks_available)
         ctlenable( CONSTASTR("dialog_button_1"), false );
@@ -370,7 +381,7 @@ dialog_addconference_c::~dialog_addconference_c()
 
 void dialog_addconference_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 }
 
 void dialog_addconference_c::network_selected(const ts::str_c &prm)
@@ -386,8 +397,8 @@ menu_c dialog_addconference_c::networks()
     networks_available = false;
     menu_c nm;
     prf().iterate_aps([&](const active_protocol_c &ap) {
-        int mif = 0;
-        if (ap.get_current_state() != CR_OK)
+        int mif = 0, rin;
+        if (ap.get_current_state(rin) != CR_OK)
             mif |= MIF_DISABLED;
         int f = ap.get_features();
         if (0 != (f & PF_CONFERENCE))
@@ -484,7 +495,7 @@ bool dialog_addconference_c::confaname_handler(const ts::wstr_c &m, bool )
 
 /*virtual*/ bool dialog_addconference_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -530,6 +541,6 @@ void dialog_addconference_c::showerror(int id)
 
     if (active_protocol_c *ap = prf().ap(apid))
         ap->create_conference(confaname, co);
-    __super::on_confirm();
+    super::on_confirm();
 }
 

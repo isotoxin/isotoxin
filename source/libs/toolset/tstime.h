@@ -2,10 +2,49 @@
 
 namespace ts
 {
+
+    INLINE time_t now()
+    {
+        time_t t;
+#ifdef _WIN32
+        _time64( &t );
+#endif // _WIN32
+#ifdef _NIX
+        time(&t);
+#endif
+        return t;
+    }
+
+    struct localtime_s : public tm
+    {
+        localtime_s(time_t t) { init(t); }
+        localtime_s() { init(now()); }
+        localtime_s &operator=(const localtime_s& lt)
+        {
+            memcpy( this, &lt, sizeof(localtime_s) );
+            return *this;
+        }
+        void init(time_t t)
+        {
+#if defined _MSC_VER
+            _localtime64_s(this, &t);
+#elif defined __GNUC__
+            localtime_r(&t, this);
+#endif
+        }
+    };
+
+    template<typename STRTYPE> streamstr<STRTYPE>& streamstr<STRTYPE>::operator<<(const streamstr_time &tim)
+    {
+        begin();
+        localtime_s today(tim.t);
+        char_t *cur = prepare_fill(16); if (!cur) return *this;
+        strftime(cur, boof_current_size(), "[%Y-%m-%d %H:%M:%S]", &today); boof_update_len(cur);
+        return *this;
+    }
+
 class Time
 {
-    MOVABLE( true );
-
     uint32 value;
     static THREADLOCAL uint32 thread_current_time;
 
@@ -39,6 +78,8 @@ public:
     bool operator>=(const Time &t) const { return int(value - t.value) >= 0; }
 };
 
+namespace internals { template <> struct movable<Time> : public movable_customized_yes {}; }
+
 int generate_time_string( wchar *s, int capacity, const wstr_c& tmpl, const tm& t );
 
 class timer_subscriber_c
@@ -60,8 +101,6 @@ public:
 
 struct timer_subscriber_entry_s
 {
-    MOVABLE(false);
-
     double ttl;
     iweak_ptr<timer_subscriber_c> hook;
     void * param;
@@ -74,10 +113,10 @@ struct timer_subscriber_entry_s
     }
 };
 
+namespace internals { template<> struct movable<timer_subscriber_entry_s> : public movable_customized_no {}; }
+
 class timerprocessor_c
 {
-    MOVABLE( false );
-
     enum
     {
         GRANULA = 16
@@ -117,8 +156,9 @@ public:
             if (!r(e->hook.get(), e->ttl, e->param)) break;
         }
     }
-
 };
+
+namespace internals { template<> struct movable<timerprocessor_c> : public movable_customized_no {}; }
 
 class frame_time_c
 {

@@ -8,11 +8,11 @@
 namespace boost
 {
 
-    template <int n> struct choose_initial_n
+    template <ptrdiff_t n> struct choose_initial_n
     {
         enum
         {
-            c = (unsigned int(1) << n << n) != 0,
+            c = (static_cast<size_t>(1) << n << n) != 0,
             value = !c*n + choose_initial_n<2 * c*n>::value
         };
     };
@@ -25,10 +25,10 @@ namespace boost
     };
 
 
-    const int n_zero = 16;
-    const int initial_n = choose_initial_n<n_zero>::value;
+    const ptrdiff_t n_zero = 16;
+    const ptrdiff_t initial_n = choose_initial_n<n_zero>::value;
 
-    template <unsigned int x, int n = initial_n> struct static_log2_impl
+    template <size_t x, ptrdiff_t n = initial_n> struct static_log2_impl
     {
         enum 
         {
@@ -45,7 +45,7 @@ namespace boost
         };
     };
 
-    template <int x> struct static_log2
+    template <ptrdiff_t x> struct static_log2
     {
         enum
         {

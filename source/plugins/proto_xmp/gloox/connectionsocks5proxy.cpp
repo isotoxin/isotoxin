@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -175,31 +175,28 @@ namespace gloox
   void ConnectionSOCKS5Proxy::handleReceivedData( const ConnectionBase* /*connection*/,
                                                   const std::string& data )
   {
-//     if( m_s5state != S5StateConnected )
-//     {
-//       printf( "data recv: " );
-//       const char* x = data.c_str();
-//       for( unsigned int i = 0; i < data.length(); ++i )
-//         printf( "%02X ", (const char)x[i] );
-//       printf( "\n" );
-//     }
-
     if( !m_connection || !m_handler )
       return;
+
+    if( m_s5state != S5StateConnected )
+      m_proxyHandshakeBuffer += data;
 
     ConnectionError connError = ConnNoError;
 
     switch( m_s5state  )
     {
       case S5StateConnecting:
-        if( data.length() != 2 || data[0] != 0x05 )
+        if( m_proxyHandshakeBuffer.length() < 2 )
+          return;
+
+        if( m_proxyHandshakeBuffer.length() != 2 || m_proxyHandshakeBuffer[0] != 0x05 )
           connError = ConnIoError;
 
-        if( data[1] == 0x00 ) // no auth
+        if( m_proxyHandshakeBuffer[1] == 0x00 ) // no auth
         {
           negotiate();
         }
-        else if( data[1] == 0x02 && !m_proxyUser.empty() && !m_proxyPwd.empty() ) // user/password auth
+        else if( m_proxyHandshakeBuffer[1] == 0x02 && !m_proxyUser.empty() && !m_proxyPwd.empty() ) // user/password auth
         {
           m_logInstance.dbg( LogAreaClassConnectionSOCKS5Proxy,
                              "authenticating to socks5 proxy as user " + m_proxyUser );
@@ -223,16 +220,21 @@ namespace gloox
         }
         else
         {
-          if( data[1] == (char)(unsigned char)0xFF && !m_proxyUser.empty() && !m_proxyPwd.empty() )
+          if( m_proxyHandshakeBuffer[1] == (char)(unsigned char)0xFF && !m_proxyUser.empty() && !m_proxyPwd.empty() )
             connError = ConnProxyNoSupportedAuth;
           else
             connError = ConnProxyAuthRequired;
         }
+
+        m_proxyHandshakeBuffer = "";
         break;
       case S5StateNegotiating:
-        if( data.length() >= 6 && data[0] == 0x05 )
+        if( m_proxyHandshakeBuffer.length() < 6 )
+          return;
+
+        if( m_proxyHandshakeBuffer.length() >= 6 && m_proxyHandshakeBuffer[0] == 0x05 )
         {
-          if( data[1] == 0x00 )
+          if( m_proxyHandshakeBuffer[1] == 0x00 )
           {
             m_state = StateConnected;
             m_s5state = S5StateConnected;
@@ -243,12 +245,19 @@ namespace gloox
         }
         else
           connError = ConnIoError;
+
+        m_proxyHandshakeBuffer = "";
         break;
       case S5StateAuthenticating:
-        if( data.length() == 2 && data[0] == 0x01 && data[1] == 0x00 )
+        if( m_proxyHandshakeBuffer.length() < 2 )
+          return;
+
+        if( m_proxyHandshakeBuffer.length() == 2 && m_proxyHandshakeBuffer[0] == 0x01 && m_proxyHandshakeBuffer[1] == 0x00 )
           negotiate();
         else
           connError = ConnProxyAuthFailed;
+
+        m_proxyHandshakeBuffer = "";
         break;
       case S5StateConnected:
         m_handler->handleReceivedData( this, data );
@@ -312,7 +321,7 @@ namespace gloox
       pos += m_server.length();
     }
     int nport = htons( port );
-    d[pos++] = static_cast<char>( nport & 0xff );
+    d[pos++] = static_cast<char>( nport );
     d[pos++] = static_cast<char>( nport >> 8 );
 
     std::string message = "Requesting socks5 proxy connection to " + server + ":"

@@ -71,7 +71,7 @@ void gui_listitem_c::set_icon(const ts::bmpcore_exbody_s &eb)
 
 /*virtual*/ ts::ivec2 gui_listitem_c::get_max_size() const
 {
-    ts::ivec2 m = __super::get_max_size();
+    ts::ivec2 m = super::get_max_size();
     m.y = get_min_size().y;
     return m;
 }
@@ -82,7 +82,7 @@ void gui_listitem_c::created()
     set_updaterect( lst.get_updaterect() );
 
     defaultthrdraw = DTHRO_BASE;
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ int gui_listitem_c::get_height_by_width(int width) const
@@ -103,7 +103,7 @@ void gui_listitem_c::created()
 
 void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
 {
-    __super::set_text(t, full_height_last_line);
+    super::set_text(t, full_height_last_line);
     int h = get_height_by_width(-INT_MAX);
 
     if (h != height)
@@ -130,7 +130,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
             {
             case SQ_MOUSE_WHEELUP:
             case SQ_MOUSE_WHEELDOWN:
-                return __super::sq_evt(qp, rid, data);;
+                return super::sq_evt(qp, rid, data);;
             case SQ_MOUSE_IN:
                 MODIFY(getrid()).highlight(true);
                 break;
@@ -180,7 +180,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         break;
     case SQ_DRAW:
         if (rid != getrid()) return false;
-        __super::sq_evt(qp, rid, data);
+        super::sq_evt(qp, rid, data);
         if (icon.info().sz.x > 0)
         {
             ts::irect cla = get_client_area();
@@ -190,7 +190,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         }
         return true;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 ts::uint32 gui_listitem_c::gm_handler(gmsg<GM_POPUPMENU_DIED> &p)
@@ -526,8 +526,8 @@ gui_dialog_c::~gui_dialog_c()
 
 void gui_dialog_c::update_header()
 {
-    header_prepend = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_prepend"), CONSTASTR("")));
-    header_append = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_append"), CONSTASTR("")));
+    header_prepend = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_prepend"), ts::str_c()));
+    header_append = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_append"), ts::str_c()));
 }
 
 ts::str_c gui_dialog_c::find( RID crid ) const
@@ -921,8 +921,8 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         break;
 
     }
-    
-    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(), deftext, chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
+
+    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(), ts::wstr_c(deftext), chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
     creator << selector << checker;
     gui_textfield_c &tf = creator;
     creator << ((RID)creator).to_param();
@@ -989,6 +989,7 @@ template<> struct MAKE_CHILD<gui_simple_dialog_list_c> : public _PCHILD(gui_simp
 
 class gui_simple_dialog_list_c : public gui_vscrollgroup_c
 {
+    typedef gui_vscrollgroup_c super;
     DUMMY(gui_simple_dialog_list_c);
     int height;
     ts::wstr_c emptymessage;
@@ -1030,7 +1031,7 @@ public:
     {
         set_theme_rect(CONSTASTR("simplelst"), false);
         defaultthrdraw = DTHRO_CENTER | DTHRO_BORDER;
-        __super::created();
+        super::created();
 
     }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
@@ -1052,7 +1053,7 @@ public:
             if (rid != getrid()) return false;
             if ( getengine().children_count() == 0 && !emptymessage.is_empty() )
             {
-                __super::sq_evt(qp, rid, data);
+                super::sq_evt(qp, rid, data);
 
                 draw_data_s &dd = getengine().begin_draw();
                 ts::irect cla = get_client_area();
@@ -1077,7 +1078,7 @@ public:
             break;
         }
 
-        return __super::sq_evt(qp, rid, data);
+        return super::sq_evt(qp, rid, data);
     }
 };
 MAKE_CHILD<gui_simple_dialog_list_c>::~MAKE_CHILD()
@@ -1300,11 +1301,11 @@ void gui_dialog_c::reset(bool keep_skip)
     getengine().cleanup_children_now();
 
     if (keep_skip) return;
-        
+
     skipctls = numtopbuttons;
 
     guirect_c *prevb = nullptr;
-    
+
     int bottom_area_height = 0;
     for (int tag = 0;; ++tag)
     {
@@ -1335,21 +1336,20 @@ void gui_dialog_c::reset(bool keep_skip)
 
 namespace
 {
-    struct checkset
+    struct checkset : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         GUIPARAMHANDLER handler;
         int tag;
     };
 }
 
-void gui_dialog_c::tabsel(const ts::str_c& par)
+void gui_dialog_c::tabsel(const ts::asptr& par)
 {
     reset(true);
 
     ts::tmp_array_inplace_t<checkset,2> chset;
 
-    tabselmask = par.as_uint();
+    tabselmask = ts::pstr_c(par).as_uint();
     RID lasthgroup, focusctl;
     for(description_s &d : descs)
     {
@@ -1610,9 +1610,8 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 
     reset();
     update_header();
-    
 
-    return __super::created();
+    return gui_vscrollgroup_c::created();
 }
 /*virtual*/ bool gui_dialog_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -1622,7 +1621,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
         return true;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return gui_vscrollgroup_c::sq_evt(qp, rid, data);
 }
 
 /*virtual*/ void gui_dialog_c::children_repos_info(cri_s &info) const

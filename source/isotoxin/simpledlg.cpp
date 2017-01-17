@@ -8,13 +8,25 @@ dialog_msgbox_params_s dialog_msgbox_c::mb_info(const ts::wstr_c &text)
 {
     return dialog_msgbox_params_s(title_information, text);
 }
+dialog_msgbox_params_s dialog_msgbox_c::mb_info(const ts::wsptr &text)
+{
+    return dialog_msgbox_params_s(title_information, ts::wstr_c(text));
+}
 dialog_msgbox_params_s dialog_msgbox_c::mb_warning(const ts::wstr_c &text)
 {
     return dialog_msgbox_params_s(title_warning, text);
 }
+dialog_msgbox_params_s dialog_msgbox_c::mb_warning(const ts::wsptr &text)
+{
+    return dialog_msgbox_params_s(title_warning, ts::wstr_c(text));
+}
 dialog_msgbox_params_s dialog_msgbox_c::mb_error(const ts::wstr_c &text)
 {
     return dialog_msgbox_params_s(title_error, text);
+}
+dialog_msgbox_params_s dialog_msgbox_c::mb_error(const ts::wsptr &text)
+{
+    return dialog_msgbox_params_s(title_error, ts::wstr_c(text));
 }
 dialog_msgbox_params_s dialog_msgbox_c::mb_qrcode(const ts::wstr_c &text)
 {
@@ -47,7 +59,7 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
     {
         bcreate_s &bcr = m_buttons.add();
         bcr.tag = 0;
-        __super::getbutton(bcr);
+        super::getbutton(bcr);
         bcr.tag = m_buttons.size()-1;
         if (!m_params.cancel_button_text.is_empty())
             bcr.btext = m_params.cancel_button_text;
@@ -56,7 +68,7 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
     {
         bcreate_s &bcr = m_buttons.add();
         bcr.tag = 1;
-        __super::getbutton(bcr);
+        super::getbutton(bcr);
         bcr.tag = m_buttons.size() - 1;
         if (!m_params.ok_button_text.is_empty())
             bcr.btext = m_params.ok_button_text;
@@ -65,7 +77,7 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
     {
         bcreate_s &bcr = m_buttons.add();
         bcr.tag = 2;
-        __super::getbutton( bcr );
+        super::getbutton( bcr );
         bcr.tag = m_buttons.size() - 1;
         if ( !m_params.custom_button_text.is_empty() )
             bcr.btext = m_params.custom_button_text;
@@ -127,7 +139,7 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
         gui->exclusive_input(getrid());
 
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 
     switch (m_params.etitle) //-V719
@@ -258,7 +270,7 @@ bool dialog_msgbox_c::checkboxes1( RID b, GUIPARAM v )
         }
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     return false;
 }
@@ -272,19 +284,19 @@ bool dialog_msgbox_c::checkboxes1( RID b, GUIPARAM v )
         else
             m_params.on_ok_h( m_params.on_ok_par );
     }
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 /*virtual*/ void dialog_msgbox_c::on_close()
 {
     if (m_params.on_cancel_h) m_params.on_cancel_h(m_params.on_cancel_par);
-    __super::on_close();
+    super::on_close();
 }
 
 bool dialog_msgbox_c::on_custom( RID, GUIPARAM )
 {
     m_params.on_custom_h( m_params.on_custom_par );
-    __super::on_close();
+    super::on_close();
     return true;
 }
 
@@ -299,7 +311,7 @@ dialog_pb_c::dialog_pb_c(MAKE_ROOT<dialog_pb_c> &data) :gui_isodialog_c(data), m
     {
         bcreate_s &bcr = m_buttons.add();
         bcr.tag = 0;
-        __super::getbutton(bcr);
+        super::getbutton(bcr);
         bcr.tag = m_buttons.size() - 1;
         if (!m_params.cancel_button_text.is_empty())
             bcr.btext = m_params.cancel_button_text;
@@ -308,7 +320,7 @@ dialog_pb_c::dialog_pb_c(MAKE_ROOT<dialog_pb_c> &data) :gui_isodialog_c(data), m
     {
         bcreate_s &bcr = m_buttons.add();
         bcr.tag = 1;
-        __super::getbutton(bcr);
+        super::getbutton(bcr);
         bcr.tag = m_buttons.size() - 1;
         if (!m_params.ok_button_text.is_empty())
             bcr.btext = m_params.ok_button_text;
@@ -325,7 +337,7 @@ dialog_pb_c::~dialog_pb_c()
 {
     gui->exclusive_input(getrid());
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 }
 
@@ -372,7 +384,7 @@ void dialog_pb_c::set_level( float v, const ts::wstr_c &txt )
     {
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     return false;
 }
@@ -380,13 +392,13 @@ void dialog_pb_c::set_level( float v, const ts::wstr_c &txt )
 /*virtual*/ void dialog_pb_c::on_confirm()
 {
     if (m_params.on_ok_h) m_params.on_ok_h(m_params.on_ok_par);
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 /*virtual*/ void dialog_pb_c::on_close()
 {
     if (m_params.on_cancel_h) m_params.on_cancel_h(m_params.on_cancel_par);
-    __super::on_close();
+    super::on_close();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -408,13 +420,13 @@ dialog_entertext_c::~dialog_entertext_c()
 {
     gui->exclusive_input(getrid());
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 }
 
 void dialog_entertext_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 }
 
 bool dialog_entertext_c::watchdog(RID, GUIPARAM p)
@@ -425,7 +437,7 @@ bool dialog_entertext_c::watchdog(RID, GUIPARAM p)
 
 ts::uint32 dialog_entertext_c::gm_handler(gmsg<ISOGM_APPRISE> &)
 {
-    if (g_app->F_MODAL_ENTER_PASSWORD)
+    if (g_app->F_MODAL_ENTER_PASSWORD())
     {
         if (getroot()) getroot()->set_system_focus(true);
     }
@@ -483,7 +495,7 @@ bool dialog_entertext_c::on_esc_press_func(RID, GUIPARAM)
     if (RID pb = find(CONSTASTR("txt")))
     {
         gui_textfield_c &tf = HOLD(pb).as<gui_textfield_c>();
-        
+
         tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_ENTER, false );
         tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_PADENTER, false );
         tf.register_kbd_callback( DELEGATE( this, on_esc_press_func ), ts::SSK_ESC, false );
@@ -494,7 +506,7 @@ bool dialog_entertext_c::on_esc_press_func(RID, GUIPARAM)
 
 /*virtual*/ bool dialog_entertext_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -518,7 +530,7 @@ bool dialog_entertext_c::on_esc_press_func(RID, GUIPARAM)
             return;
         }
     }
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 /*virtual*/ void dialog_entertext_c::on_close()
@@ -532,7 +544,7 @@ bool dialog_entertext_c::on_esc_press_func(RID, GUIPARAM)
             return;
         }
     }
-    __super::on_close();
+    super::on_close();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -557,7 +569,7 @@ dialog_about_c::~dialog_about_c()
 {
     gui->exclusive_input(getrid());
     set_theme_rect(CONSTASTR("about"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 }
 
@@ -566,7 +578,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     if (bcr.tag == 0)
     {
         bcr.tag = 1;
-        __super::getbutton(bcr);
+        super::getbutton(bcr);
     }
 }
 
@@ -579,11 +591,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
 
     ts::wstr_c title(256,true);
     title.set( CONSTWSTR("<p=c><b>") );
-#if _MSC_VER <= 1800
-	title.append(ts::wsptr(L"<a href=\"" JOINMACRO1( L, HOME_SITE ) L"\">Isotoxin</a>"));
-#else
 	title.append( CONSTWSTR("<a href=\"" HOME_SITE "\">Isotoxin</a>") );
-#endif
     title.append( CONSTWSTR("</b> ") );
     title.appendcvt( application_c::appver() );
 #ifdef MODE64
@@ -593,7 +601,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
 #endif
     title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/isotoxin\">Rotkaermota</a>") );
     title.append( CONSTWSTR( "<br>Swedish translation by \x00c5ke Engelbrektson" ) );
-    
+
     title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/isotoxin/isotoxin/blob/master/LICENSE\">GPL3</a>") );
     title.append( CONSTWSTR("<br>See version history <a href=\"https://github.com/isotoxin/isotoxin/releases\">here</a>") );
 
@@ -637,11 +645,11 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
     title.append( CONSTWSTR(" <a href=\"http://opensans.com\">Open Sans fonts</a>") );
-    title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
+    title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>\x00a9<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
     title.append( CONSTWSTR(" <a href=\"https://github.com/titoBouzout/Dictionaries\">Hunspell utf8 dictionaries</a>"));
 
-    
-    
+
+
     dm().label( title );
 
     return 0;
@@ -656,7 +664,7 @@ void dialog_about_c::updrect_about(const void *rr, int r, const ts::ivec2 &p)
 
     } else
         updrect_def(rr,r,p);
-    
+
 }
 
 bool dialog_about_c::updanim(RID, GUIPARAM)
@@ -666,7 +674,7 @@ bool dialog_about_c::updanim(RID, GUIPARAM)
         pa.render();
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, updanim), nullptr);
     }
-    
+
     if (RID upd = find(CONSTASTR("upd")))
         HOLD(upd).engine().redraw();
     return true;
@@ -740,7 +748,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
     MEMT( MEMT_GUI_COMMON );
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     return false;
 }
@@ -798,7 +806,7 @@ incoming_call_panel_c::~incoming_call_panel_c()
 /*virtual*/ void incoming_call_panel_c::created()
 {
     set_theme_rect( CONSTASTR("icp"), false );
-    __super::created();
+    super::created();
 
     gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
     b_accept.set_face_getter(BUTTON_FACE(p_accept_call));
@@ -846,7 +854,7 @@ incoming_call_panel_c::~incoming_call_panel_c()
 {
     if (qp == SQ_DRAW && rid == getrid())
     {
-        __super::sq_evt(qp, rid, data);
+        super::sq_evt(qp, rid, data);
 
         draw_data_s &dd = getengine().begin_draw();
 
@@ -869,7 +877,7 @@ incoming_call_panel_c::~incoming_call_panel_c()
         return true;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 bool incoming_call_panel_c::b_accept_call_video(RID, GUIPARAM)
@@ -958,7 +966,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
 /*virtual*/ void incoming_msg_panel_c::created()
 {
     set_theme_rect( CONSTASTR( "imp" ), false );
-    __super::created();
+    super::created();
 
 
     DEFERRED_UNIQUE_CALL( prf().dmn_duration(), DELEGATE( this, endoflife ), 0 );
@@ -966,7 +974,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
 
     avarect = g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz + ts::ivec2(10);
 
-    msgitm = MAKE_CHILD<gui_message_item_c>( getrid(), hist, sender, CONSTASTR( "other" ), MTA_MESSAGE, true );
+    msgitm = MAKE_CHILD<gui_message_item_c>( getrid(), hist, sender, ts::str_c(CONSTASTR( "other" )), MTA_MESSAGE, true );
     msgitm->setup_text( post );
     ts::aint h = msgitm->calc_height_by_width( sz.x - avarect.x );
 
@@ -1014,7 +1022,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
 {
     if ( qp == SQ_DRAW && rid == getrid() )
     {
-        __super::sq_evt( qp, rid, data );
+        super::sq_evt( qp, rid, data );
 
         m_engine->begin_draw();
         ts::ivec2 addp = get_client_area().lt;
@@ -1062,7 +1070,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
         return true;
     }
 
-    return __super::sq_evt( qp, rid, data );
+    return super::sq_evt( qp, rid, data );
 }
 
 bool incoming_msg_panel_c::tick( RID, GUIPARAM )

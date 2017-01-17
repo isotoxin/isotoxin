@@ -90,7 +90,7 @@ class packetgen
         push(&vv, sizeof(vv), correct_size);
     }
 
-    void push( int clamp_chars, const asptr&s )
+    void push( int clamp_chars, const std::asptr&s )
     {
         aint l = s.l;
         if (l > clamp_chars) l = clamp_chars;
@@ -167,8 +167,8 @@ public:
 
     void pg_meet(const byte *other_public_key, const byte *temporary_key);
 
-    void pg_invite(const asptr &inviter_name, const asptr& invite_message, const byte *crypt_packet_key);
-    void pg_accept(const asptr&name, const byte *auth_key, const byte *crypt_packet_key);
+    void pg_invite(const std::asptr &inviter_name, const std::asptr& invite_message, const byte *crypt_packet_key);
+    void pg_accept(const std::asptr&name, const byte *auth_key, const byte *crypt_packet_key);
     void pg_ready(const byte *raw_public_id, const byte *crypt_packet_key);
     void pg_reject(); // no crypt
     

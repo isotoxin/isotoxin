@@ -1,5 +1,9 @@
 #include "rectangles.h"
 
+#ifdef _NIX
+#define _alloca alloca
+#endif // _NIX
+
 INLINE bool insidelt(int v, int a, int asz)
 {
     return v >= a && v < (a + asz);
@@ -15,7 +19,7 @@ rectengine_c::rectengine_c()
 {
 
 }
-rectengine_c::~rectengine_c() 
+rectengine_c::~rectengine_c()
 {
     ts::aint cnt = children.size();
     for(int i=0;i<cnt;++i)
@@ -146,17 +150,23 @@ ts::uint32 rectengine_c::detect_area(const ts::ivec2 &p)
         {
             if (rps.allow_resize())
             {
-                if (insidelt(p.x, clr.lt.x, themerect->resizearea))
-                    d.detectarea.area |= AREA_LEFT;
+                if (!rps.is_fs_dock_h())
+                {
+                    if (insidelt(p.x, clr.lt.x, themerect->resizearea))
+                        d.detectarea.area |= AREA_LEFT;
 
-                if (insiderb(p.x, clr.rb.x, themerect->resizearea))
-                    d.detectarea.area |= AREA_RITE;
+                    if (insiderb(p.x, clr.rb.x, themerect->resizearea))
+                        d.detectarea.area |= AREA_RITE;
+                }
 
-                if (insidelt(p.y, clr.lt.y, themerect->resizearea))
-                    d.detectarea.area |= AREA_TOP;
+                if (!rps.is_fs_dock_v())
+                {
+                    if (insidelt(p.y, clr.lt.y, themerect->resizearea))
+                        d.detectarea.area |= AREA_TOP;
 
-                if (insiderb(p.y, clr.rb.y, themerect->resizearea))
-                    d.detectarea.area |= AREA_BOTTOM;
+                    if (insiderb(p.y, clr.rb.y, themerect->resizearea))
+                        d.detectarea.area |= AREA_BOTTOM;
+                }
             }
 
             if (!d.detectarea.area)
@@ -242,7 +252,7 @@ rectengine_c *rectengine_c::get_last_child()
 
         return true;
 	case SQ_MOUSE_MOVE:
-		if (const mousetrack_data_s *mtd = gui->mtrack( getrid(), MTT_RESIZE | MTT_MOVE ))
+		if (mousetrack_data_s *mtd = gui->mtrack( getrid(), MTT_RESIZE | MTT_MOVE ))
 		{
             manual_move_resize( true );
 
@@ -250,6 +260,7 @@ rectengine_c *rectengine_c::get_last_child()
 			d.rectchg.rect = mtd->rect;
 			d.rectchg.area = mtd->area;
             d.rectchg.apply = true;
+            d.rectchg.undock = false;
 
 			ts::ivec2 delta = data.mouse.screenpos.get() - mtd->mpos;
 
@@ -267,9 +278,64 @@ rectengine_c *rectengine_c::get_last_child()
             {
                 d.rectchg.rect.get() += delta;
             }
-			sq_evt(SQ_RECT_CHANGING, getrid(), d);
+
+            ts::irect cr = getrect().getprops().screenrect();
+
+            if (getrect().getprops().is_maximized())
+            {
+                if (delta.sqlen() > 225)
+                {
+                    cr = getrect().getprops().screenrect(false); // get normal rect
+                    MODIFY(getrect()).dock(false, false);
+                    d.rectchg.undock = true;
+                }
+
+            } else
+            {
+                sq_evt(SQ_RECT_CHANGING, getrid(), d);
+
+                if (getrect().getprops().is_fs_dock_v() && ts::tabs(delta.y) > 15)
+                {
+                    cr = getrect().getprops().screenrect(false); // get normal rect
+                    MODIFY(getrect()).dock(false, false);
+                    d.rectchg.undock = true;
+                }
+            }
+
+            if (d.rectchg.undock)
+            {
+                mtd->mpos = data.mouse.screenpos.get();
+                ts::ivec2 lt;
+                if (mtd->relclick.x <= cr.width() / 2)
+                {
+                    // rel to lt
+                    lt = mtd->mpos - mtd->relclick.xy();
+                }
+                else if (-mtd->relclick.z <= cr.width() / 2)
+                {
+                    ts::ivec2 rt = mtd->mpos - ts::ivec2( mtd->relclick.z, mtd->relclick.y );
+                    lt = rt;
+                    lt.x -= cr.width();
+                } else
+                {
+                    lt.x = mtd->mpos.x - cr.width()/2;
+                    lt.y = mtd->mpos.y - mtd->relclick.y;
+                }
+               
+
+                mtd->rect.lt = lt;
+                mtd->rect.rb = lt + cr.size();
+            }
 
             manual_move_resize( false );
+
+            if (MTT_MOVE == mtd->mtt || MTT_RESIZE == mtd->mtt)
+            {
+                if (guirect_c *r = rect())
+                    if (rectengine_root_c *rt = r->getroot())
+                        if (rt->is_taskbar())
+                            gui->do_addition_rect_control(rt, mtd->mtt);
+            }
 
 		} else if (gui->mtrack(getrid(), MTT_ANY))
             if (guirect_c *r = rect())
@@ -279,9 +345,9 @@ rectengine_c *rectengine_c::get_last_child()
 	case SQ_MOUSE_LDOWN:
 		{
             const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
-			if (hd.rid == getrid() && !getrect().getprops().is_maximized())
+			if (hd.rid == getrid())
             {
-                if (0 != (hd.area & AREA_RESIZE) && 0 == (hd.area & AREA_NORESIZE))
+                if (0 != (hd.area & AREA_RESIZE) && 0 == (hd.area & AREA_NORESIZE) && !getrect().getprops().is_maximized())
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_RESIZE_START, getrid(), ts::make_dummy<evt_data_s>(true));
@@ -289,7 +355,9 @@ rectengine_c *rectengine_c::get_last_child()
 				    oo.area = hd.area;
 				    oo.rect = getrect().getprops().rect();
 				    oo.mpos = data.mouse.screenpos;
-				    return true;
+                    oo.relclick.xy() = oo.mpos - getrect().getprops().screenpos();
+                    oo.relclick.z = oo.mpos.x - getrect().getprops().screenrect().rb.x;
+                    return true;
 			    }
 			    if (0 != (hd.area & AREA_MOVE) && 0 == (hd.area & AREA_NOMOVE))
 			    {
@@ -299,6 +367,8 @@ rectengine_c *rectengine_c::get_last_child()
 				    oo.area = hd.area;
 				    oo.rect = getrect().getprops().rect();
 				    oo.mpos = data.mouse.screenpos;
+                    oo.relclick.xy() = oo.mpos - getrect().getprops().screenpos();
+                    oo.relclick.z = oo.mpos.x - getrect().getprops().screenrect().rb.x;
 				    return true;
 			    }
             }
@@ -308,10 +378,23 @@ rectengine_c *rectengine_c::get_last_child()
 		if (gui->end_mousetrack( getrid(), MTT_RESIZE ))
 		{
 			sq_evt(SQ_RESIZE_END, getrid(), ts::make_dummy<evt_data_s>(true));
+
+            if (guirect_c *r = rect())
+                if (rectengine_root_c *rt = r->getroot())
+                    if (rt->is_taskbar())
+                        gui->do_addition_rect_control(rt, MTT_RESIZE_OFF);
+
+
 			return true;
 		} else if (gui->end_mousetrack( getrid(), MTT_MOVE ))
 		{
 			sq_evt(SQ_MOVE_END, getrid(), ts::make_dummy<evt_data_s>(true));
+
+            if (guirect_c *r = rect())
+                if (rectengine_root_c *rt = r->getroot())
+                    if (rt->is_taskbar())
+                        gui->do_addition_rect_control(rt, MTT_MOVE_OFF);
+
 			return true;
 		}
 		return false;
@@ -351,7 +434,7 @@ rectengine_c *rectengine_c::get_last_child()
 
             return handled;
         }
-        
+
         return false;
     }
 
@@ -401,7 +484,7 @@ void rectengine_c::draw_textrect( ts::text_rect_c & tr, const ts::ivec2 &clampsi
         bd[ ts::SPB_LEFT ].r.rb.x = bd[ ts::SPB_LEFT ].r.lt.x + thr->maxcutborder.lt.x;
         bd[ ts::SPB_LEFT ].e.rb.x = bd[ ts::SPB_LEFT ].e.lt.x + thr->maxcutborder.lt.x;
         bd[ ts::SPB_LEFT ].e.rb.y -= thr->maxcutborder.rb.y;
-        
+
         // SPB_TOP:
         bd[ ts::SPB_TOP ].img = thr->src;
         bd[ ts::SPB_TOP ].s = thr->sis[ SI_LEFT_TOP ];
@@ -417,7 +500,7 @@ void rectengine_c::draw_textrect( ts::text_rect_c & tr, const ts::ivec2 &clampsi
         bd[ ts::SPB_RIGHT ].s = thr->sis[ SI_RIGHT_TOP ];
         bd[ ts::SPB_RIGHT ].r = thr->sis[ SI_RIGHT ];
         bd[ ts::SPB_RIGHT ].e = thr->sis[ SI_RIGHT_BOTTOM ];
-        
+
         bd[ ts::SPB_RIGHT ].r.lt.x = bd[ ts::SPB_RIGHT ].r.rb.x - thr->maxcutborder.rb.x;
         bd[ ts::SPB_RIGHT ].s.lt.x = bd[ ts::SPB_RIGHT ].s.rb.x - thr->maxcutborder.rb.x;
         bd[ ts::SPB_RIGHT ].s.lt.y += thr->maxcutborder.lt.y;
@@ -524,7 +607,7 @@ system_query_e me2sq( ts::mouse_event_e me )
         } else if ( ts::D_MAX == d )
         {
             if ( !r->inmod() )
-                MODIFY( *r ).maximize( scr );
+                MODIFY( *r ).dock( scr, true, true );
 
             drawcollector dch( owner() );
             owner()->redraw();
@@ -643,7 +726,7 @@ rectengine_root_c::rectengine_root_c( rect_sys_e sys)
 
 }
 
-rectengine_root_c::~rectengine_root_c() 
+rectengine_root_c::~rectengine_root_c()
 {
     flags.set( F_DIP );
     //if (gui) gui->delete_event( DELEGATE(this, refresh_frame) );
@@ -688,7 +771,7 @@ rectengine_root_c::~rectengine_root_c()
             shp.d = ts::D_MICRO;
 
         if ( pss.is_maximized() && shp.d == ts::D_NORMAL )
-            shp.d = ts::D_MAX;
+            shp.d = ts::D_MAX, shp.maxrect = pss.fsrect();
 
         shp.opacity = pss.opacity();
 
@@ -800,15 +883,15 @@ rectengine_root_c::~rectengine_root_c()
 
         shp.d = ts::D_NORMAL;
 
-        if ( pss.is_maximized() )
-            shp.d = ts::D_MAX;
+        if (pss.is_maximized())
+            shp.d = ts::D_MAX, shp.maxrect = pss.fsrect();
         if ( pss.is_minimized() )
             shp.d = ts::D_MIN;
         if ( pss.is_micromized() )
             shp.d = ts::D_MICRO;
 
         shp.layered = pss.is_alphablend();
-        shp.rect = pss.screenrect(false);
+        shp.rect = pss.screenrect(pss.is_docked() && !pss.is_maximized());
         shp.visible = true;
         shp.opacity = pss.opacity();
         ts::disposition_e odp = syswnd.wnd->disposition();
@@ -1095,7 +1178,7 @@ void rectengine_root_c::redraw_now()
                     lt_crop = *lt; lt_crop.setheight( t->height() );
                     rdraw.rbeg = &lt_crop; //-V506
                     rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
-                } else 
+                } else
                 {
                     lt_drawn = drawn_e::full;
                     rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
@@ -1339,7 +1422,7 @@ void rectengine_root_c::redraw_now()
     tr.set_text_only(text, true);
     tr.set_size( dd.size );
     tr.set_font( tdp.font );
-    tr.set_options(tdp.textoptions ? *tdp.textoptions : 0);
+    tr.set_options(tdp.textoptions ? *tdp.textoptions : ts::flags32_s() );
     tr.set_def_color(tdp.forecolor ? *tdp.forecolor : ts::ARGB(0,0,0));
 
     if ( tdp.rectupdate )
@@ -1358,7 +1441,7 @@ void rectengine_root_c::redraw_now()
 #ifdef _DEBUG
     if (tdp.textoptions && tdp.textoptions->is(ts::TO_SAVETOFILE))
     {
-        tr.make_bitmap().save_as_png(L"text.png");
+        tr.make_bitmap().save_as_png(CONSTWSTR("text.png"));
     }
 #endif // _DEBUG
 
@@ -1451,10 +1534,31 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 if (c) c->sq_evt(SQ_PARENT_RECT_CHANGING, c->getrid(), data2);
 
             fixrect(data2.rectchg.rect, minsz, maxsz, data.rectchg.area);
-			
+
             if (data.rectchg.apply)
-			    MODIFY(getrect()).size(data2.rectchg.rect.get().size()).pos(data2.rectchg.rect.get().lt);
-            
+            {
+                MODIFY(getrect()).size(data2.rectchg.rect.get().size()).pos(data2.rectchg.rect.get().lt);
+
+                if (getrect().getprops().is_docked())
+                {
+                    for (int i = 0, mc = ts::monitor_count(); i < mc; ++i)
+                    {
+                        ts::irect fsr = ts::monitor_get_max_size(i);
+                        ts::irect scr = getrect().getprops().screenrect();
+                        if (fsr.intersected(scr) && scr.combine(fsr).area() > fsr.area())
+                        {
+                            data.rectchg.undock = true;
+                            break;
+                        }
+                    }
+
+                    if (data.rectchg.undock)
+                    {
+                        MODIFY(getrect()).dock(false, false);
+                    }
+                }
+            }
+
             data.rectchg.rect = data2.rectchg.rect;
 		}
 		break;
@@ -1516,7 +1620,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 //DMSG("capture" << hwnd);
             }
 
-            bool noresize_nomove = false;
+            bool noresize = false;
             if (hd.rid == rid)
             {
                 if (guirect_c *r = rect())
@@ -1524,7 +1628,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     r->sq_evt(SQ_MOUSE_MOVE, rid, data);
                     if (r->getprops().is_maximized())
                     {
-                        noresize_nomove = true;
+                        noresize = true;
                         ts::master().set_cursor(ts::CURSOR_ARROW);
                     }
                 }
@@ -1552,18 +1656,17 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     };
                     if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < ARRAY_SIZE(cursors))
                     {
-                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
+                        if (noresize && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
                         return cursors[hd.area & AREA_RESIZE];
                     }
                     if (hd.area & (AREA_MOVE))
                     {
-                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
                         return ts::CURSOR_SIZEALL;
                     }
                     if (hd.area & AREA_EDITTEXT) return ts::CURSOR_IBEAM;
                     if (hd.area & AREA_HAND) return ts::CURSOR_HAND;
                     if ( hd.area & AREA_CROSS ) return ts::CURSOR_CROSS;
-                    
+
 
                     return ts::CURSOR_ARROW;
                 };
@@ -1589,7 +1692,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
     case SQ_MOUSE_WHEELDOWN:
     case SQ_MOUSE_L2CLICK:
 
-        if (__super::sq_evt(qp, rid, data)) return true;
+        if (super::sq_evt(qp, rid, data)) return true;
         {
             const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
             ts::safe_ptr<rectengine_root_c> me(this);
@@ -1606,10 +1709,10 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     {
                         if ( 0 != (r->caption_buttons() & SETBIT(CBT_MAXIMIZE)) )
                         {
-                            if (r->getprops().is_maximized())
-                                MODIFY(*r).maximize(false);
+                            if (r->getprops().is_docked())
+                                MODIFY(*r).dock(false, false);
                             else if (!r->getprops().is_collapsed())
-                                MODIFY(*r).maximize(true);
+                                MODIFY(*r).dock(true, true);
                         }
                     }
                 }
@@ -1640,8 +1743,10 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             r->sq_evt(qp, r->getrid(), data);
 
             prepare_children_z_sorted();
-            for( rectengine_c *c : children_z_sorted )
-                if (c) c->sq_evt(qp, c->getrid(), data);
+
+            for (ts::aint i = children_z_sorted.size() - 1; i >= 0; --i)
+                if (rectengine_c *c = children_z_sorted.get(i))
+                    c->sq_evt(qp, c->getrid(), data);
 
             end_draw();
             return true;
@@ -1651,7 +1756,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
         gui->resort_roots();
         break;
 	}
-	return __super::sq_evt(qp, rid, data);
+	return super::sq_evt(qp, rid, data);
 }
 
 void rectengine_root_c::set_system_focus(bool bring_to_front)
@@ -1698,7 +1803,7 @@ void rectengine_root_c::make_hole( const ts::irect &holerect )
 void rectengine_root_c::tab_focus( RID r, bool fwd )
 {
     decltype( afocus ) sfocus( afocus );
-    
+
     for ( ts::aint i = sfocus.size() - 1; i >= 0; --i )
         if ( sfocus.get( i ).expired() )
             sfocus.remove_fast(i);
@@ -1838,12 +1943,12 @@ rectengine_child_c::rectengine_child_c(guirect_c *parent, RID after):parent(pare
     parent->getengine().add_child(this, after);
     drawntag = parent->getroot()->current_drawtag() - 1;
 }
-rectengine_child_c::~rectengine_child_c() 
+rectengine_child_c::~rectengine_child_c()
 {
 
 }
 
-/*virtual*/ draw_data_s & rectengine_child_c::begin_draw() 
+/*virtual*/ draw_data_s & rectengine_child_c::begin_draw()
 {
     draw_data_s &d = getrect().getroot()->begin_draw();
     d.engine = this;
@@ -1867,14 +1972,16 @@ rectengine_child_c::~rectengine_child_c()
             draw_data_s  &dd = begin_draw();
             dd.offset = r->local_to_root( ts::ivec2(0) );
             dd.size = r->getprops().size();
-            
+
             if (dd.cliprect.intersected(ts::irect(dd.offset,dd.offset+dd.size)))
             {
                 r->sq_evt(qp, r->getrid(), data);
 
                 prepare_children_z_sorted();
-                for (rectengine_c *c : children_z_sorted)
-                    if (c) c->sq_evt(qp, c->getrid(), data);
+
+                for (ts::aint i=children_z_sorted.size()-1;i>=0;--i)
+                    if (rectengine_c *c = children_z_sorted.get(i))
+                        c->sq_evt(qp, c->getrid(), data);
             }
 
             end_draw();
@@ -1903,7 +2010,7 @@ rectengine_child_c::~rectengine_child_c()
     default:
         break;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 /*virtual*/ void rectengine_child_c::redraw(const ts::irect *invalidate_rect)

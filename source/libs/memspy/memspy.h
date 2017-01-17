@@ -19,7 +19,12 @@
 #endif
 
 #ifndef MEMSPY_SYS_SIZE
+#ifdef _WIN32
 #define MEMSPY_SYS_SIZE(ptr) _msize(ptr)
+#endif
+#ifdef __linux__
+#define MEMSPY_SYS_SIZE(ptr) malloc_usable_size(ptr)
+#endif
 #endif
 
 void *mspy_malloc(const char *fn, int line, int typ, size_t sz);

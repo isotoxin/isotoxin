@@ -35,24 +35,24 @@ gui_filterbar_c::~gui_filterbar_c()
 
     filtereditheight = gui->theme().conf().get_int(CONSTASTR("filtereditheight"), 25);
 
-    if (prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
+    if (prf_options().is(UIOPT_SHOW_SEARCH_BAR))
     {
-        gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH_LENGTH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this, update_filter));
+        gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), ts::wstr_c(), MAX_PATH_LENGTH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this, update_filter));
         edit = &e;
         e.set_placeholder(TOOLTIP(TTT("Search", 277)), get_default_text_color(COL_PLACEHOLDER));
         e.register_kbd_callback(DELEGATE(this, cancel_filter), ts::SSK_ESC, false);
     }
-    if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+    if (prf_options().is(UIOPT_TAGFILETR_BAR))
     {
         fill_tags();
     }
 
-    search_in_messages = prf().is_loaded() && prf().get_options().is(MSGOP_FULL_SEARCH);
+    search_in_messages = prf().is_loaded() && prf_options().is(MSGOP_FULL_SEARCH);
 
     if (!is_all())
         refresh_list(true);
 
-    __super::created();
+    super::created();
 }
 
 void gui_filterbar_c::get_link_prolog(ts::wstr_c &r, int linknum) const
@@ -123,7 +123,7 @@ ts::wstr_c gui_filterbar_c::tagname( int index ) const
             TTT("Online", 86),
             TTT("Untagged",263),
         };
-        return bit[index];
+        return ts::wstr_c(bit[index]);
     }
     return from_utf8( contacts().get_all_tags().get(index - BIT_count) );
 }
@@ -202,7 +202,7 @@ void gui_filterbar_c::fill_tags()
 
     for(const ts::str_c &ht : contacts().get_all_tags())
         t.append(make_ht(from_utf8(ht)));
-    
+
     t.trunc_length(2);
     set_text(t);
 }
@@ -530,7 +530,7 @@ void gui_filterbar_c::redraw_anm()
             ts::irect cla = get_client_area();
             fake_margin.x = 5;
             fake_margin.y = 0;
-            if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+            if (prf_options().is(UIOPT_TAGFILETR_BAR))
             {
                 if (!textrect.get_text().is_empty())
                 {
@@ -576,7 +576,7 @@ void gui_filterbar_c::redraw_anm()
         {
             gui_control_c::sq_evt( qp, rid, data );
 
-            if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+            if (prf_options().is(UIOPT_TAGFILETR_BAR))
             {
                 ts::irect ca = get_client_area();
                 draw_data_s &dd = getengine().begin_draw();
@@ -612,7 +612,7 @@ void gui_filterbar_c::redraw_anm()
         break;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 void gui_filterbar_c::focus_edit()
@@ -698,7 +698,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
     return true;
 }
 
-/*virtual*/ int gui_filterbar_c::full_search_s::iterate()
+/*virtual*/ int gui_filterbar_c::full_search_s::iterate(ts::task_executor_c *e)
 {
     // mtype 0 == MTA_MESSAGE
     // mtype 1 == MTA_SYSTEM_MESSAGE
@@ -724,7 +724,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
         owner->current_search = nullptr;
         HOLD( owner->getparent() ).as<gui_contactlist_c>().update_filter_pos();
     }
-        
-    __super::done(canceled);
+
+    ts::task_c::done(canceled);
 }
 

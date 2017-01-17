@@ -1,6 +1,6 @@
 #pragma once
 
-#define TABSELMI(mask) gettabsel(), ts::amake((ts::uint32)mask)
+#define TABSELMI(mask) gettabsel(), ts::amake(static_cast<ts::uint32>(mask))
 
 bool TSCALL dialog_already_present( int );
 
@@ -34,6 +34,7 @@ template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c), p
 
 class gui_listitem_c : public gui_label_ex_c
 {
+    typedef gui_label_ex_c super;
     friend struct MAKE_CHILD<gui_listitem_c>;
     DUMMY(gui_listitem_c);
     ts::str_c  param;
@@ -85,7 +86,7 @@ class gui_dialog_c : public gui_vscrollgroup_c
 
     ts::wstr_c captiontext;
     ts::smart_int numtopbuttons;
-    int skipctls = 0;
+    ts::smart_int skipctls;
     ts::uint32 tabselmask = 0;
     ts::irect border = ts::irect(0);
     ts::hashmap_t<ts::str_c, guirect_c::sptr_t> ctl_by_name;
@@ -116,13 +117,10 @@ protected:
         menu_c *menu;
     };
 
-    struct description_s
+    struct description_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
-
-        struct ctlptr_s
+        struct ctlptr_s : public ts::movable_flag<true>
         {
-            MOVABLE( true );
             ts::safe_ptr<guirect_c> ptr;
             int what = -1; // -1 - desc; 0 - base ctrl
             ctlptr_s() {}
@@ -253,7 +251,7 @@ protected:
         description_s& radio( const ts::wsptr &desc, GUIPARAMHANDLER handler, int initial );
         description_s& button(const ts::wsptr &desc, const ts::wsptr &text, GUIPARAMHANDLER handler);
         description_s& hslider(const ts::wsptr &desc, float val, const ts::wsptr &initstr, GUIPARAMHANDLER handler);
-        
+
 
         RID make_ctl(gui_dialog_c *dlg, RID parent);
     };
@@ -264,8 +262,12 @@ protected:
 
     typedef ts::array_inplace_t<description_s, 0> descarray;
     descarray descs;
-    void tabsel(const ts::str_c& par);
-    MENUHANDLER gettabsel() { return DELEGATE(this, tabsel); };
+    void tabsel(const ts::asptr& par);
+    void tabseld(const ts::str_c& par)
+    {
+        tabsel(par.as_sptr());
+    }
+    MENUHANDLER gettabsel() { return DELEGATE(this, tabseld); };
 
     struct descmaker
     {
@@ -299,22 +301,23 @@ protected:
     bool passw_hide_show( RID, GUIPARAM prm );
     bool copy_text( RID, GUIPARAM prm );
 
-    struct radio_item_s
+    struct radio_item_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::wstr_c text;
         GUIPARAM param;
         ts::str_c name;
         radio_item_s(const ts::wstr_c &text, GUIPARAM param):text(text), param(param) {}
+        radio_item_s(const ts::wsptr &text, GUIPARAM param) :text(text), param(param) {}
         radio_item_s(const ts::wstr_c &text, GUIPARAM param, const ts::asptr& name):text(text), param(param), name(name) {}
+        radio_item_s(const ts::wsptr &text, GUIPARAM param, const ts::asptr& name) :text(text), param(param), name(name) {}
     };
-    struct check_item_s
+    struct check_item_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::wstr_c text;
         ts::uint32 mask;
         ts::str_c name;
         check_item_s(const ts::wstr_c &text, ts::uint32 mask) :text(text), mask(mask) {}
+        check_item_s(const ts::wsptr &text, ts::uint32 mask) :text(text), mask(mask) {}
         check_item_s(const ts::wstr_c &text, ts::uint32 mask, const ts::asptr& name) :text(text), mask(mask), name(name) {}
     };
 

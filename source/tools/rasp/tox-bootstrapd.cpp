@@ -31,8 +31,10 @@
 // system provided
 
 // C
+#ifdef _WIN32
 #include <WinSock2.h>
 #include <ws2tcpip.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -258,7 +260,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     }
 
 
-    DHT *dht = new_DHT(nullptr,net);
+    DHT *dht = new_DHT(nullptr,net,true);
 
     if (dht == NULL) {
         Print(FOREGROUND_RED, "Couldn't initialize Tox DHT instance. Exiting.\n");
@@ -316,7 +318,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     {
         ts::str_c addr4;
         ts::str_c addr6;
-        byte pubid[32];
+        uint8_t pubid[32];
         int port;
         int used = 0;
         int random = 0;
@@ -333,7 +335,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
 
     for( const dht_node_s &n : nodes )
     {
-        DHT_bootstrap_from_address(dht, n.addr4.cstr(), 1, htons((USHORT)n.port), n.pubid);
+        DHT_bootstrap_from_address(dht, n.addr4.cstr(), 1, htons((uint16_t)n.port), n.pubid);
     }
 
     /*
@@ -378,7 +380,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
             waiting_for_dht_connection = 0;
         }
 
-        Sleep(1);
+        ts::sys_sleep(1);
     }
 
     return 1;

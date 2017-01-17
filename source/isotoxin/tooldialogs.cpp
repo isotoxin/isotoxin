@@ -14,12 +14,12 @@ dialog_colors_c::~dialog_colors_c()
 /*virtual*/ void dialog_colors_c::created()
 {
     set_theme_rect( CONSTASTR("main"), false );
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 }
 /*virtual*/ void dialog_colors_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
     if (bcr.tag == 1)
     {
         bcr.btext = CONSTWSTR("Apply");
@@ -186,25 +186,25 @@ void dialog_colors_c::color_selected()
     descmaker dm(this);
     dm << 1;
 
-    dm().page_header(L"colors");
+    dm().page_header(CONSTWSTR("colors"));
 
-    dm().combik(L"Preset").setmenu(presets()).setname(CONSTASTR("presets"));
+    dm().combik(CONSTWSTR("Preset")).setmenu(presets()).setname(CONSTASTR("presets"));
     dm().vspace();
-    dm().hgroup(L"Color");
-    dm().selector(L"", from_utf8(colorsarr.get(0)), DELEGATE(this, selcolor)).setmenu(colors()).setname(CONSTASTR("colors"));
-    dm().button(L"", L"<char=60>", DELEGATE(this, cprev) ).height(30).width(30).setname(CONSTASTR("bprev"));
-    dm().button(L"", L"<char=62>", DELEGATE(this, cnext) ).height(30).width(30).setname(CONSTASTR("bnext"));
+    dm().hgroup(CONSTWSTR("Color"));
+    dm().selector(ts::wsptr(), from_utf8(colorsarr.get(0)), DELEGATE(this, selcolor)).setmenu(colors()).setname(CONSTASTR("colors"));
+    dm().button(ts::wsptr(), CONSTWSTR("<char=60>"), DELEGATE(this, cprev) ).height(30).width(30).setname(CONSTASTR("bprev"));
+    dm().button(ts::wsptr(), CONSTWSTR("<char=62>"), DELEGATE(this, cnext) ).height(30).width(30).setname(CONSTASTR("bnext"));
     dm().vspace();
 
-    dm().hslider(ts::wstr_c(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_r)).setname(CONSTASTR("R"));
+    dm().hslider(ts::wsptr(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_r)).setname(CONSTASTR("R"));
     dm().vspace(2);
-    dm().hslider(ts::wstr_c(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_g)).setname(CONSTASTR("G"));
+    dm().hslider(ts::wsptr(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_g)).setname(CONSTASTR("G"));
     dm().vspace(2);
-    dm().hslider(ts::wstr_c(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_b)).setname(CONSTASTR("B"));
+    dm().hslider(ts::wsptr(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_b)).setname(CONSTASTR("B"));
     dm().vspace(2);
-    dm().hslider(ts::wstr_c(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_a)).setname(CONSTASTR("A"));
+    dm().hslider(ts::wsptr(), 0, CONSTWSTR("0/0/1/1"), DELEGATE(this, hslider_a)).setname(CONSTASTR("A"));
     dm().vspace(2);
-    dm().textfield(ts::wstr_c(), curcolastext(), DELEGATE(this,colastext)).setname(CONSTASTR("str"));
+    dm().textfield(ts::wsptr(), curcolastext(), DELEGATE(this,colastext)).setname(CONSTASTR("str"));
 
     color_selected();
 
@@ -315,8 +315,8 @@ bool dialog_colors_c::updatetext(RID, GUIPARAM p)
 {
     if (qp == SQ_DRAW && rid == getrid())
     {
-        __super::sq_evt(qp, rid, data);
-    
+        super::sq_evt(qp, rid, data);
+
         ts::irect cl = get_client_area();
         cl.rb.x = cl.lt.x + 32 * 7;
         cl.lt.y = cl.rb.y - 32 * 3;
@@ -333,7 +333,7 @@ bool dialog_colors_c::updatetext(RID, GUIPARAM p)
         return true;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 
@@ -364,7 +364,7 @@ dialog_cmdlinegenerator_c::~dialog_cmdlinegenerator_c()
 /*virtual*/ void dialog_cmdlinegenerator_c::created()
 {
     set_theme_rect( CONSTASTR( "main" ), false );
-    __super::created();
+    super::created();
     tabsel( CONSTASTR( "1" ) );
 }
 /*virtual*/ void dialog_cmdlinegenerator_c::getbutton( bcreate_s &bcr )
@@ -373,7 +373,7 @@ dialog_cmdlinegenerator_c::~dialog_cmdlinegenerator_c()
         return;
 
     bcr.tag = 1;
-    __super::getbutton( bcr );
+    super::getbutton( bcr );
 }
 
 bool dialog_cmdlinegenerator_c::passt( const ts::wstr_c &p, bool )
@@ -401,12 +401,12 @@ bool dialog_cmdlinegenerator_c::passt( const ts::wstr_c &p, bool )
 
     dm().page_header( TTT("Command line generator for encrypted profiles. You can use this command line to run [appname] with specified profile and password.[br][b]IMPORTANT!!![/b][br]Password will be encrypted by machine-specific key and will be valid only for current computer.",490) );
 
-    dm().textfield( ts::wstr_c(TTT("Password to encrypt",491)), L"", DELEGATE( this, passt ) ).passwd(true);
+    dm().textfield( ts::wstr_c(TTT("Password to encrypt",491)), ts::wsptr(), DELEGATE( this, passt ) ).passwd(true);
 
     dm().vspace();
     dm().rotext( TTT( "Current profile", 492 ), ts::fn_get_name( prf().get_path() ) );
-    dm().rotext( TTT( "Encrypted password", 493 ), L"" ).setname( CONSTASTR("ep") );
-    dm().rotext( TTT( "Command line", 494 ), L"" ).setname( CONSTASTR( "cmdl" ) );
+    dm().rotext( TTT( "Encrypted password", 493 ), ts::wsptr() ).setname( CONSTASTR("ep") );
+    dm().rotext( TTT( "Command line", 494 ), ts::wsptr() ).setname( CONSTASTR( "cmdl" ) );
 
     return 0;
 }
@@ -430,9 +430,9 @@ ts::wstr_c dialog_cmdlinegenerator_c::enc() const
 {
     if ( qp == SQ_DRAW && rid == getrid() )
     {
-        __super::sq_evt( qp, rid, data );
+        super::sq_evt( qp, rid, data );
         return true;
     }
 
-    return __super::sq_evt( qp, rid, data );
+    return super::sq_evt( qp, rid, data );
 }

@@ -47,8 +47,8 @@ typedef long ZSTRINGS_SIGNED; // 32 bit enough
 
 template<typename TCHARACTER> struct sptr;
 
-int     str_wrap_text_ucs2_to_ansi(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
-void    str_wrap_text_ansi_to_ucs2(ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
+ZSTRINGS_SIGNED str_wrap_text_ucs2_to_ansi(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
+ZSTRINGS_SIGNED str_wrap_text_ansi_to_ucs2(ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 ZSTRINGS_SIGNED str_wrap_text_utf8_to_ucs2(ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 ZSTRINGS_SIGNED str_wrap_text_ucs2_to_utf8(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
 bool    str_wrap_text_iequalsw(const ZSTRINGS_WIDECHAR *s1, const ZSTRINGS_WIDECHAR *s2, ZSTRINGS_SIGNED len);

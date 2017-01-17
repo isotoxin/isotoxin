@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+ * Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
  * This file is part of the gloox library. http://camaya.net/gloox
  *
  * This software is distributed under a license. The full license
@@ -557,6 +557,8 @@ namespace gloox
     };
     DWORD cUsages = sizeof( Usages ) / sizeof( LPSTR );
 
+    m_certInfo.status = CertOk;
+
     do
     {
       // Get server's certificate.
@@ -625,8 +627,35 @@ namespace gloox
 
       if( policyStatus.dwError )
       {
-        //printf("Trust Error!!!}n");
-        break;
+          switch (policyStatus.dwError)
+          {
+          case TRUST_E_CERT_SIGNATURE:
+              m_certInfo.status |= CertSignerUnknown; /**< The certificate hasn't got a known issuer. */
+              break;
+          case CRYPT_E_REVOKED:
+              m_certInfo.status |= CertRevoked; /**< The certificate has been revoked. */
+              break;
+          case CERT_E_EXPIRED:
+              m_certInfo.status |= CertExpired; /**< The certificate has expired. */
+              break;
+          case CERT_E_VALIDITYPERIODNESTING:
+              m_certInfo.status |= CertNotActive; /**< The certificate is not yet active. */
+              break;
+          case CERT_E_WRONG_USAGE:
+          case CERT_E_INVALID_NAME:
+          case CERT_E_CN_NO_MATCH:
+          case CERT_E_PURPOSE:
+          case CERT_E_ROLE:
+              m_certInfo.status |= CertWrongPeer; /**< The certificate has not been issued for the peer we're connected to. */
+              break;
+          case CERT_E_CHAINING:
+              m_certInfo.status |= CertSignerNotCa; /**< The signer is not a CA. */
+              break;
+          default:
+              m_certInfo.status |= CertInvalid;
+              break;
+          }
+          break;
       }
       valid = true;
     }

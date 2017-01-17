@@ -8,19 +8,10 @@ class task_c
     friend class task_executor_c;
     spinlock::syncvar<int> queueflags;
     int __wake_up_time = 0;
-    void setflag( int flagmask )
+    void changeflag(int clearbits, int setbits)
     {
         auto w = queueflags.lock_write();
-        if ( 0 != (w() & flagmask) )
-            DEBUG_BREAK();
-        w() |= flagmask;
-    }
-    void resetflag(int flagmask)
-    {
-        auto w = queueflags.lock_write();
-        if (0 == (w() & flagmask))
-            DEBUG_BREAK();
-        RESETFLAG( w(), flagmask );
+        w() = (w() & ~clearbits) | setbits;
     }
     bool is_flag(int mask) const
     {
@@ -29,6 +20,8 @@ class task_c
 
     void setup_wakeup( int t );
 
+protected:
+    bool should_stop(task_executor_c *e);
 public:
     task_c() { queueflags.lock_write()() = 0; }
     virtual ~task_c() {}
@@ -38,15 +31,15 @@ public:
     static const int R_RESULT = -3; // call result and iterate again (simultaneously)
     static const int R_RESULT_EXCLUSIVE = -4; // call result in base thread and iterate strongly after result
 
-    int call_iterate()
+    int call_iterate(task_executor_c *e)
     {
-        int r = iterate();
+        int r = iterate(e);
         if ( r > 0 )
             setup_wakeup(r);
         return r;
     }
 
-    virtual int iterate() { return R_DONE; }; // can be called from any thread
+    virtual int iterate(task_executor_c *e) { return R_DONE; }; // can be called from any thread
     virtual void done(bool canceled) { TSDEL(this); } // called only from base thread. task should kill self
     virtual void result() {} // called only from base thread
 
@@ -54,6 +47,8 @@ public:
 
 class task_executor_c
 {
+    friend class task_c;
+
     struct slallocator
     {
         static void *ma(size_t sz) { return MM_ALLOC(sz); }

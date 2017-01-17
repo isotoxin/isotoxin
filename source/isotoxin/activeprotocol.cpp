@@ -3,6 +3,8 @@
 //-V:w:807
 //-V:flags:807
 
+#define RECONNECT_TIMEOUT 5
+
 #define ACTUAL_USER_NAME( d ) ( (d).data.user_name.is_empty() ? prf().username() : (d).data.user_name )
 #define ACTUAL_STATUS_MSG( d ) ( (d).data.user_statusmsg.is_empty() ? prf().userstatus() : (d).data.user_statusmsg )
 
@@ -22,14 +24,15 @@ bool configurable_s::get_password_decoded( ts::str_c& rslt ) const
     return r;
 }
 
-
+namespace
+{
 struct config_maker_s : public ipcw
 {
     config_maker_s() : ipcw( AQ_SET_CONFIG )
     {
-        *this << ( ts::int32 )sizeof( ts::int32 ); // sizeof data
+        *this << static_cast<ts::int32>(sizeof(ts::int32)); // sizeof data
         flags_offset = size();
-        *this << ( ts::uint32 )0; // flags
+        *this << static_cast<ts::uint32>(0); // flags
     }
     ts::aint flags_offset;
     ts::aint params_offset = -1;
@@ -47,17 +50,17 @@ struct config_maker_s : public ipcw
         if (0 == (flags() & CFL_PARAMS) )
         {
             flags() = flags() | CFL_PARAMS;
-            *this << ( ts::int32 )0;
+            *this << static_cast<ts::int32>(0);
             params_offset = size();
         }
 
-        ASSERT( params_offset == flags_offset + (ts::aint)sizeof( ts::int32 ) * 2 );
-        append_s( field );
-        tappend<char>( '=' );
-        append_s( value );
-        tappend<char>( '\n' );
-        *( ts::uint32 * )( data() + flags_offset + sizeof( ts::int32 ) ) = ( ts::int32 )( size() - params_offset );
-        *( ts::uint32 * )( data() + flags_offset - sizeof( ts::int32 ) ) = ( ts::int32 )( size() - flags_offset );
+        ASSERT(params_offset == flags_offset + (ts::aint)sizeof(ts::int32) * 2);
+        append_s(field);
+        tappend<char>('=');
+        append_s(value);
+        tappend<char>('\n');
+        *(ts::int32 *)(data() + flags_offset + sizeof(ts::int32)) = static_cast<ts::int32>(size() - params_offset);
+        *(ts::int32 *)(data() + flags_offset - sizeof(ts::int32)) = static_cast<ts::int32>(size() - flags_offset);
 
         return *this;
     }
@@ -74,7 +77,7 @@ struct config_maker_s : public ipcw
         append_buf( proto_cfg.data(), proto_cfg.size() );
         proto_stuff = true;
 
-        *( ts::uint32 * )( data() + flags_offset - sizeof( ts::int32 ) ) = ( ts::int32 )( size() - flags_offset );
+        *(ts::int32 *)(data() + flags_offset - sizeof(ts::int32)) = static_cast<ts::int32>(size() - flags_offset);
 
         return *this;
     }
@@ -92,14 +95,12 @@ struct config_maker_s : public ipcw
             par( CONSTASTR( CFGF_SERVER_PORT ), ts::amake<int>( c.server_port ) );
         }
 
-        if ( 0 != ( conn_features & CF_IPv6_OPTION ) )
-        {
-            par( CONSTASTR( CFGF_IPv6_ENABLE ), ( c.ipv6_enable ? CONSTASTR( "1" ) : CONSTASTR( "0" ) ) );
+#define COPDEF( nnn, dv ) if ( 0 != ( conn_features & CF_##nnn ) ) \
+        { \
+            par(CONSTASTR(#nnn), (c.nnn ? CONSTASTR("1") : CONSTASTR("0"))); \
         }
-        if ( 0 != ( conn_features & CF_UDP_OPTION ) )
-        {
-            par( CONSTASTR( CFGF_UDP_ENABLE ), ( c.udp_enable ? CONSTASTR( "1" ) : CONSTASTR( "0" ) ) );
-        }
+        CONN_OPTIONS
+#undef COPDEF
 
         if ( 0 != ( features & PF_NEW_REQUIRES_LOGIN ) )
         {
@@ -113,7 +114,7 @@ struct config_maker_s : public ipcw
         return *this;
     }
 };
-
+}
 
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
@@ -129,7 +130,7 @@ active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):i
             return oap.sort_factor() == w().data.sort_factor;
         }) ; ++w().data.sort_factor );
     }
-    g_app->F_PROTOSORTCHANGED = true;
+    g_app->F_PROTOSORTCHANGED(true);
 
     w().manual_cos = (contact_online_state_e)prf().manual_cos();
 
@@ -148,11 +149,11 @@ active_protocol_c::~active_protocol_c()
 
 void active_protocol_c::run()
 {
-    if (g_app->F_READONLY_MODE && !g_app->F_READONLY_MODE_WARN)
+    if (g_app->F_READONLY_MODE() && !g_app->F_READONLY_MODE_WARN())
         return; // no warn - no job
 
     auto r = syncdata.lock_read();
-    if (r().flags.is(F_WORKER)) return;
+    if (r().flags.is(F_WORKER|F_WORKER_STOP)) return;
     if (r().flags.is(F_WORKER_STOPED))
         g_app->avcontacts().stop_all_av();
     r.unlock();
@@ -165,6 +166,7 @@ void active_protocol_c::reset_data()
     auto w = syncdata.lock_write();
     w().data.config.clear();
     w().current_state = CR_OK;
+    w().cbits = 0;
 
     config_maker_s c;
     c.configurable( w().data.configurable, get_features(), get_conn_features() );
@@ -179,6 +181,7 @@ void active_protocol_c::change_data( const ts::blob_c &b, bool is_native )
     w().data.config = b;
     w().data.config.set_size( b.size() ); // copy content due race condition
     w().current_state = CR_OK;
+    w().cbits = 0;
 
     config_maker_s c;
     c.configurable( w().data.configurable, get_features(), get_conn_features() );
@@ -233,8 +236,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
     {
     case HA_CMD_STATUS:
         {
-            commands_e c = (commands_e)r.get<int>();
-            cmd_result_e s = (cmd_result_e)r.get<int>();
+            commands_e c = static_cast<commands_e>(r.get<int>());
+            cmd_result_e s = static_cast<cmd_result_e>(r.get<int>());
 
             if (c == AQ_SET_PROTO)
             {
@@ -250,6 +253,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     auto w = syncdata.lock_write();
                     
                     w().current_state = CR_OK;
+                    w().cbits = 0;
 
                     w().strings.clear();
                     for(;numstrings > 0; --numstrings )
@@ -258,6 +262,12 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     ts::str_c emptystring;
                     setup_audio_fmt( w().strings.size() > IS_AUDIO_FMT ? w().strings.get( IS_AUDIO_FMT ) : emptystring );
                     setup_avatar_restrictions( w().strings.size() > IS_AVATAR_RESTRICTIOS ? w().strings.get( IS_AVATAR_RESTRICTIOS ) : emptystring );
+
+                    {
+                        ipcw uids(AQ_SET_USED_IDS);
+                        g_app->getuap(static_cast<ts::uint16>(id), uids);
+                        ipcp->send(uids);
+                    }
 
                     config_maker_s cm;
                     cm.configurable( w().data.configurable, get_features(), get_conn_features() );
@@ -280,14 +290,14 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 if ( w().manual_cos != COS_ONLINE )
                     set_ostate( w().manual_cos );
 
-                ipcp->send( ipcw( AQ_INIT_DONE ) );
+                ipcp->send( ipcw( AQ_SIGNAL ) << static_cast<ts::int32>(APPS_INIT_DONE) );
                 if ( CR_OK == s &&  0 != ( w().data.options & active_protocol_data_s::O_AUTOCONNECT ) )
                 {
-                    ipcp->send( ipcw( AQ_ONLINE ) );
+                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
                     w().flags.set( F_ONLINE_SWITCH );
                 }
 
-                w().flags.set( F_SET_PROTO_OK );
+                w().flags.set(F_SET_PROTO_OK | F_CLEAR_ICON_CACHE);
                 w.unlock();
 
                 gmsg<ISOGM_PROTO_LOADED> *m = TSNEW( gmsg<ISOGM_PROTO_LOADED>, id );
@@ -296,43 +306,52 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 if ( s != CR_OK )
                 {
                     indicator = 0;
-                    syncdata.lock_write()().current_state = s;
+                    auto ww = syncdata.lock_write();
+                    ww().reconnect_in = s == CR_NETWORK_ERROR ? RECONNECT_TIMEOUT : 0;
+                    ww().current_state = s;
                     goto we_shoud_broadcast_result;
                 }
 
-            } else if ( c == AQ_ONLINE )
+            } else if ( c == AQ_SIGNAL )
             {
-                if (s != CR_OK)
-                {
-                    indicator = 0;
-                    syncdata.lock_write()().current_state = s;
-                    goto we_shoud_broadcast_result;
-                }
+                indicator = 0;
+                auto ww = syncdata.lock_write();
+                ww().reconnect_in = s == CR_NETWORK_ERROR ? RECONNECT_TIMEOUT : 0;
+                ww().current_state = s;
+                goto we_shoud_broadcast_result;
 
             } else
             {
             we_shoud_broadcast_result:
-                DMSG( "cmd status: " << (int)c << (int)s );
+                DMSG( "cmd status: " << static_cast<int>(c) << static_cast<int>(s));
                 gmsg<ISOGM_CMD_RESULT> *m = TSNEW(gmsg<ISOGM_CMD_RESULT>, id, c, s);
                 m->send_to_main_thread();
             }
+        }
+        break;
+    case HA_CONNECTION_BITS:
+        {
+            auto w = syncdata.lock_write();
+            w().cbits = r.get<int>();
         }
         break;
     case HQ_UPDATE_CONTACT:
         {
             gmsg<ISOGM_UPDATE_CONTACT> *m = TSNEW( gmsg<ISOGM_UPDATE_CONTACT> );
 
-
-            m->key = contact_key_s( r.get<int>(), id );
+            m->key = r.get<contact_id_s>();
+            m->apid = static_cast<ts::uint16>(id);
             m->mask = r.get<int>();
             m->pubid = r.getastr();
             m->name = r.getastr();
             m->statusmsg = r.getastr();
             m->avatar_tag = r.get<int>();
-            m->state = (contact_state_e)r.get<int>();
-            m->ostate = (contact_online_state_e)r.get<int>();
-            m->gender = (contact_gender_e)r.get<int>();
+            m->state = static_cast<contact_state_e>(r.get<int>());
+            m->ostate = static_cast<contact_online_state_e>(r.get<int>());
+            m->gender = static_cast<contact_gender_e>(r.get<int>());
             m->grants = r.get<int>();
+
+            g_app->setuap(static_cast<ts::uint16>(id), m->key.id);
 
             if (0 != (m->mask & CDM_MEMBERS)) // conference members
             {
@@ -341,11 +360,19 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 int cnt = r.get<int>();
                 m->members.set_count(cnt);
                 for(int i=0;i<cnt;++i)
-                    m->members.set( i, r.get<int>() );
+                    m->members.set( i, r.get<contact_id_s>() );
             }
 
             if (0 != (m->mask & CDM_DETAILS))
                 m->details = r.getastr();
+
+            if (0 != (m->mask & CDM_DATA))
+            {
+                int dsz;
+                const void *data = r.get_data(dsz);
+                m->pdata.set_size(dsz);
+                memcpy(m->pdata.data(), data, dsz);
+            }
 
 
             m->send_to_main_thread();
@@ -354,10 +381,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_MESSAGE:
         {
             gmsg<ISOGM_INCOMING_MESSAGE> *m = TSNEW(gmsg<ISOGM_INCOMING_MESSAGE>);
-            int gid = r.get<int>();
-            int cid = r.get<int>();
-            m->sender = contact_key_s( gid, cid, id );
-            m->mt = (message_type_app_e)r.get<int>();
+            m->gid = r.get<contact_id_s>();
+            m->cid = r.get<contact_id_s>();
+            m->apid = static_cast<ts::uint16>(id);
+            m->mt = static_cast<message_type_app_e>(r.get<int>());
             m->create_time = r.get<uint64>();
             m->msgutf8 = r.getastr();
 
@@ -423,11 +450,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
                         w().data.configurable.proxy.proxy_addr = v;
                     else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
                         w().data.configurable.server_port = v.as_int();
-                    else if (f.equals(CONSTASTR(CFGF_IPv6_ENABLE)))
-                        w().data.configurable.ipv6_enable = v.as_int() != 0;
-                    else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
-                        w().data.configurable.udp_enable = v.as_int() != 0;
 
+#define COPDEF( nnn, dv ) else if (f.equals(CONSTASTR(#nnn))) { w().data.configurable.nnn = v.as_int() != 0; }
+        CONN_OPTIONS
+#undef COPDEF
                     w().data.configurable.initialized = true;
                 }
             }
@@ -435,8 +461,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
         break;
     case HQ_AUDIO:
         {
-            int gid = r.get<int>();
-            int cid = r.get<int>();
+            contact_id_s gid = r.get<contact_id_s>();
+            contact_id_s cid = r.get<contact_id_s>();
             s3::Format fmt;
             fmt.sampleRate = r.get<int>();
             fmt.channels = r.get<short>();
@@ -454,8 +480,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
         break;
     case HQ_STREAM_OPTIONS:
         {
-            int gid = r.get<int>();
-            int cid = r.get<int>();
+            contact_id_s gid = r.get<contact_id_s>();
+            contact_id_s cid = r.get<contact_id_s>();
             int so = r.get<int>();
             ts::ivec2 sosz;
             sosz.x = r.get<int>();
@@ -482,7 +508,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
             m->i_utag = r.get<uint64>();
-            m->fctl = (file_control_e)r.get<int>();
+            m->fctl = static_cast<file_control_e>(r.get<int>());
             m->send_to_main_thread();
 
         }
@@ -490,7 +516,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_INCOMING_FILE:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
-            m->sender = contact_key_s( r.get<int>(), id );
+            m->sender = contact_key_s( r.get<contact_id_s>(), id );
             m->i_utag = r.get<uint64>();
             m->filesize = r.get<uint64>();
             m->filename.set_as_utf8(r.getastr());
@@ -540,7 +566,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_AVATAR_DATA:
         {
             gmsg<ISOGM_AVATAR> *m = TSNEW(gmsg<ISOGM_AVATAR>);
-            m->contact = contact_key_s( r.get<int>(), id );
+            m->contact = contact_key_s( r.get<contact_id_s>(), id );
             m->tag = r.get<int>();
             int dsz;
             const void *data = r.get_data(dsz);
@@ -564,8 +590,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_TYPING:
         {
             gmsg<ISOGM_TYPING> *m = TSNEW(gmsg<ISOGM_TYPING>);
-            int gid = r.get<int>();
-            int cid = r.get<int>();
+            contact_id_s gid = r.get<contact_id_s>();
+            contact_id_s cid = r.get<contact_id_s>();
             m->contact = contact_key_s( gid, cid, id );
             m->send_to_main_thread();
         }
@@ -603,7 +629,7 @@ void active_protocol_c::tlm_statistic_s::newdata( const tlm_data_s *d, bool full
         ns->newdata( d, false );
         ns->next = next;
 
-        next = ns; // final action due multithreaded
+        next = ns; // final action due multi threaded
     } else
     {
         ts::Time c = ts::Time::current();
@@ -640,7 +666,7 @@ void active_protocol_c::once_per_5sec_tick()
 
 bool active_protocol_c::tick()
 {
-    if (syncdata.lock_read()().flags.is(F_DIP))
+    if (syncdata.lock_read()().flags.is(F_WORKER_STOP))
         return false;
 
     return true;
@@ -656,7 +682,7 @@ void active_protocol_c::worker()
 
     auto ww = syncdata.lock_write();
     ww().flags.set(F_WORKER);
-    ww().flags.clear(F_WORKER_STOPED);
+    ww().flags.clear(F_WORKER_STOPED|F_WORKER_STOP);
     ipcname.append( ww().data.tag );
     ww.unlock();
 
@@ -670,11 +696,13 @@ void active_protocol_c::worker()
         ipcp->wait_loop(DELEGATE(this, tick));
         auto w = syncdata.lock_write();
         ipcp = nullptr;
+        bool stop_signal = w().flags.is(F_WORKER_STOP);
         w().flags.clear(F_WORKER);
         w().flags.set(F_WORKER_STOPED);
         w.unlock();
 
-        TSNEW( gmsg<ISOGM_PROTO_CRASHED>, id )->send_to_main_thread();
+        if (!stop_signal)
+            TSNEW( gmsg<ISOGM_PROTO_CRASHED>, id )->send_to_main_thread();
 
         SIMPLELOCK(lbsync);
         for(data_header_s *dh : locked_bufs)
@@ -685,8 +713,11 @@ void active_protocol_c::worker()
     
 }
 
-ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
+ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SL>&p )
 {
+    if (!p.saved)
+        return 0;
+
     if (p.tabi == pt_active_protocol && p.pass == 0)
     {
         tableview_active_protocol_s &t = prf().get_table_active_protocol();
@@ -739,8 +770,16 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 {
     run();
 
+    bool do_reconnect = false;
     if (auto sss = syncdata.lock_write(true))
     {
+        if (sss().current_state == CR_NETWORK_ERROR && sss().reconnect_in > 0)
+        {
+            --sss().reconnect_in;
+            if (sss().reconnect_in == 0)
+                do_reconnect = true;
+        }
+
         if (!sss().flags.is(F_CFGSAVE_CHECKER))
         {
             if (sss().flags.clearr(F_SAVE_REQUEST))
@@ -763,6 +802,20 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
         cmd_result_e curstate = r().current_state;
         is_online = r().flags.is(F_CURRENT_ONLINE);
 
+        if (r().flags.is(F_NEED_SEND_CONFIGURABLE))
+        {
+            countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
+            if (ipcp)
+            {
+                configurable_s c;
+                c = r().data.configurable;
+                r.unlock();
+                send_configurable(c);
+                r = syncdata.lock_read();
+            }
+        }
+
+
         bool is_ac = false;
         if (curstate != CR_OK && r().flags.is(F_ONLINE_SWITCH))
             goto to_offline;
@@ -770,40 +823,61 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
         if (r().flags.is(F_SET_PROTO_OK))
         {
             is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
+            if (is_ac)
+                countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
+
             if (r().flags.is(F_ONLINE_SWITCH))
             {
+                countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
+
                 if (!is_ac)
                 {
             to_offline:
                     r.unlock();
-                    ipcp->send(ipcw(AQ_OFFLINE));
+                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_OFFLINE));
                     syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
                 }
             }
             else if (is_ac && curstate == CR_OK)
             {
                 r.unlock();
-                ipcp->send(ipcw(AQ_ONLINE));
-                syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
+                if (ipcp)
+                {
+                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
+                    syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
+                }
             }
+        } else
+        {
+            countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
         }
+    }
+
+    if (--countdown_unload < 0 && ipcp)
+    {
+        auto w = syncdata.lock_write();
+        w().flags.set(F_WORKER_STOP);
+        ipcp->something_happens();
     }
 
     if (is_online)
     {
-        if (typingsendcontact && (typingtime - ts::Time::current()) > 0)
+        if (!typingsendcontact.is_empty() && (typingtime - ts::Time::current()) > 0)
         {
             // still typing
             ipcp->send(ipcw(AQ_TYPING) << typingsendcontact);
         } else
         {
-            typingsendcontact = 0;
+            typingsendcontact.clear();
         }
 
     } else
     {
-        typingsendcontact = 0;
+        typingsendcontact.clear();
     }
+
+    if (do_reconnect)
+        set_autoconnect(true);
 
     return 0;
 }
@@ -843,7 +917,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
             break;
         }
 
-        typingsendcontact = 0;
+        typingsendcontact.clear();
         ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().gidcid() << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8->cstr() );
     }
     return 0;
@@ -883,11 +957,11 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 syncdata.lock_write()().data.name = ch.s;
             return GMRBIT_CALLAGAIN;
         case PP_ONLINESTATUS:
-            if (contact_c *c = contacts().get_self().subget( contact_key_s(0, id) ))
+            if (contact_c *c = contacts().get_self().subget( contact_key_s(contact_id_s::make_self(), id) ))
                 set_ostate(c->get_ostate());
             break;
         case PP_PROFILEOPTIONS:
-            if (0 != (ch.bits & UIOPT_PROTOICONS) && !prf().get_options().is(UIOPT_PROTOICONS))
+            if (0 != (ch.bits & UIOPT_PROTOICONS) && !prf_options().is(UIOPT_PROTOICONS))
                 icons_cache.clear(); // FREE MEMORY
             break;
         case PP_VIDEO_ENCODING_SETTINGS:
@@ -903,7 +977,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
 void active_protocol_c::push_debug_settings()
 {
-    if (prf().get_options().is(OPTOPT_POWER_USER))
+    if (prf_options().is(OPTOPT_POWER_USER))
         ipcp->send(ipcw(AQ_DEBUG_SETTINGS) << cfg().debug());
     else
         ipcp->send(ipcw(AQ_DEBUG_SETTINGS) << ts::str_c());
@@ -912,6 +986,14 @@ void active_protocol_c::push_debug_settings()
 const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
 {
     MEMT( MEMT_AP_ICON );
+
+    auto w = syncdata.lock_write();
+    if (w().flags.is(F_CLEAR_ICON_CACHE|F_DIP))
+    {
+        icons_cache.clear();
+        w().flags.clear(F_CLEAR_ICON_CACHE);
+    }
+    w.unlock();
 
     for(const icon_s &icon : icons_cache)
         if (icon.icot == icot && icon.bmp->info().sz.x == sz)
@@ -967,13 +1049,13 @@ void active_protocol_c::save_config( const ts::blob_c &cfg_, bool native_config 
     {
         if ( r->other.config != cfg_)
         {
-            time_t n = now();
+            time_t n = ts::now();
             if ( (n-last_backup_time) > prf().backup_period() )
             {
                 last_backup_time = n;
                 tableview_backup_protocol_s &backup = prf().get_table_backup_protocol();
                 auto &row = backup.getcreate(0);
-                row.other.time = now();
+                row.other.time = ts::now();
                 row.other.tick = ts::Time::current().raw();
                 row.other.protoid = id;
                 row.other.config = r->other.config;
@@ -991,7 +1073,7 @@ void active_protocol_c::save_config( const ts::blob_c &cfg_, bool native_config 
 void active_protocol_c::set_sortfactor(int sf)
 {
     syncdata.lock_write()().data.sort_factor = sf;
-    g_app->F_PROTOSORTCHANGED = true;
+    g_app->F_PROTOSORTCHANGED(true);
 }
 
 void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp );
@@ -1189,20 +1271,24 @@ void active_protocol_c::set_autoconnect( bool v )
             row->changed();
         }
     }
-    if (!v)
-        w().current_state = CR_OK;
-
+    w().current_state = CR_OK;
+    w().cbits = 0;
+    if (v)
+    {
+        w().flags.clear(F_WORKER_STOP);
+        countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
+    }
 }
 
 void active_protocol_c::stop_and_die(bool wait_worker_end)
 {
     auto w = syncdata.lock_write();
-    if (w().flags.is(F_DIP) || !w().flags.is(F_WORKER))
+    if (w().flags.is(F_WORKER_STOP|F_DIP) || !w().flags.is(F_WORKER))
     {
-        w().flags.set(F_DIP);
+        w().flags.set(F_WORKER_STOP|F_DIP);
         return;
     }
-    w().flags.set(F_DIP);
+    w().flags.set(F_WORKER_STOP|F_DIP);
     if (ipcp) ipcp->something_happens();
     w.unlock();
 
@@ -1238,7 +1324,7 @@ void active_protocol_c::refresh_details( const contact_key_s &ck )
     ipcp->send( ipcw( AQ_REFRESH_DETAILS ) << ck.gidcid() );
 }
 
-void active_protocol_c::resend_request( int cid, const ts::str_c &msg_utf8 )
+void active_protocol_c::resend_request( contact_id_s cid, const ts::str_c &msg_utf8 )
 {
     ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)1 << cid << msg_utf8 );
 }
@@ -1268,46 +1354,51 @@ void active_protocol_c::enter_conference( const ts::str_c &confa_id )
     ipcp->send( ipcw( AQ_ENTER_CONFERENCE ) << confa_id );
 }
 
-void active_protocol_c::leave_conference( int gid, bool keep_leave )
+void active_protocol_c::leave_conference(contact_id_s gid, bool keep_leave )
 {
-    ipcp->send( ipcw( AQ_LEAVE_CONFERENCE ) << gid << (keep_leave ? 1 : 0) );
+    ipcp->send( ipcw( AQ_LEAVE_CONFERENCE ) << gid << static_cast<ts::int32>(keep_leave ? 1 : 0) );
 }
 
 
-void active_protocol_c::rename_conference(int gid, const ts::str_c &conferencename)
+void active_protocol_c::rename_conference(contact_id_s gid, const ts::str_c &conferencename)
 {
     ipcp->send(ipcw(AQ_REN_CONFERENCE) << gid << conferencename);
 }
 
-void active_protocol_c::join_conference(int gid, int cid)
+void active_protocol_c::join_conference(contact_id_s gid, contact_id_s cid)
 {
     ipcp->send(ipcw(AQ_JOIN_CONFERENCE) << gid << cid);
 }
 
 
-void active_protocol_c::accept(int cid)
+void active_protocol_c::accept(contact_id_s cid)
 {
     ipcp->send( ipcw(AQ_ACCEPT) << cid );
 }
 
-void active_protocol_c::reject(int cid)
+void active_protocol_c::reject(contact_id_s cid)
 {
     ipcp->send( ipcw(AQ_REJECT) << cid );
 }
 
-void active_protocol_c::accept_call(int cid)
+void active_protocol_c::accept_call(contact_id_s cid)
 {
     ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
 }
 
-void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb, uint64 msmonotonic )
+void active_protocol_c::send_proto_data(contact_id_s cid, const ts::blob_c &pdata)
+{
+    ipcp->send(ipcw(AQ_CONTACT) << cid << pdata);
+}
+
+void active_protocol_c::send_video_frame(contact_id_s cid, const ts::bmpcore_exbody_s &eb, uint64 msmonotonic )
 {
     if (!ipcp) return;
     isotoxin_ipc_s *ipcc = ipcp;
 
     struct inf_s
     {
-        int cid;
+        contact_id_s cid;
         int w;
         int h;
         int fmt;
@@ -1342,24 +1433,24 @@ void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb
     }
 }
 
-void active_protocol_c::send_audio(int cid, const void *data, int size, uint64 timestamp)
+void active_protocol_c::send_audio(contact_id_s cid, const void *data, int size, uint64 timestamp)
 {
     if (!ipcp) return;
     ipcp->send( ipcw( AQ_SEND_AUDIO ) << cid << data_block_s( data, size ) << timestamp );
 }
 
-void active_protocol_c::call(int cid, int seconds)
+void active_protocol_c::call(contact_id_s cid, int seconds, bool videocall)
 {
     apply_encoding_settings();
-    ipcp->send(ipcw(AQ_CALL) << cid << seconds);
+    ipcp->send(ipcw(AQ_CALL) << cid << seconds << static_cast<ts::int32>(videocall ? 1 : 0));
 }
 
-void active_protocol_c::stop_call(int cid)
+void active_protocol_c::stop_call(contact_id_s cid)
 {
     ipcp->send(ipcw(AQ_STOP_CALL) << cid);
 }
 
-void active_protocol_c::set_stream_options(int cid, int so, const ts::ivec2 &vr)
+void active_protocol_c::set_stream_options(contact_id_s cid, int so, const ts::ivec2 &vr)
 {
     ipcp->send(ipcw(AQ_STREAM_OPTIONS) << cid << so << vr.x << vr.y);
 }
@@ -1373,6 +1464,32 @@ void active_protocol_c::apply_encoding_settings()
         .par( CONSTASTR( CFGF_VIDEO_QUALITY ), ts::amake<int>( prf().video_enc_quality() ) );
 
     ipcp->send( cm );
+}
+
+void active_protocol_c::send_configurable(const configurable_s &c)
+{
+    ASSERT(ipcp);
+
+    config_maker_s cm;
+    cm.configurable(c, get_features(), get_conn_features());
+    ipcp->send(cm);
+
+    // do not save config now
+    // protocol will initiate save procedure itself
+
+    auto w = syncdata.lock_write();
+    if (w().current_state == CR_NETWORK_ERROR || w().current_state == CR_AUTHENTICATIONFAILED)
+    {
+        w().current_state = CR_OK; // set to ok now. if error still exist, state will be set back to CR_NETWORK_ERROR by protocol
+        w().cbits = 0;
+        w().flags.set(F_ONLINE_SWITCH);
+        w.unlock();
+        ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
+    }
+    else
+    {
+        w().flags.clear(F_NEED_SEND_CONFIGURABLE);
+    }
 }
 
 void active_protocol_c::set_configurable( const configurable_s &c, bool force_send )
@@ -1406,22 +1523,14 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
         {
             oldc = w().data.configurable;
             w.unlock();
-
-            config_maker_s cm;
-            cm.configurable( oldc, get_features(), get_conn_features() );
-            ipcp->send( cm );
-
-            // do not save config now
-            // protocol will initiate save procedure itself
-
-            w = syncdata.lock_write();
-            if ( w().current_state == CR_NETWORK_ERROR || w().current_state == CR_AUTHENTICATIONFAILED )
-            {
-                w().current_state = CR_OK; // set to ok now. if error still exist, state will be set back to CR_NETWORK_ERROR by protocol
-                w().flags.set(F_ONLINE_SWITCH);
-                w.unlock();
-                ipcp->send(ipcw(AQ_ONLINE));
-            }
+            send_configurable(oldc);
+        }
+        else
+        {
+            ASSERT(w.is_locked());
+            w().flags.set(F_NEED_SEND_CONFIGURABLE);
+            w().flags.clear(F_WORKER_STOP);
+            countdown_unload = NUMTICKS_COUNTDOWN_UNLOAD;
         }
     }
 
@@ -1437,7 +1546,7 @@ void active_protocol_c::file_control(uint64 utag, file_control_e fctl)
     ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((ts::int32)fctl));
 }
 
-void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize)
+void active_protocol_c::send_file(contact_id_s cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize)
 {
     ipcp->send(ipcw(AQ_FILE_SEND) << cid << utag << ts::to_utf8(filename) << filesize);
 }
@@ -1457,7 +1566,7 @@ bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *dat
     ts::aint bsz = sz;
     bsz += sizeof(data_header_s) + sizeof(fd_s);
 
-    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer((int)bsz))
+    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer(static_cast<int>(bsz)))
     {
         dh->cmd = AA_FILE_PORTION;
         fd_s *d = (fd_s *)(dh + 1);
@@ -1467,14 +1576,14 @@ bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *dat
 
         memcpy( d + 1, data, sz );
 
-        ipcc->junct.unlock_send_buffer(dh, (int)bsz);
+        ipcc->junct.unlock_send_buffer(dh, static_cast<int>(bsz));
         return true;
     }
 
     return false;
 }
 
-void active_protocol_c::avatar_data_request(int cid)
+void active_protocol_c::avatar_data_request(contact_id_s cid)
 {
     ipcp->send(ipcw(AQ_GET_AVATAR_DATA) << cid);
 }
@@ -1488,17 +1597,17 @@ void active_protocol_c::typing( const contact_key_s &ck )
 {
     ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
 
-    if (!prf().get_options().is( MSGOP_SEND_TYPING ) || ck.is_empty())
+    if (!prf_options().is( MSGOP_SEND_TYPING ) || ck.is_empty())
     {
-        g_app->F_TYPING = false;
-        typingsendcontact = 0;
+        g_app->F_TYPING(false);
+        typingsendcontact.clear();
         return;
     }
 
     ASSERT( ck.protoid == (unsigned)id );
 
-    g_app->F_TYPING = true;
-    int gidcid = ck.gidcid();
+    g_app->F_TYPING(true);
+    contact_id_s gidcid = ck.gidcid();
     if (typingsendcontact != gidcid)
         ipcp->send(ipcw(AQ_TYPING) << gidcid);
     typingsendcontact = gidcid;

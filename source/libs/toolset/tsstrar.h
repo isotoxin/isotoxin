@@ -10,8 +10,6 @@ template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACT
     typedef strings_t<TCHARACTER, S_CORE> arrtype;
     typedef array_inplace_t<str_t<TCHARACTER, S_CORE>, 8> super;
 
-    MOVABLE( is_movable<super>::value );
-
 public:
 
     strings_t() {};
@@ -65,7 +63,7 @@ public:
             int k = str.find_pos(i,separator);
             if (k < 0)
             {
-                
+
                 add(str.substr(i));
                 break;
             }
@@ -117,7 +115,7 @@ public:
         int i = 0;
         for(;;)
         {
-            int k = str.get_index(i,separator);
+            int k = str.find_pos(i,separator);
             if (k < 0)
             {
 
@@ -428,7 +426,7 @@ public:
         return super::get( index );
     }
 
-    
+
     aint find_sorted_descending(const TCHARACTER *text) const
     {
         aint index;
@@ -498,20 +496,19 @@ public:
             ++i;
         }
     }
-    
 
-    void    moveup(aint i)    
-    { 
+    void    moveup(aint i)
+    {
         if ((i > 0) && (i < super::size()))
         {
             super::move_up_unsafe(i);
         }
     }
-    void    movedown(aint i)  
-    { 
+    void    movedown(aint i)
+    {
         if (i < super::size()-1)
         {
-            super::move_down_unsafe(i); 
+            super::move_down_unsafe(i);
         }
     }
 
@@ -758,9 +755,18 @@ public:
 
 };
 
+namespace internals
+{
+    template <typename TCHARACTER, class S_CORE> struct movable< strings_t<TCHARACTER, S_CORE> >
+    {
+        typedef array_inplace_t<str_t<TCHARACTER, S_CORE>, 8> super;
+        static const bool value = movable<super>::value;
+        static const bool explicitly = movable<super>::explicitly;
+    };
+}
+
 template <typename S> struct strmap_pair_s
 {
-    MOVABLE( true );
     S k,v;
     typedef typename S::TCHAR TCHARACTER;
     int operator()( const sptr<TCHARACTER> &_k ) const
@@ -780,6 +786,11 @@ template <typename S> struct strmap_pair_s
         return !k.equals(m.k) || !v.equals(m.v);
     }
 };
+
+namespace internals
+{
+    template <typename S> struct movable< strmap_pair_s<S> > : public movable_customized_yes {};
+}
 
 template <typename S> class strmap_t : public array_inplace_t < strmap_pair_s< S >, 8 >
 {
@@ -830,7 +841,7 @@ public:
     bool unset(const sptr<TCHARACTER>&k)
     {
         ts::aint index;
-        if (find_sorted(index, k))
+        if (super::find_sorted(index, k))
         {
             super::remove_slow(index);
             return true;
@@ -840,7 +851,7 @@ public:
     S& set(const sptr<TCHARACTER>&k)
     {
         ts::aint index;
-        if (find_sorted(index, k))
+        if (super::find_sorted(index, k))
             return super::get(index).v;
 
         auto &i = super::insert(index);
@@ -857,14 +868,14 @@ public:
     const S *find(const sptr<TCHARACTER>&k) const
     {
         ts::aint index;
-        if (find_sorted(index, k))
+        if (super::find_sorted(index, k))
             return &super::get(index).v;
         return nullptr;
     }
     S *find(const sptr<TCHARACTER>&k)
     {
         ts::aint index;
-        if (find_sorted(index, k))
+        if (super::find_sorted(index, k))
             return &super::get(index).v;
         return nullptr;
     }
@@ -887,7 +898,7 @@ public:
     {
         return !(*this == m);
     }
-    
+
 };
 
 typedef strmap_t<str_c> astrmap_c;

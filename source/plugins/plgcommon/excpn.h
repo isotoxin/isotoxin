@@ -3,7 +3,7 @@
 
 typedef BOOL (WINAPI * MINIDUMPWRITEDUMP)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
 
-typedef void(*GET_CALLSTACK_PROC)(str_c&);
+typedef void(*GET_CALLSTACK_PROC)(std::string&);
 
 
 class exception_operator_c : public StackWalker
@@ -11,7 +11,7 @@ class exception_operator_c : public StackWalker
 private:
     spinlock::long3264 lock = 0;
     MINIDUMP_TYPE dump_type;
-	mutable sstr_t<32768> output;
+	mutable std::sstr_t<32768> output;
 
 	static exception_operator_c self;
 	exception_operator_c();
@@ -36,7 +36,7 @@ public:
     {
         ::SetUnhandledExceptionFilter(&exception_filter);
     }
-    static swstr_t<MAX_PATH> dump_filename;
+    static std::swstr_t<MAX_PATH> dump_filename;
 };
 
 #define EXCEPTIONFILTER() exception_operator_c::exception_filter(GetExceptionInformation())

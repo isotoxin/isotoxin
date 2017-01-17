@@ -138,11 +138,6 @@
     <ClCompile Include="src\cairo-user-font.c" />
     <ClCompile Include="src\cairo-version.c" />
     <ClCompile Include="src\cairo-wideint.c" />
-    <ClCompile Include="src\cairo-win32-device.c" />
-    <ClCompile Include="src\cairo-win32-display-surface.c" />
-    <ClCompile Include="src\cairo-win32-font.c" />
-    <ClCompile Include="src\cairo-win32-gdi-compositor.c" />
-    <ClCompile Include="src\cairo-win32-surface.c" />
     <ClCompile Include="src\cairo.c" />
   </ItemGroup>
   <ItemGroup>

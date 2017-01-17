@@ -45,6 +45,7 @@ struct preloaded_stuff_s
     const theme_image_s* online_some = nullptr;
     
     ts::shared_ptr<button_desc_s> callb;
+    ts::shared_ptr<button_desc_s> callvb;
     ts::shared_ptr<button_desc_s> fileb;
 
     ts::shared_ptr<button_desc_s> editb;
@@ -90,8 +91,6 @@ struct autoupdate_params_s
 
 struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 {
-    MOVABLE(true);
-
     static const int BPSSV_WAIT_FOR_ACCEPT = -3;
     static const int BPSSV_PAUSED_BY_REMOTE = -2;
     static const int BPSSV_PAUSED_BY_ME = -1;
@@ -102,9 +101,8 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
     uint64 write_buffer_offset = 0;
     ts::buf0_c write_buffer;
 
-    struct job_s
+    struct job_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         DUMMY( job_s );
         uint64 offset = 0xFFFFFFFFFFFFFFFFull;
         int sz = 0;
@@ -112,7 +110,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
         job_s() {}
     };
 
-    /*virtual*/ int iterate() override;
+    /*virtual*/ int iterate(ts::task_executor_c *e) override;
     /*virtual*/ void done( bool canceled ) override;
     /*virtual*/ void result() override;
 
@@ -198,6 +196,7 @@ extern application_c *g_app;
 
 class application_c : public gui_c, public sound_capture_handler_c
 {
+    typedef gui_c super;
     bool b_customize(RID r, GUIPARAM param);
 
     ts::tbuf_t<s3::Format> avformats;
@@ -210,6 +209,7 @@ public:
     static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_HEAD = PEF_FREEBITSTART << 2;
     static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_MSG = PEF_FREEBITSTART << 3;
     static const ts::flags32_s::BITS PEF_SHOW_HIDE_EDITOR = PEF_FREEBITSTART << 4;
+    static const ts::flags32_s::BITS PEF_UPDATE_PROTOS_HEAD = PEF_FREEBITSTART << 5;
     
     
     static const ts::flags32_s::BITS PEF_APP = (ts::flags32_s::BITS)(-1) & (~(PEF_FREEBITSTART-1));
@@ -247,51 +247,81 @@ public:
     /*virtual*/ void app_path_expand_env(ts::wstr_c &path) override;
     /*virtual*/ void do_post_effect() override;
     /*virtual*/ void app_font_par(const ts::str_c&, ts::font_params_s&fprm) override;
+    /*virtual*/ guirect_c * app_create_shade(const ts::irect &r) override;
 
     ///////////// application_c itself
 
     ts::safe_ptr<gui_contactlist_c> contactlist;
     RID main;
 
+
+    struct uap : public ts::movable_flag<true>
+    {
+        ts::buf0_c usedids;
+        ts::uint16 apid;
+    };
+
+    spinlock::syncvar< ts::array_inplace_t< uap, 0 > > uaps; // no need to sync
+
+    void getuap(ts::uint16 apid, ipcw & w);
+    void setuap(ts::uint16 apid, ts::aint id);
+
     void apply_ui_mode( bool split_ui );
 
     volatile bool F_INDICATOR_CHANGED = false; // whole byte due it modified from non-main thread
+    volatile bool F_AUDIO_MUTED = false; // whole byte due it modified from non-main thread
 
-    unsigned F_INITIALIZATION : 1;
-    unsigned F_NEWVERSION : 1;
-    unsigned F_NONEWVERSION : 1;
-    unsigned F_UNREADICON : 1;
-    unsigned F_NEED_BLINK_ICON : 1;
-    unsigned F_BLINKING_FLAG : 1;
-    unsigned F_BLINKING_ICON : 1;
-    unsigned F_SETNOTIFYICON : 1; // once
-    unsigned F_OFFLINE_ICON : 1;
-    unsigned F_ALLOW_AUTOUPDATE : 1;
-    unsigned F_PROTOSORTCHANGED : 1;
-    unsigned F_READONLY_MODE : 1;
-    unsigned F_READONLY_MODE_WARN : 1;
-    unsigned F_MODAL_ENTER_PASSWORD : 1;
-    unsigned F_TYPING : 1; // any typing
-    unsigned F_CAPTURE_AUDIO_TASK : 1;
-    unsigned F_CAPTURING : 1;
-    unsigned F_SHOW_CONTACTS_IDS : 1;
-    unsigned F_SHOW_LOST_CONTACTS : 1;
-    unsigned F_SHOW_SPELLING_WARN : 1;
-    unsigned F_MAINRECTSUMMON : 1;
-    unsigned F_SPLIT_UI : 1;
-    unsigned F_BACKUP_PROFILE : 1;
+#define APPFLAGS \
+    APPF( NEWVERSION, false ) \
+    APPF( NONEWVERSION, false ) \
+    APPF( UNREADICON, false ) \
+    APPF( NEED_BLINK_ICON, false ) \
+    APPF( BLINKING_FLAG, false ) \
+    APPF( BLINKING_ICON, false ) \
+    APPF( SETNOTIFYICON, false ) \
+    APPF( OFFLINE_ICON, true ) \
+    APPF( ALLOW_AUTOUPDATE, false ) \
+    APPF( PROTOSORTCHANGED, true ) \
+    APPF( READONLY_MODE, g_commandline().readonlymode ) \
+    APPF( READONLY_MODE_WARN, g_commandline().readonlymode ) \
+    APPF( MODAL_ENTER_PASSWORD, false ) \
+    APPF( TYPING, false ) \
+    APPF( CAPTURE_AUDIO_TASK, false ) \
+    APPF( CAPTURING, false ) \
+    APPF( SHOW_CONTACTS_IDS, false ) \
+    APPF( SHOW_SPELLING_WARN, false ) \
+    APPF( MAINRECTSUMMON, false ) \
+    APPF( SPLIT_UI, false ) \
+    APPF( BACKUP_PROFILE, false ) \
+
+    enum {
+#define APPF(n,v) FLAG_##n,
+        APPFLAGS
+#undef APPF
+        FLAG_LAST,
+    };
+
+    TS_STATIC_CHECK(FLAG_LAST <= 31, "too many flags");
+
+#define APPF(n,v) static const ts::flags32_s::BITS FLAGBIT_##n = F_FREEBITSTART << FLAG_##n;
+    APPFLAGS
+#undef APPF
+
+#define APPF(n,v) bool F_##n() const {return m_flags.is(FLAGBIT_##n);} void F_##n(bool vv) { m_flags.init(FLAGBIT_##n, vv); }
+    APPFLAGS
+#undef APPF
 
 
     bool on_init();
     bool on_exit();
     bool on_loop();
     void on_mouse( ts::mouse_event_e me, const ts::ivec2 &clpos /* relative to wnd */, const ts::ivec2 &scrpos );
-    bool on_char( wchar_t c );
+    bool on_char( ts::wchar c );
     bool on_keyboard( int scan, bool dn, int casw );
 
     bool handle_keyboard( int scan, bool dn, int casw );
 
-    GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
+    GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SL );
     GM_RECEIVER( application_c, ISOGM_CHANGED_SETTINGS );
     GM_RECEIVER( application_c, GM_UI_EVENT );
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
@@ -310,23 +340,26 @@ public:
 
     ts::array_del_t<file_transfer_s, 2> m_files;
 
-    struct blinking_reason_s
+    struct blinking_reason_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
-        time_t last_update = now();
+        time_t last_update = ts::now();
         contact_key_s historian;
         ts::Time nextblink = ts::Time::undefined();
+        ts::Time acblinking_stop = ts::Time::undefined();
         int unread_count = 0;
         ts::flags32_s flags;
         ts::tbuf_t<uint64> ftags_request, ftags_progress;
 
         static const ts::flags32_s::BITS F_BLINKING_FLAG = SETBIT(0);
         static const ts::flags32_s::BITS F_CONTACT_BLINKING = SETBIT(1);
-        static const ts::flags32_s::BITS F_RINGTONE = SETBIT(2);
-        static const ts::flags32_s::BITS F_INVITE_FRIEND = SETBIT(3);
-        static const ts::flags32_s::BITS F_RECALC_UNREAD = SETBIT(4);
-        static const ts::flags32_s::BITS F_NEW_VERSION = SETBIT(5);
-        static const ts::flags32_s::BITS F_REDRAW = SETBIT(6);
+        static const ts::flags32_s::BITS F_REDRAW = SETBIT(2);
+
+        // reasons
+        static const ts::flags32_s::BITS F_RINGTONE = SETBIT(3);
+        static const ts::flags32_s::BITS F_INVITE_FRIEND = SETBIT(4);
+        static const ts::flags32_s::BITS F_RECALC_UNREAD = SETBIT(5);
+        static const ts::flags32_s::BITS F_NEW_VERSION = SETBIT(6);
+        static const ts::flags32_s::BITS F_CONFERENCE_AUDIO = SETBIT(7);
 
         void do_recalc_unread_now();
         bool tick();
@@ -336,11 +369,11 @@ public:
         bool is_blank() const
         {
             if (contacts().find(historian) == nullptr) return true;
-            return unread_count == 0 && ftags_request.count() == 0 && ftags_progress.count() == 0 && (flags.__bits & ~(F_CONTACT_BLINKING|F_BLINKING_FLAG)) == 0;
+            return unread_count == 0 && ftags_request.count() == 0 && ftags_progress.count() == 0 && (flags.__bits & ~(F_CONTACT_BLINKING|F_BLINKING_FLAG|F_REDRAW)) == 0;
         }
         bool notification_icon_need_blink() const
         {
-            return flags.is(F_RINGTONE | F_INVITE_FRIEND) || unread_count > 0 || is_file_download_request();
+            return flags.is(F_RINGTONE | F_INVITE_FRIEND | F_CONFERENCE_AUDIO) || unread_count > 0 || is_file_download_request();
         }
         bool contact_need_blink() const
         {
@@ -401,6 +434,17 @@ public:
             }
         }
 
+        void conference_audio(bool f = true)
+        {
+            if (flags.is(F_CONFERENCE_AUDIO) != f)
+            {
+                flags.init(F_CONFERENCE_AUDIO, f);
+                flags.set(F_REDRAW);
+            }
+            if (f)
+                acblinking_stop = ts::Time::current() + 5000;
+        }
+
         void recalc_unread()
         {
             flags.set(F_RECALC_UNREAD);
@@ -408,11 +452,11 @@ public:
 
         void up_unread()
         {
-            last_update = now();
+            last_update = ts::now();
             ++unread_count;
             flags.set(F_REDRAW);
             flags.clear( F_RECALC_UNREAD );
-            g_app->F_SETNOTIFYICON = true;
+            g_app->F_SETNOTIFYICON(true);
         }
 
         void set_unread(int unread)
@@ -421,7 +465,7 @@ public:
             {
                 flags.set(F_REDRAW);
                 unread_count = unread;
-                g_app->F_SETNOTIFYICON = true;
+                g_app->F_SETNOTIFYICON(true);
             }
         }
 
@@ -478,7 +522,7 @@ public:
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
-    bool flashingicon() const {return F_UNREADICON;};
+    bool flashingicon() const {return F_UNREADICON();}
     bool update_state();
 public:
 
@@ -561,11 +605,6 @@ public:
     bool b_restart(RID, GUIPARAM);
     bool b_install(RID, GUIPARAM);
     
-    void newversion(bool nv) { F_NEWVERSION = nv; };
-    void nonewversion(bool nv) { F_NONEWVERSION = nv; };
-    bool newversion() const {return F_NEWVERSION;}
-    bool nonewversion() const {return F_NONEWVERSION;}
-
     static ts::str_c appver();
     static int appbuild();
     void set_notification_icon();
@@ -638,8 +677,8 @@ public:
     void check_capture();
     bool capturing() const
     {
-        if (F_CAPTURE_AUDIO_TASK) return false;
-        return F_CAPTURING;
+        if (F_CAPTURE_AUDIO_TASK()) return false;
+        return F_CAPTURING();
     }
 
     mediasystem_c &mediasystem() {return m_mediasystem;};
@@ -683,6 +722,7 @@ public:
     void update_buttons_head() { m_post_effect.set(PEF_UPDATE_BUTTONS_HEAD); };
     void update_buttons_msg() { m_post_effect.set(PEF_UPDATE_BUTTONS_MSG); };
     void hide_show_messageeditor() { m_post_effect.set(PEF_SHOW_HIDE_EDITOR); };
+    void update_protos_head() { m_post_effect.set(PEF_UPDATE_PROTOS_HEAD); };
 
 };
 

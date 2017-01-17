@@ -475,7 +475,7 @@ public:
 
     template <typename T> T tpop()
     {
-        ASSERT(core.size() >= sizeof(T));
+        ASSERT(core.size() >= (aint)sizeof(T));
         make_pod<T> t;
         memcpy( &t.get(), tend<T>()-1, sizeof(T) );
         set_size( size() - sizeof(T), true );
@@ -512,13 +512,13 @@ public:
         return *this;
     }
 
-    template<typename CORE2> bool operator==(const buf_t<CORE2> & tb)
+    template<typename CORE2> bool operator==(const buf_t<CORE2> & tb) const
     {
         if (size() != tb.size()) return false;
         return blk_cmp(data(), tb.data(), size());
     }
 
-    template<typename CORE2> bool operator!=(const buf_t<CORE2> & tb)
+    template<typename CORE2> bool operator!=(const buf_t<CORE2> & tb) const
     {
         if (size() != tb.size()) return true;
         return !blk_cmp( data(), tb.data(), size() );
@@ -855,8 +855,6 @@ public:
 
 template <typename T, typename CORE = BUFFER_RESIZABLE<sizeof(T) * 32, TS_DEFAULT_ALLOCATOR> > class tbuf_t : public buf_t< CORE > // only simple types can be used due memcpy
 {
-    MOVABLE( true );
-
     static const size_t tsize = sizeof(T);
     TS_STATIC_CHECK(is_movable<T>::value, "wrong type for tbuf_t! use array_c");
     
@@ -1254,6 +1252,14 @@ public:
     }
 };
 
+namespace internals
+{
+    template <class CORE> struct movable< buf_t< CORE > >
+    {
+        static const bool value = movable<CORE>::value;
+        static const bool explicitly = movable<CORE>::explicitly;
+    };
+}
 
 typedef buf_t< BUFFER_SIZE_ONLY<TS_DEFAULT_ALLOCATOR> > buf0_c;
 typedef buf_t< BUFFER_RESIZABLE<1024, TS_DEFAULT_ALLOCATOR> > buf_c;
@@ -1343,8 +1349,6 @@ public:
 
 template< typename T, aint GRANULA > class struct_buf_t
 {
-    MOVABLE( false );
-
     struct sset_s;
     struct free_item_s
     {
@@ -1368,7 +1372,7 @@ template< typename T, aint GRANULA > class struct_buf_t
 
         sset_s()
         {
-            for ( int i = 0; i < ( ARRAY_SIZE( items ) - 1 ); ++i )
+            for ( aint i = 0; i < static_cast<aint>( ARRAY_SIZE( items ) ) - 1; ++i )
             {
                 items[ i ].next = items + i + 1;
             }
@@ -1380,7 +1384,7 @@ template< typename T, aint GRANULA > class struct_buf_t
             ASSERT( free_items_count == ARRAY_SIZE( items ) );
         }
 
-        template<class TT, class... _Valty> TT * acquire( _Valty&&... _Val )
+        template<typename TT, class... _Valty> TT * acquire( _Valty&&... _Val )
         {
             if ( free_items_list )
             {
@@ -1422,7 +1426,7 @@ public:
         TS_STATIC_CHECK( sizeof( TT ) == sizeof(T), "check size" );
         ASSERT( set_first );
 
-        if ( TT * t = set_first->acquire<TT>( std::forward<_Valty>( _Val )... ) )
+        if ( TT * t = set_first->template acquire<TT, _Valty...>( std::forward<_Valty>( _Val )... ) )
         {
             if ( set_first->free_items_count == 0 )
             {
@@ -1436,7 +1440,7 @@ public:
 
         sset_s *x = TSNEW( sset_s );
         LIST_INSERT( x, set_first, set_last, prev, next ); // insert into begining of list
-        return x->acquire<TT>( std::forward<_Valty>( _Val )... );
+        return x->template acquire<TT, _Valty...>( std::forward<_Valty>( _Val )... );
     }
     template<class... _Valty> T *alloc( _Valty&&... _Val )
     {
@@ -1468,9 +1472,10 @@ public:
     }
 };
 
-
-namespace internal
+namespace internals
 {
+    template <typename T, aint N> struct movable< struct_buf_t< T, N > > : public movable_customized_no {};
+
     template <size_t BITS_PER_ELEMENT> struct minrvsize
     {
         enum
@@ -1483,7 +1488,7 @@ namespace internal
     };
 };
 
-template< size_t BITS_PER_ELEMENT, size_t NUM_OF_ELEMENTS, typename TYPEOFRV = typename sztype< internal::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE >::type > class packed_buf_c
+template< size_t BITS_PER_ELEMENT, size_t NUM_OF_ELEMENTS, typename TYPEOFRV = typename sztype< internals::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE >::type > class packed_buf_c
 {
 
     enum
@@ -1515,7 +1520,7 @@ public:
     for example, for 9-bit element 2-byte read required; for 10-bit element - minimum 3-byte read required
     */
 
-    TS_STATIC_CHECK( RVSIZE >= internal::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE, "element too large" );
+    TS_STATIC_CHECK( RVSIZE >= internals::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE, "element too large" );
 
     TYPEOFRV get(aint index) const
     {

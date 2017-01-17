@@ -3,9 +3,8 @@
 
 //-V::550
 
-struct rsvg_working_surf_s
+struct rsvg_working_surf_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
     ts::bitmap_c bmp;
     rsvg_working_surf_s( const ts::bitmap_c &bmp ):bmp( bmp ) {}
     rsvg_working_surf_s(const ts::ivec2&sz)

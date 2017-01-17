@@ -15,26 +15,22 @@
 
 #include "../appver.inl"
 
-#define FUNC0( rt, fn ) rt __stdcall fn() { return lan_engine::get()->fn(); }
-#define FUNC1( rt, fn, p0 ) rt __stdcall fn(p0 pp0) { return lan_engine::get()->fn(pp0); }
-#define FUNC2( rt, fn, p0, p1 ) rt __stdcall fn(p0 pp0, p1 pp1) { return lan_engine::get()->fn(pp0, pp1); }
+#define FUNC1( rt, fn, p0 ) rt PROTOCALL fn(p0 pp0) { return lan_engine::get()->fn(pp0); }
+#define FUNC2( rt, fn, p0, p1 ) rt PROTOCALL fn(p0 pp0, p1 pp1) { return lan_engine::get()->fn(pp0, pp1); }
 PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 
 proto_functions_s funcs = 
 {
-#define FUNC0( rt, fn ) &fn,
 #define FUNC1( rt, fn, p0 ) &fn,
 #define FUNC2( rt, fn, p0, p1 ) &fn,
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 };
 
-proto_functions_s* __stdcall api_handshake( host_functions_s *hf )
+proto_functions_s* PROTOCALL api_handshake( host_functions_s *hf )
 {
     if (ASSERT(lan_engine::get(false) == nullptr))
     {
@@ -48,7 +44,7 @@ proto_functions_s* __stdcall api_handshake( host_functions_s *hf )
     return &funcs;
 }
 
-void __stdcall api_getinfo( proto_info_s *info )
+void PROTOCALL api_getinfo( proto_info_s *info )
 {
 #define NL "\n"
     static const char *strings[ _is_count_ ] =

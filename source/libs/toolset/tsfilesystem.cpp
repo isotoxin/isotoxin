@@ -32,7 +32,7 @@ namespace
         { CONSTWSTR( "STARTUP" ), SPTH_STARTUP_MENU },
         { CONSTWSTR( "COMMONSTARTUP" ), SPTH_STARTUP_MENU_COMMON },
 #endif // _WIN32
-        
+
     };
 
     int get_system_path( ts::wchar *path, sp_e spth )
@@ -150,7 +150,7 @@ namespace
 }
 
 #ifdef _NIX
-static int GetEnvironmentVariableW(const ts::wsptr &name, ts::wchar *buf, int bufl)
+int GetEnvironmentVariableW(const ts::wsptr &name, ts::wchar *buf, int bufl)
 {
     if ( const char *vv = getenv( ts::to_utf8(name) ) )
     {
@@ -283,8 +283,8 @@ namespace ts
 #ifdef _NIX
         if ( !__is_slash( path.get_char( 0 ) ) )
         {
-            char wd[ PATH_MAX ];
-            if ( const char *d = getwd( wd ) )
+            char wd[ MAX_PATH_LENGTH ];
+            if ( const char *d = getcwd( wd, sizeof(wd)-1 ) )
             {
                 ts::wstr_c dd = ts::from_utf8( d );
                 __append_slash_if_not( dd );
@@ -443,7 +443,7 @@ namespace ts
         dirs.add(path);
         return;
     }
-        
+
     while ((ent = readdir(dir)) != nullptr)
     {
         pstr_c sFileName(asptr( ent->d_name ));
@@ -499,7 +499,7 @@ namespace ts
 			dirs.get(i).replace( 0, pfl, wsptr(path_clone.cstr(), pfc) );
 		}
 		dirs.sort(true);
-		
+
         for (const auto & s : dirs)
 			make_path( s, 0 );
 
@@ -572,7 +572,7 @@ namespace ts
 			}
 
 			if (!PathFileExistsW(path.cstr()))
-				if (0 == CreateDirectoryW(path.cstr(), nullptr)) 
+				if (0 == CreateDirectoryW(path.cstr(), nullptr))
                     return false;
 #endif // _WIN32
 #ifdef _NIX
@@ -621,7 +621,7 @@ namespace ts
             return CRSLT_FAIL;
         }
 
-        int dest = open( to_utf8( newfn ), O_WRONLY | O_CREAT /*| O_TRUNC/**/, (stat_source.st_mode & 0777) );
+        int dest = open( to_utf8( newfn ), O_WRONLY | O_CREAT /*| O_TRUNC*/, (stat_source.st_mode & 0777) );
         if (dest == -1)
         {
             close( source );
@@ -640,7 +640,8 @@ namespace ts
 
         return CRSLT_OK;
     }
-    bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn )
+
+    bool TSCALL ren_or_move_file( const wsptr &existingfn, const wsptr &newfn )
     {
 #ifdef _WIN32
         return MoveFileW( tmp_wstr_c(existingfn), tmp_wstr_c( newfn ) ) != 0;
@@ -837,10 +838,21 @@ namespace ts
         return space.QuadPart;
 #endif // _WIN32
 #ifdef _NIX
-        statvfs sfs;
+        struct statvfs sfs;
         if (statvfs( to_utf8(path), &sfs ) != -1)
             return (unsigned long long)sfs.f_bsize * sfs.f_bfree;
         return 0;
+#endif //_NIX
+    }
+
+    aint  TSCALL get_exe_full_name( char *buf, aint buflen )
+    {
+        buf[0] = 0;
+#ifdef _WIN32
+        return GetModuleFileNameA( nullptr, buf, static_cast<DWORD>(buflen) );
+#endif // _WIN32
+#ifdef _NIX
+        return readlink( "/proc/self/exe", buf, buflen - 1 );
 #endif //_NIX
     }
 
@@ -1041,7 +1053,7 @@ namespace ts
         wstrings_c sa(path, NATIVE_SLASH);
         path.set_length(0);
 
-        
+
         for (int i = pwstr_c(ipath).begins(CONSTWSTR("\\\\")) ? (path.set(CONSTWSTR("\\\\")).append(sa.get(2)).append_char(NATIVE_SLASH), 3) : 0; i < sa.size(); ++i)
         {
             ts::wstr_c prevpath = path;
@@ -1264,7 +1276,7 @@ namespace ts
         efd_s &d = (efd_s &)data;
         return  d.fn;
     }
-    const wstr_c *enum_files_c::operator->() const 
+    const wstr_c *enum_files_c::operator->() const
     {
         efd_s &d = (efd_s &)data;
         return &d.fn;
@@ -1318,50 +1330,94 @@ namespace ts
 #endif
 
 #ifdef _NIX
-    ts::wstr_c f_create( const ts::wsptr&fn )
+
+    TS_STATIC_CHECK( sizeof(off_t) == 8, "off_t size" );
+
+    static str_c fncvt( const wsptr&fn )
     {
-        DEBUG_BREAK();
+        if ( fn.l )
+        {
+            if (fn.s[0] != '~' )
+                return to_utf8(fn);
+
+            const char *homedir;
+            if ((homedir = getenv("HOME")) == nullptr)
+                homedir = getpwuid(getuid())->pw_dir;
+            if (homedir)
+                return str_c( asptr(homedir), to_utf8(fn.skip(1)) );
+
+            return to_utf8(fn);
+
+        }
+        return str_c();
+    }
+
+    wstr_c f_create( const wsptr&fn )
+    {
+        str_c n = fncvt(fn);
+        int fh = open( n, O_CREAT|O_EXCL, 0666 );
+        if ( fh < 0 )
+        {
+            if (EEXIST == errno)
+                return wstr_c( CONSTWSTR("Already exists") ); // TODO format error string by system
+
+            return wstr_c( CONSTWSTR("Create file failed") ); // TODO format error string by system
+        }
+        close(fh);
+        return wstr_c();
     }
     void *f_open( const ts::wsptr&fn )
     {
-        DEBUG_BREAK();
+        return reinterpret_cast<void *>(1 + open( fncvt(fn), O_RDONLY ));
     }
     void *f_recreate( const ts::wsptr&fn )
     {
-        DEBUG_BREAK();
+        return reinterpret_cast<void *>(1 + open( fncvt(fn), O_TRUNC|O_CREAT|O_RDWR, 0666 ));
     }
     void *f_continue( const ts::wsptr&fn )
     {
-        DEBUG_BREAK();
+        return reinterpret_cast<void *>(1 + open( fncvt(fn), O_RDWR ));
     }
     uint64 f_size( void *h )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        struct stat s;
+        if ( -1 == fstat( fh, &s ))
+            return 0;
+        return s.st_size;
     }
     aint f_read( void *h, void *ptr, aint sz )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        return read(fh, ptr, sz);
     }
     aint f_write( void *h, const void *ptr, aint sz )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        return write(fh, ptr, sz);
     }
     void f_close( void *h )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        close(fh);
     }
     bool f_set_pos( void *h, uint64 pos )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        return -1 != lseek64(fh, pos, SEEK_SET);
     }
     uint64 f_get_pos( void *h )
     {
-        DEBUG_BREAK();
-
+        int fh = ptr2int(h) - 1;
+        return lseek64(fh, 0, SEEK_CUR);
     }
     uint64 f_time_last_write( void *h )
     {
-        DEBUG_BREAK();
+        int fh = ptr2int(h) - 1;
+        struct stat s;
+        if ( -1 == fstat( fh, &s ))
+            return 0;
+        return (uint64)s.st_mtime * 10000000;
     }
 
 
@@ -1393,8 +1449,7 @@ namespace ts
         return bIsWow64 != FALSE;
 #endif
 #ifdef _NIX
-        UNFINISHED( "check 32 or 64 bit linux" );
-        DEBUG_BREAK();
+        STOPSTUB( "check 32 or 64 bit linux" );
         return false;
 #endif
 #endif

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 
+#ifdef _WIN32
 #pragma USELIB("ipc")
 #pragma USELIB("plgcommon")
 
@@ -20,26 +21,47 @@
 #include "libsodium/src/libsodium/include/sodium.h"
 #pragma warning (pop)
 
+#endif
+#ifdef _NIX
+#include <sodium.h>
+#endif
+
+static bitset_s allowed_ids;
+
+static int PROTOCALL find_free_id()
+{
+    aint i = allowed_ids.find_first_0();
+    if (i >= 256 * 256 * 256) return -1;
+    allowed_ids.set_bit( i, true );
+    return static_cast<int>(i);
+}
+
+void PROTOCALL use_id(int i)
+{
+    allowed_ids.set_bit(i, true);
+}
+
 ipc::ipc_junction_s *ipcj = nullptr;
 static bool panica = false;
 
-static void __stdcall operation_result(long_operation_e op, int rslt);
-static void __stdcall update_contact(const contact_data_s *);
-static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen);
-static void __stdcall delivered(u64 utag);
-static void __stdcall save();
-static void __stdcall on_save(const void *data, int dlen, void *param);
-static void __stdcall export_data(const void *data, int dlen);
-static void __stdcall av_data(int gid, int cid, const media_data_s *data);
-static void __stdcall free_video_data(const void *ptr);
-static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so);
-static void __stdcall configurable(int n, const char **fields, const char **values);
-static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
-static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
-static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
-static void __stdcall file_control(u64 utag, file_control_e fctl);
-static void __stdcall typing(int gid, int cid);
-static void __stdcall telemetry( telemetry_e k, const void *data, int datasize );
+static void PROTOCALL operation_result(long_operation_e op, int rslt);
+static void PROTOCALL connection_bits(int cbits);
+static void PROTOCALL update_contact(const contact_data_s *);
+static void PROTOCALL message(message_type_e mt, contact_id_s gid, contact_id_s cid, u64 create_time, const char *msgbody_utf8, int mlen);
+static void PROTOCALL delivered(u64 utag);
+static void PROTOCALL save();
+static void PROTOCALL on_save(const void *data, int dlen, void *param);
+static void PROTOCALL export_data(const void *data, int dlen);
+static void PROTOCALL av_data(contact_id_s gid, contact_id_s cid, const media_data_s *data);
+static void PROTOCALL free_video_data(const void *ptr);
+static void PROTOCALL av_stream_options(contact_id_s gid, contact_id_s cid, const stream_options_s *so);
+static void PROTOCALL configurable(int n, const char **fields, const char **values);
+static void PROTOCALL avatar_data(contact_id_s cid, int tag, const void *avatar_body, int avatar_body_size);
+static void PROTOCALL incoming_file(contact_id_s cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
+static bool PROTOCALL file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
+static void PROTOCALL file_control(u64 utag, file_control_e fctl);
+static void PROTOCALL typing(contact_id_s gid, contact_id_s cid);
+static void PROTOCALL telemetry( telemetry_e k, const void *data, int datasize );
 
 static void fix_pf( proto_info_s &pi )
 {
@@ -53,7 +75,7 @@ struct protolib_s
     HMODULE protolib;
     proto_functions_s *functions;
 
-    cmd_result_e load(const wchar_t *protolibname, proto_info_s& pi)
+    cmd_result_e load(const std::widechar *protolibname, proto_info_s& pi)
     {
         protolib = LoadLibraryW(protolibname);
         if (protolib)
@@ -62,6 +84,10 @@ struct protolib_s
             if (!gi) return CR_FUNCTION_NOT_FOUND;
 
             gi(&pi);
+
+            if (pi.plugin_interface_ver != PLUGIN_INTERFACE_VER)
+                return CR_MODULE_VERSION_MISMATCH;
+
             fix_pf( pi );
 
             handshake_pf handshake = (handshake_pf)GetProcAddress(protolib, "api_handshake");
@@ -70,6 +96,7 @@ struct protolib_s
                 functions = handshake( &hostfunctions );
                 functions->logging_flags(g_logging_flags);
                 functions->telemetry_flags( g_telemetry_flags );
+                use_id(0); // make 0 cid unusable 
 
             } else
             {
@@ -92,7 +119,7 @@ struct protolib_s
     {
         if (protolib)
         {
-            functions->goodbye();
+            functions->app_signal(APPS_GOODBYE);
             FreeLibrary(protolib);
         }
     }
@@ -101,6 +128,7 @@ struct protolib_s
 {
     {
         operation_result,
+        connection_bits,
         update_contact,
         message,
         delivered,
@@ -117,6 +145,8 @@ struct protolib_s
         file_control,
         typing,
         telemetry,
+        find_free_id,
+        use_id,
     },
     nullptr, // protolib
     nullptr, // functions
@@ -267,13 +297,6 @@ struct state_s
 
 spinlock::syncvar<state_s> state;
 
-struct data_block_s
-{
-    const void *data;
-    int datasize;
-    data_block_s(const void *data, int datasize):data(data), datasize(datasize) {}
-};
-
 struct IPCW
 {
     ipcw *w;
@@ -287,19 +310,19 @@ struct IPCW
     }
 
     template<typename T> struct put2buf { static void put( ipcw *w, const T &v ) { w->add<T>() = v; } };
-    template<> struct put2buf<asptr> { static void put( ipcw *w, const asptr &s ) { w->add(s); } };
-    template<> struct put2buf<wsptr> { static void put( ipcw *w, const wsptr &s ) { w->add(s); } };
-    template<> struct put2buf< std::vector<char, ph_allocator> >
+    template<> struct put2buf<std::asptr> { static void put( ipcw *w, const std::asptr &s ) { w->add(s); } };
+    template<> struct put2buf<std::wsptr> { static void put( ipcw *w, const std::wsptr &s ) { w->add(s); } };
+    template<> struct put2buf<byte_buffer>
     {
-        static void put( ipcw *w, const std::vector<char, ph_allocator> &v )
+        static void put( ipcw *w, const byte_buffer &v )
         {
             w->add<i32>() = (i32)v.size();
             if (v.size()) w->add( v.data(), v.size() );
         }
     };
-    template<> struct put2buf<data_block_s>
+    template<> struct put2buf<bytes>
     {
-        static void put( ipcw *w, const data_block_s &d)
+        static void put( ipcw *w, const bytes &d)
         {
             w->add<i32>() = (i32)d.datasize;
             if (d.datasize) w->add( d.data, d.datasize );
@@ -508,11 +531,11 @@ int CALLBACK WinMain(
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "../appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
-    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(), 
+    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), std::wstr_c(STD_WSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(),
 #ifdef MODE64
-        CONSTWSTR( "x64.dmp" ) );
+        STD_WSTR( "x64.dmp" ) );
 #else
-        CONSTWSTR( "dmp" ) );
+        STD_WSTR( "dmp" ) );
 #endif // MODE64                   
 #endif
 
@@ -522,9 +545,9 @@ int CALLBACK WinMain(
         return 0;
 }
 
-wstr_c mypath()
+std::wstr_c mypath()
 {
-    wstr_c path;
+    std::wstr_c path;
     path.set_length(2048 - 8);
     int len = GetModuleFileNameW(nullptr, path.str(), 2048 - 8);
     path.set_length(len);
@@ -546,7 +569,7 @@ inline bool check_loaded(int cmd, bool f)
 {
     if (!f)
     {
-        IPCW(HA_CMD_STATUS) << cmd << (int)CR_MODULE_NOT_FOUND;
+        IPCW(HA_CMD_STATUS) << cmd << static_cast<i32>(CR_MODULE_NOT_FOUND);
     }
 
     return f;
@@ -564,13 +587,13 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     case AQ_GET_PROTOCOLS_LIST:
         {
             IPCW w(HA_PROTOCOLS_LIST);
-            auto cnt = w.w->reserve<int>();
+            auto cnt = w.w->reserve<i32>();
 
-            wstr_c path = mypath();
-            int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
+            std::wstr_c path = mypath();
+            int truncp = path.find_last_pos_of(STD_WSTR("/\\"));
             if (truncp>0)
             {
-                path.set_length(truncp+1).append(CONSTWSTR("proto.*.dll"));
+                path.set_length(truncp+1).append(STD_WSTR("proto.*.dll"));
 
             
                 WIN32_FIND_DATAW find_data;
@@ -595,7 +618,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
                         w << numofstrings;
                         for ( int i = 0; i < numofstrings; ++i )
-                            w << asptr( info.strings[ i ] );
+                            w << std::asptr( info.strings[ i ] );
 
                         ++cnt;
                     }
@@ -611,15 +634,15 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     case AQ_SET_PROTO:
         {
             ipcr r(d->get_reader());
-            tmp_str_c proto = r.getastr();
-            tmp_wstr_c path = mypath();
+            std::string proto( r.getastr() );
+            std::wstr_c path = mypath();
             proto_info_s pi;
 
-            int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
+            int truncp = path.find_last_pos_of(STD_WSTR("/\\"));
             cmd_result_e rst = CR_MODULE_NOT_FOUND;
             if (truncp > 0)
             {
-                path.set_length(truncp + 1).append(CONSTWSTR("proto.")).appendcvt(proto).append(CONSTWSTR(".dll"));
+                path.set_length(truncp + 1).append(STD_WSTR("proto.")).appendcvt(proto).append(STD_WSTR(".dll"));
 
                 WIN32_FIND_DATAW find_data;
                 HANDLE fh = FindFirstFileW(path, &find_data);
@@ -630,11 +653,11 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 #if defined _DEBUG || defined _CRASH_HANDLER
                     if (CR_OK == rst)
                     {
-                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).appendcvt(proto)
+                        exception_operator_c::dump_filename.replace_all(STD_WSTR(".dmp"), std::wstr_c(STD_WSTR(".")).appendcvt(proto)
 #ifdef MODE64
-                            .append( CONSTWSTR( ".x64.dmp" ) ) );
+                            .append(STD_WSTR(".x64.dmp")));
 #else
-                            .append(CONSTWSTR(".dmp")));
+                            .append(STD_WSTR(".dmp")));
 #endif // MODE64                   
                     }
 #endif
@@ -650,14 +673,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.indicator << pi.features << pi.connection_features << numofstrings;
 
                 for ( int i = 0; i < numofstrings; ++i )
-                    status << asptr( pi.strings[ i ] );
+                    status << std::asptr( pi.strings[ i ] );
         }
         break;
     case AQ_SET_NAME:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_str_c name = r.getastr();
+            std::string name( r.getastr() );
             protolib.functions->set_name(name);
         }
         break;
@@ -665,8 +688,17 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_str_c status = r.getastr();
+            std::string status( r.getastr() );
             protolib.functions->set_statusmsg(status);
+        }
+        break;
+    case AQ_SET_USED_IDS:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int sz;
+            if (const void *data = r.get_data(sz))
+                allowed_ids.or_bits( (const uint8_t *)data, sz );
         }
         break;
     case AQ_SET_CONFIG:
@@ -678,6 +710,23 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 protolib.functions->set_config(data,sz);
         }
         break;
+    case AQ_CONTACT:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+
+            contact_id_s cid = r.get<contact_id_s>();
+            contact_data_s cd( cid, CDM_DATA );
+
+            int sz;
+            if (const void *data = r.get_data(sz))
+            {
+                cd.data = data;
+                cd.data_size = sz;
+                protolib.functions->contact(&cd);
+            }
+        }
+        break;
     case AQ_SET_AVATAR:
         if (LIBLOADED())
         {
@@ -687,22 +736,12 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 protolib.functions->set_avatar(data, sz);
         }
         break;
-    case AQ_INIT_DONE:
+    case AQ_SIGNAL:
         if (LIBLOADED())
         {
-            protolib.functions->init_done();
-        }
-        break;
-    case AQ_ONLINE:
-        if (LIBLOADED())
-        {
-            protolib.functions->online();
-        }
-        break;
-    case AQ_OFFLINE:
-        if (LIBLOADED())
-        {
-            protolib.functions->offline();
+            ipcr r(d->get_reader());
+            app_signal_e s = static_cast<app_signal_e>(r.get<i32>());
+            protolib.functions->app_signal(s);
         }
         break;
     case AQ_OSTATE:
@@ -717,8 +756,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int gid = r.get<int>();
-            int cid = r.get<int>();
+            contact_id_s gid = r.get<contact_id_s>();
+            contact_id_s cid = r.get<contact_id_s>();
             protolib.functions->join_conference(gid, cid);
         }
         break;
@@ -726,8 +765,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int gid = r.get<int>();
-            tmp_str_c gchname = r.getastr();
+            contact_id_s gid = r.get<contact_id_s>();
+            std::string gchname( r.getastr() );
             protolib.functions->ren_conference(gid, gchname);
         }
         break;
@@ -735,8 +774,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_str_c confaname = r.getastr();
-            tmp_str_c confao = r.getastr();
+            std::string confaname( r.getastr() );
+            std::string confao( r.getastr() );
             protolib.functions->create_conference( confaname, confao );
         }
         break;
@@ -744,7 +783,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r( d->get_reader() );
-            tmp_str_c confaid = r.getastr();
+            std::string confaid(r.getastr());
             protolib.functions->del_conference( confaid );
         }
         break;
@@ -752,7 +791,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if ( LIBLOADED() )
         {
             ipcr r( d->get_reader() );
-            tmp_str_c confaid = r.getastr();
+            std::string confaid( r.getastr() );
             protolib.functions->enter_conference( confaid );
         }
         break;
@@ -760,7 +799,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if ( LIBLOADED() )
         {
             ipcr r( d->get_reader() );
-            int gid = r.get<int>();
+            contact_id_s gid = r.get<contact_id_s>();
             int options = r.get<int>();
             protolib.functions->leave_conference( gid, options );
         }
@@ -774,34 +813,34 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             {
             case 0:
                 {
-                    tmp_str_c publicid = r.getastr();
-                    tmp_str_c invitemsg = r.getastr();
-                    rslt = protolib.functions->add_contact( publicid, invitemsg );
+                    std::string publicid(r.getastr());
+                    std::string invitemsg(r.getastr());
+                    rslt = protolib.functions->add_contact(publicid, invitemsg);
                 }
                 break;
             case 1:
                 {
                     // resend
-                    int cid = r.get<int>();
-                    tmp_str_c invitemsg = r.getastr();
+                    contact_id_s cid = r.get<contact_id_s>();
+                    std::string invitemsg(r.getastr());
                     rslt = protolib.functions->resend_request( cid, invitemsg );
                 }
                 break;
             case 2:
                 {
-                    tmp_str_c publicid = r.getastr();
+                    std::string publicid(r.getastr());
                     rslt = protolib.functions->add_contact( publicid, nullptr );
                 }
                 break;
             }
-            IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
+            IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_ADD_CONTACT) << rslt;
         }
         break;
     case AQ_DEL_CONTACT:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->del_contact(id);
         }
         break;
@@ -809,23 +848,23 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r( d->get_reader() );
-            int id = r.get<int>();
-            protolib.functions->refresh_details( id );
+            contact_id_s id = r.get<contact_id_s>();
+            protolib.functions->request( id, RE_DETAILS );
         }
         break;
     case AQ_MESSAGE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             u64 utag = r.get<u64>();
             u64 crtime = r.get<u64>();
-            str_c message = r.getastr();
+            std::asptr message = r.getastr();
             message_s m;
             m.utag = utag;
             m.crtime = crtime;
-            m.message = message.cstr();
-            m.message_len = message.get_length();
+            m.message = message.s;
+            m.message_len = message.l;
             protolib.functions->send_message(id, &m);
         }
         break;
@@ -833,14 +872,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (0 != (FLAG_SAVE_CONFIG_MULTI & flags)) break;
         if (0 != (FLAG_SAVE_CONFIG & flags))
         {
-            IPCW(HA_CMD_STATUS) << (int)AQ_SAVE_CONFIG << (int)CR_MULTIPLE_CALL;
+            IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_SAVE_CONFIG) << static_cast<i32>(CR_MULTIPLE_CALL);
             flags |= FLAG_SAVE_CONFIG_MULTI;
             break;
         }
         flags |= FLAG_SAVE_CONFIG;
         if (LIBLOADED())
         {
-            std::vector<char, ph_allocator> cfg;
+            byte_buffer cfg;
             protolib.functions->save_config(&cfg);
             if (cfg.size()) IPCW(HA_CONFIG) << cfg << blake2b<crypto_generichash_BYTES_MIN>(cfg);
             else IPCW(HA_CMD_STATUS) << (int)AQ_SAVE_CONFIG << (int)CR_FUNCTION_NOT_FOUND;
@@ -850,7 +889,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->accept(id);
         }
         break;
@@ -858,7 +897,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->reject(id);
         }
         break;
@@ -866,7 +905,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->stop_call(id);
         }
         break;
@@ -874,7 +913,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->accept_call(id);
         }
         break;
@@ -882,7 +921,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             call_info_s cinf;
             cinf.audio_data = r.get_data(cinf.audio_data_size);
             cinf.ms_monotonic = r.get<u64>();
@@ -893,7 +932,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             stream_options_s so;
             so.options = r.get<int>();
             so.view_w = r.get<int>();
@@ -905,9 +944,10 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             call_info_s cinf;
             cinf.duration = r.get<int>();
+            cinf.call_type = r.get<i32>() != 0 ? call_info_s::VIDEO_CALL : call_info_s::VOICE_CALL;
             protolib.functions->call(id, &cinf);
         }
         break;
@@ -916,7 +956,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             file_send_info_s fi;
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             fi.utag = r.get<u64>();
             fi.filename = r.readastr(fi.filename_len);
             fi.filesize = r.get<u64>();
@@ -973,8 +1013,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
-            protolib.functions->get_avatar(id);
+            contact_id_s id = r.get<contact_id_s>();
+            protolib.functions->request(id, RE_AVATAR);
         }
         break;
     case AQ_DEL_MESSAGE:
@@ -989,7 +1029,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int id = r.get<int>();
+            contact_id_s id = r.get<contact_id_s>();
             protolib.functions->typing(id);
         }
         break;
@@ -998,14 +1038,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ipcr r(d->get_reader());
             int sz;
             const void *data = r.get_data(sz);
-            IPCW(XX_PONG) << data_block_s(data, sz);
+            IPCW(XX_PONG) << bytes(data, sz);
         }
         break;
     case AQ_VIDEO:
         {
             struct inf_s
             {
-                int cid;
+                contact_id_s cid;
                 int w;
                 int h;
                 int fmt;
@@ -1035,7 +1075,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         break;
 
     case AQ_EXPORT_DATA:
-        protolib.functions->export_data();
+        protolib.functions->request(contact_id_s(), RE_EXPORT_DATA);
         break;
     case AQ_DEBUG_SETTINGS:
         {
@@ -1047,20 +1087,20 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 #endif
     
             ipcr r(d->get_reader());
-            parse_values(r.getastr(), [&](const pstr_c &k, const pstr_c &v) {
+            parse_values(r.getastr(), [&](const std::pstr_c &k, const std::pstr_c &v) {
 
-                if (k.equals(CONSTASTR(DEBUG_OPT_FULL_DUMP)))
+                if (k.equals(STD_ASTR(DEBUG_OPT_FULL_DUMP)))
                 {
 #if defined _DEBUG || defined _CRASH_HANDLER
                     if (v.as_int() != 0)
                         dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithDataSegs | MiniDumpWithHandleData);
 #endif
                 }
-                else if (k.equals(CONSTASTR(DEBUG_OPT_LOGGING)))
+                else if (k.equals(STD_ASTR(DEBUG_OPT_LOGGING)))
                 {
                     g_logging_flags = (unsigned)v.as_int();
                 }
-                else if ( k.equals(CONSTASTR(DEBUG_OPT_TELEMETRY)))
+                else if ( k.equals(STD_ASTR(DEBUG_OPT_TELEMETRY)))
                 {
                     g_telemetry_flags = (unsigned)v.as_int();
                 }
@@ -1082,47 +1122,44 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     return flags;
 }
 
-static void __stdcall operation_result(long_operation_e op, int rslt)
+static void PROTOCALL operation_result(long_operation_e op, int rslt)
 {
     switch (op)
     {
     case LOP_ADDCONTACT: {
-            IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
+            IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_ADD_CONTACT) << rslt;
             break;
         }
     case LOP_SETCONFIG: {
-            IPCW(HA_CMD_STATUS) << (int)AQ_SET_CONFIG << rslt;
+            IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_SET_CONFIG) << rslt;
             break;
         }
     case LOP_ONLINE: {
-            IPCW(HA_CMD_STATUS) << (int)AQ_ONLINE << rslt;
+            IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_SIGNAL) << rslt;
             break;
         }
     }
 }
 
-static void __stdcall update_contact(const contact_data_s *cd)
+static void PROTOCALL connection_bits(int cbits)
 {
-#ifdef _DEBUG
-    if ( cd->id < 0 )
+    IPCW(HA_CONNECTION_BITS) << cbits;
+}
+
+static void PROTOCALL update_contact(const contact_data_s *cd)
+{
+    int mask = cd->mask;
+    if ((0 != (mask & CDM_NAME)))
     {
-        if ((cd->mask & CDM_PUBID) == 0)
-            __debugbreak();
-        if ((cd->mask & CDM_SPECIAL_BITS) == 0)
-            __debugbreak();
-
-        if (pstr_c(asptr(cd->public_id,cd->public_id_len)).begins("CC3B0"))
-            if ( 0 == (cd->mask & CDF_AUDIO_CONFERENCE) && cd->state == CS_ONLINE )
-                __debugbreak();
-
+        if (cd->name_len == 0)
+            mask &= ~CDM_NAME; // dont send empty name
     }
-#endif // _DEBUG
 
     IPCW ucs(HQ_UPDATE_CONTACT);
-    ucs << cd->id << cd->mask
-        << ((0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
-        << ((0 != (cd->mask & CDM_NAME)) ? asptr(cd->name, cd->name_len) : asptr("",0))
-        << ((0 != (cd->mask & CDM_STATUSMSG)) ? asptr(cd->status_message, cd->status_message_len) : asptr("",0))
+    ucs << cd->id << mask
+        << ((0 != (mask & CDM_PUBID)) ? std::asptr(cd->public_id, cd->public_id_len) : std::asptr())
+        << ((0 != (mask & CDM_NAME)) ? std::asptr(cd->name, cd->name_len) : std::asptr())
+        << ((0 != (mask & CDM_STATUSMSG)) ? std::asptr(cd->status_message, cd->status_message_len) : std::asptr())
         << cd->avatar_tag << static_cast<int>(cd->state) << static_cast<int>(cd->ostate) << static_cast<int>(cd->gender) << cd->conference_permissions;
     
     if ( 0 != (cd->mask & CDM_MEMBERS) )
@@ -1133,11 +1170,15 @@ static void __stdcall update_contact(const contact_data_s *cd)
     }
     if (0 != (cd->mask & CDM_DETAILS))
     {
-        ucs << asptr(cd->details, cd->details_len);
+        ucs << std::asptr(cd->details, cd->details_len);
+    }
+    if (0 != (cd->mask & CDM_DATA))
+    {
+        ucs << bytes(cd->data, cd->data_size);
     }
 }
 
-static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen)
+static void PROTOCALL message(message_type_e mt, contact_id_s gid, contact_id_s cid, u64 create_time, const char *msgbody_utf8, int mlen)
 {
     static u64 last_createtime = 0;
     static byte lastmessage_blake2b[crypto_generichash_BYTES] = {};
@@ -1148,50 +1189,50 @@ static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_ti
         memcpy( lastmessage_blake2b, b.hash, sizeof( lastmessage_blake2b ) );
     }
     last_createtime = create_time;
-    IPCW(HQ_MESSAGE) << gid << cid << static_cast<int>(mt) << create_time << asptr(msgbody_utf8, mlen);
+    IPCW(HQ_MESSAGE) << gid << cid << static_cast<i32>(mt) << create_time << std::asptr(msgbody_utf8, mlen);
 }
 
-static void __stdcall save()
+static void PROTOCALL save()
 {
     IPCW(HQ_SAVE) << 0;
 }
 
-static void __stdcall delivered(u64 utag)
+static void PROTOCALL delivered(u64 utag)
 {
     IPCW(HA_DELIVERED) << utag;
 }
 
-static void __stdcall on_save(const void *data, int dlen, void *param)
+static void PROTOCALL on_save(const void *data, int dlen, void *param)
 {
-    std::vector<char, ph_allocator> *buffer = (std::vector<char, ph_allocator> *)param;
+    byte_buffer *buffer = (byte_buffer *)param;
     size_t offset = buffer->size();
     buffer->resize( buffer->size() + dlen );
     memcpy( buffer->data() + offset, data, dlen );
 }
 
-static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so)
+static void PROTOCALL av_stream_options(contact_id_s gid, contact_id_s cid, const stream_options_s *so)
 {
     IPCW(HQ_STREAM_OPTIONS) << gid << cid << so->options << so->view_w << so->view_h;
 }
 
-static void __stdcall export_data(const void *data, int dlen)
+static void PROTOCALL export_data(const void *data, int dlen)
 {
-    IPCW(HQ_EXPORT_DATA) << data_block_s(data, dlen);
+    IPCW(HQ_EXPORT_DATA) << bytes(data, dlen);
 }
 
-static void __stdcall av_data(int gid, int cid, const media_data_s *data)
+static void PROTOCALL av_data(contact_id_s gid, contact_id_s cid, const media_data_s *data)
 {
     if (data->audio_framesize)
     {
         IPCW(HQ_AUDIO) << gid << cid
             << data->afmt.sample_rate << data->afmt.channels << data->afmt.bits
-            << data_block_s(data->audio_frame, data->audio_framesize) << data->msmonotonic;
+            << bytes(data->audio_frame, data->audio_framesize) << data->msmonotonic;
     }
 
     struct inf_s
     {
-        int gid;
-        int cid;
+        contact_id_s gid;
+        contact_id_s cid;
         int w;
         int h;
         u64 msmonotonic;
@@ -1268,33 +1309,33 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
     }
 }
 
-static void __stdcall free_video_data(const void *ptr)
+static void PROTOCALL free_video_data(const void *ptr)
 {
     ipcj->unlock_buffer(ptr);
 }
 
-static void __stdcall configurable(int n, const char **fields, const char **values)
+static void PROTOCALL configurable(int n, const char **fields, const char **values)
 {
     IPCW s(HA_CONFIGURABLE);
     s << n;
     for(int i=0;i<n;++i)
     {
-        s << asptr(fields[i]);
-        s << asptr(values[i]);
+        s << std::asptr(fields[i]);
+        s << std::asptr(values[i]);
     }
 }
 
-static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size)
+static void PROTOCALL avatar_data(contact_id_s cid, int tag, const void *avatar_body, int avatar_body_size)
 {
-    IPCW(HQ_AVATAR_DATA) << cid << tag << data_block_s(avatar_body, avatar_body_size);
+    IPCW(HQ_AVATAR_DATA) << cid << tag << bytes(avatar_body, avatar_body_size);
 }
 
-static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen)
+static void PROTOCALL incoming_file(contact_id_s cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen)
 {
-    IPCW(HQ_INCOMING_FILE) << cid << utag << filesize << asptr(filename_utf8, filenamelen);
+    IPCW(HQ_INCOMING_FILE) << cid << utag << filesize << std::asptr(filename_utf8, filenamelen);
 }
 
-static void __stdcall file_control(u64 utag, file_control_e fctl)
+static void PROTOCALL file_control(u64 utag, file_control_e fctl)
 {
     switch(fctl)
     {
@@ -1307,7 +1348,7 @@ static void __stdcall file_control(u64 utag, file_control_e fctl)
     IPCW(AQ_CONTROL_FILE) << utag << (int)fctl;
 }
 
-static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size)
+static bool PROTOCALL file_portion(u64 utag, u64 offset, const void *portion, int portion_size)
 {
     if (portion == nullptr)
     {
@@ -1352,12 +1393,12 @@ static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     return true;
 }
 
-static void __stdcall typing(int gid, int cid)
+static void PROTOCALL typing(contact_id_s gid, contact_id_s cid)
 {
     IPCW(HQ_TYPING) << gid << cid;
 }
 
-static void __stdcall telemetry( telemetry_e k, const void *data, int datasize )
+static void PROTOCALL telemetry( telemetry_e k, const void *data, int datasize )
 {
-    IPCW( HQ_TELEMETRY ) << (int)k << data_block_s(data, datasize);
+    IPCW( HQ_TELEMETRY ) << static_cast<int>(k) << bytes(data, datasize);
 }

@@ -2,15 +2,13 @@
 
 namespace ts
 {
-
     class json_c
     {
-        struct elem_s
+        struct elem_s : public movable_flag<true>
         {
-            MOVABLE( true );
             str_c s;
-            UNIQUE_PTR( json_c ) v;
-            elem_s & operator=( elem_s &&o)
+            UNIQUE_PTR(json_c) v;
+            elem_s & operator=(elem_s &&o)
             {
                 s = o.s;
                 v = std::move(o.v);
@@ -18,9 +16,9 @@ namespace ts
             }
 
             elem_s() {}
-            elem_s( elem_s && ) UNUSED;
-            elem_s( const elem_s & ) UNUSED;
-            elem_s & operator=( const elem_s &) UNUSED;
+            elem_s(elem_s &&) UNUSED;
+            elem_s(const elem_s &) UNUSED;
+            elem_s & operator=(const elem_s &) UNUSED;
         };
 
         array_inplace_t<elem_s,0> elems;
@@ -43,6 +41,9 @@ namespace ts
         int parse_obj( asptr s );
         int parse_arr( asptr s );
         int parse_num( bool negative,  asptr s );
+
+        json_c(const json_c&) UNUSED;
+        json_c &operator=(const json_c&) UNUSED;
 
     public:
         json_c() {}

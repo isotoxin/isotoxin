@@ -1,18 +1,26 @@
 #pragma once
 
+#ifdef _WIN32
+#include <winsock2.h>
+#endif // _WIN32
+
+#include "std_lite.h"
+
+#ifdef _WIN32
+
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 //-V::730
 
 #include <windows.h>
+#include <Mmsystem.h>
+
 #include <malloc.h>
 #include <locale.h>
 #include <stdio.h>
 #include <tchar.h>
 #include <conio.h>
 #include <time.h>
-#include <vector>
-#include <map>
-#include <unordered_map>
+#endif // _WIN32
 
 #if defined (_M_AMD64) || defined (_M_X64) || defined (WIN64) || defined(__LP64__)
 #define MODE64
@@ -142,15 +150,22 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "excpn.h"
+#ifdef _MSC_VER
 #define UNSTABLE_CODE_PROLOG __try {
 #define UNSTABLE_CODE_EPILOG } __except(EXCEPTIONFILTER()){}
+#endif // _MSC_VER
+#ifdef __GNUC__
+#define UNSTABLE_CODE_PROLOG try {
+#define UNSTABLE_CODE_EPILOG } catch(...){}
+#endif // __GNUC__
 #else
 #define UNSTABLE_CODE_PROLOG ;
 #define UNSTABLE_CODE_EPILOG ;
 #endif
 
-#define STRTYPE(TCHARACTER) pstr_t<TCHARACTER>
-#define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( sptr<TCHARACTER>((s),(l)) )
+#define STRTYPE(TCHARACTER) std::pstr_t<TCHARACTER>
+typedef std::widechar WIDECHAR;
+#define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( std::sptr<TCHARACTER>((s),(l)) )
 #include "plghost_interface.h"
 #undef MAKESTRTYPE
 #undef STRTYPE
@@ -162,6 +177,8 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #define SETFLAG(f,mask) (f)|=(mask)
 #define UNSETFLAG(f,mask) (f)&=~(mask)
 #define SETUPFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {UNSETFLAG(f,mask);}
+
+#define SETBIT(x) (static_cast<size_t>(1)<<(x))
 
 #ifdef _DEBUG
 
@@ -191,15 +208,15 @@ struct delta_time_profiler_s
 
 #include "proto_interface.h"
 
-wstr_c get_exe_full_name();
+std::wstr_c get_exe_full_name();
 
-inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
+inline std::wstr_c fn_change_name_ext(const std::wstr_c &full, const std::wsptr &name, const std::wsptr &ext)
 {
-    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
-    return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
+    int i = full.find_last_pos_of(STD_WSTR("/\\")) + 1;
+    return std::wstr_c(std::wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
-asptr utf8clamp( const asptr &utf8, int maxbytesize );
+std::asptr utf8clamp( const std::asptr &utf8, int maxbytesize );
 
 
 template <class T> class shared_ptr
@@ -315,18 +332,19 @@ struct loader
 
     const byte *chunkdata() const { return d + current_chunk; }
     int get_byte() const { return current_chunk_data_size >= 1 ? (*(byte *)chunkdata()) : 0; }
-    i32 get_i32() const { return current_chunk_data_size >= sizeof( i32 ) ? (*(i32 *)chunkdata()) : 0; }
+    i32 get_i32() const { return current_chunk_data_size >= sizeof(i32) ? (*(i32 *)chunkdata()) : 0; }
+    u32 get_u32() const { return current_chunk_data_size >= sizeof(u32) ? (*(u32 *)chunkdata()) : 0; }
     u64 get_u64() const { return current_chunk_data_size >= sizeof(u64) ? (*(u64 *)chunkdata()) : 0; }
-    asptr get_astr() const
+    std::asptr get_astr() const
     {
-        if (current_chunk_data_size < 2) return asptr();
+        if (current_chunk_data_size < 2) return std::asptr();
         int slen = *(unsigned short *)chunkdata();
-        if ((current_chunk_data_size - 2) < slen) return asptr();
-        return asptr((const char *)chunkdata() + 2, slen);
+        if ((current_chunk_data_size - 2) < slen) return std::asptr();
+        return std::asptr((const char *)chunkdata() + 2, slen);
     }
 };
 
-struct savebuffer : public std::vector < char >
+struct savebuffer : public byte_buffer
 {
     template<typename T> T &add()
     {
@@ -340,13 +358,104 @@ struct savebuffer : public std::vector < char >
         resize(offset + sz);
         memcpy(data() + offset, d, sz);
     }
-    void add(const asptr& s)
+    void add(const std::asptr& s)
     {
         add<unsigned short>() = (unsigned short)s.l;
         add(s.s, s.l);
     }
 
 };
+
+class bitset_s
+{
+    size_t * data = nullptr;
+    size_t size = 0; // in size_t elements which is 32 or 64 bits
+
+    enum : size_t
+    {
+        BITS_PER_ELEMENT = sizeof(size_t) * 8,
+        MASK = BITS_PER_ELEMENT - 1,
+    };
+
+    static size_t maskmake(size_t shift)
+    {
+#if LITTLEENDIAN
+        return static_cast<size_t>(1) << shift;
+#endif
+#if BIGENDIAN
+        size_t x = static_cast<size_t>(1) << shift;
+        return _MY_WS2_32_WINSOCK_SWAP_LONGLONG( x );
+#endif
+    }
+
+    void sure_fit_bit(aint index)
+    {
+        size_t newsz = (index + BITS_PER_ELEMENT) / BITS_PER_ELEMENT;
+        if (newsz > size)
+        {
+            size_t *ndata = (size_t *)realloc(data, newsz * sizeof(size_t));
+            if (!ndata) return;
+            memset(ndata + size, 0, (newsz - size) * sizeof(size_t));
+            size = newsz;
+            data = ndata;
+        }
+    }
+
+public:
+
+    ~bitset_s()
+    {
+        free( data );
+    }
+
+    void or_bits(const uint8_t *block, int blocksize)
+    {
+        sure_fit_bit( blocksize * 8 - 1 );
+
+        size_t * tgt = data;
+        for (; blocksize >= sizeof(size_t); blocksize -= sizeof(size_t), block += sizeof(size_t), ++tgt)
+            *tgt |= *(size_t *)block;
+
+        if (blocksize)
+        {
+            uint8_t *tgt8 = (uint8_t *)tgt;
+            for (; blocksize > 0; --blocksize, ++block, ++tgt8)
+                *tgt8 |= *block;
+        }
+    }
+
+    bool get_bit(aint index) const
+    {
+        if (index >= aint(size * BITS_PER_ELEMENT)) return false;
+        return 0 != (data[index / BITS_PER_ELEMENT] & maskmake((index & MASK)));
+    }
+
+    void set_bit(aint index, bool b)
+    {
+        sure_fit_bit(index);
+        if (b) data[index / BITS_PER_ELEMENT] |= maskmake(index & MASK);
+        else data[index / BITS_PER_ELEMENT] &= ~maskmake(index & MASK);
+    }
+
+    aint find_first_0() const
+    {
+        for( size_t i = 0; i<size; ++i )
+        {
+            size_t el = data[i];
+            if (el != static_cast<size_t>(-1))
+            {
+                for (int k = 0; k < BITS_PER_ELEMENT; ++k)
+                {
+                    if (0 == (el & maskmake(k)))
+                        return (i * BITS_PER_ELEMENT) | k;
+                }
+            }
+        }
+        return size * BITS_PER_ELEMENT;
+    }
+
+};
+
 
 extern "C" {
     int crypto_generichash( unsigned char *out, size_t outlen,
@@ -357,9 +466,9 @@ extern "C" {
 template <int hashsize> struct blake2b
 {
     byte hash[hashsize];
-    template<typename A> explicit blake2b( const std::vector<char, A> &buf )
+    explicit blake2b( const byte_buffer &buf )
     {
-        crypto_generichash(hash, hashsize, (const unsigned char *)buf.data(), buf.size(), nullptr, 0);
+        crypto_generichash(hash, hashsize, buf.data(), buf.size(), nullptr, 0);
     }
     blake2b( const void *buf, size_t len )
     {
@@ -373,16 +482,37 @@ struct bytes
     aint datasize;
     bytes(const void *data, aint datasize) :data(data), datasize(datasize) {}
 };
-template<typename T> struct serlist
+
+template<typename T> struct defnext
+{
+    static T * getnext(T * el)
+    {
+        return el->next;
+    }
+};
+
+template<typename T> struct nonext
+{
+    static T * getnext(T *)
+    {
+        return nullptr;
+    }
+};
+
+template<typename T, typename N = defnext<T> > struct serlist
 {
     T *first;
     serlist(T *first) :first(first) {}
+    T *operator() (T *el) const
+    {
+        return N::getnext( el );
+    }
 };
 
 template<typename T> struct servec
 {
-    std::vector<T> &vec;
-    servec( std::vector<T> &vec ) :vec( vec ) {}
+    const std::vector<T> &vec;
+    servec( const std::vector<T> &vec ) :vec( vec ) {}
 };
 
 struct chunk
@@ -390,6 +520,9 @@ struct chunk
     savebuffer &b;
     size_t sizeoffset;
     chunk &operator=(const chunk&) = delete;
+    chunk(savebuffer &b) :b(b), sizeoffset(static_cast<size_t>(-1))
+    {
+    }
     chunk(savebuffer &b, byte chunkid) :b(b)
     {
         b.add<byte>() = chunkid;
@@ -398,7 +531,8 @@ struct chunk
     }
     ~chunk()
     {
-        *(i32 *)(b.data() + sizeoffset) = (i32)(b.size() - sizeoffset);
+        if (sizeoffset < b.size() - sizeof(i32))
+            *(i32 *)(b.data() + sizeoffset) = (i32)(b.size() - sizeoffset);
     }
 
     void *alloc(aint sz)
@@ -409,17 +543,18 @@ struct chunk
         return b.data() + offset;
     }
 
+    void operator <<(contact_id_s v) { b.add<contact_id_s>() = v; }
     void operator <<(byte v) { b.add<byte>() = v; }
     void operator <<( i32 v) { b.add<i32>() = v; }
     void operator <<(u64 v) { b.add<u64>() = v; }
-    void operator <<(const str_c& str) { b.add(str.as_sptr()); }
-    void operator <<(const bytes&byts) { b.add<i32>() = (i32)byts.datasize; b.add(byts.data, byts.datasize); }
-    template<typename T> void operator <<(const serlist<T>& sl)
+    void operator <<(const std::str_c& str) { b.add(str.as_sptr()); }
+    void operator <<(const bytes&byts) { b.add<i32>() = static_cast<i32>(byts.datasize); b.add(byts.data, byts.datasize); }
+    template<typename T, typename N> void operator <<(const serlist<T,N>& sl)
     {
         size_t numoffset = b.size();
         b.add<i32>();
         int n = 0;
-        for (T *el = sl.first; el; el = el->next)
+        for (T *el = sl.first; el; el = sl(el))
         {
             size_t preoffset = b.size();
             *this << *el;
@@ -447,7 +582,7 @@ struct chunk
 
 class fifo_stream_c
 {
-    std::vector<byte> buf[2];
+    byte_buffer buf[2];
     int readpos = 0;
     
     unsigned readbuf : 1;
@@ -499,7 +634,7 @@ struct ranges_s
         u64 offset1;
         range_s(u64 _offset0, u64 _offset1):offset0(_offset0), offset1(_offset1) {}
     };
-    std::vector<range_s> ranges;
+    std::vector<range_s, std::pcmna> ranges;
 
     void add(u64 _offset0, u64 _offset1)
     {
@@ -546,22 +681,9 @@ struct ranges_s
 };
 */
 
-_inline str_c json_value( const asptr&val ) // replace \, \"
-{
-    str_c v( val );
-    v.replace_all( CONSTASTR("\\"), CONSTASTR( "\\\\" ) );
-    v.replace_all( CONSTASTR( "\"" ), CONSTASTR( "\\\"" ) );
-    v.replace_all( CONSTASTR( "\n" ), CONSTASTR( "\\\n" ) );
-    v.replace_all( CONSTASTR( "\r" ), CONSTASTR( "\\\r" ) );
-    v.replace_all( CONSTASTR( "\t" ), CONSTASTR( "\\\t" ) );
-    v.replace_all( CONSTASTR( "\b" ), CONSTASTR( "\\\b" ) );
-    v.replace_all( CONSTASTR( "\f" ), CONSTASTR( "\\\f" ) );
-    return v;
-}
-
 struct config_accessor_s
 {
-    asptr params;
+    std::asptr params;
     const byte *native_data = nullptr;
     const byte *protocol_data = nullptr;
     int native_data_len = 0;
@@ -593,6 +715,37 @@ struct config_accessor_s
         }
     }
 };
+
+template<typename COPP, auto_conn_options_e co> struct handle_cop_s
+{
+    static bool h(const std::asptr&n, const std::asptr&nn, const std::asptr&v, const COPP& c)
+    {
+        if (std::pstr_c(n).equals(nn))
+        {
+            c( co, std::pstr_c(v).as_uint() != 0 );
+            return true;
+        }
+        return false;
+    }
+};
+
+template<typename COPP> struct handle_cop_s<COPP, auto_co_count>
+{
+    static bool h(const std::asptr&, const std::asptr&, const std::asptr&, const COPP&) { return false; }
+};
+
+template<size_t cops, typename COPP> void handle_cop(const std::asptr& n, const std::asptr& v, const COPP &copp)
+{
+#define COPDEF( nnn, dv ) if (handle_cop_s<COPP, ISFLAG(cops, SETBIT(auto_co_##nnn) ) ? auto_co_##nnn : auto_co_count>::h(n, STD_ASTR(#nnn), v, copp)) return;
+    CONN_OPTIONS
+#undef COPDEF
+}
+
+template<auto_conn_options_e co> struct copname{};
+#define COPDEF( nnn, dv ) template <> struct copname<auto_co_##nnn> { static std::asptr name() { return STD_ASTR(#nnn); } };
+CONN_OPTIONS
+#undef COPDEF
+
 
 template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)
 {

@@ -75,6 +75,7 @@ template<> struct MAKE_CHILD<gui_notice_conference_c> : public _PCHILD( gui_noti
 class gui_notice_c : public gui_label_ex_c
 {
     DUMMY(gui_notice_c);
+    typedef gui_label_ex_c super;
 
     bool close_reject_notice( RID, GUIPARAM );
 
@@ -136,6 +137,8 @@ public:
 struct av_contact_s;
 class gui_notice_callinprogress_c : public gui_notice_c
 {
+    typedef gui_notice_c super;
+
     friend struct common_videocall_stuff_s;
     friend class fullscreenvideo_c;
 
@@ -227,14 +230,14 @@ public:
 
 class gui_notice_conference_c : public gui_notice_c
 {
+    typedef gui_notice_c super;
+
     static const ts::flags32_s::BITS F_FIRST_TIME = F_FREEBITSTART_NOTICE << 0;
     static const ts::flags32_s::BITS F_COLLAPSED = F_FREEBITSTART_NOTICE << 1;
     static const ts::flags32_s::BITS F_INDICATOR = F_FREEBITSTART_NOTICE << 2;
 
-    struct member_s
+    struct member_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
-
         static const int hltime = 7000;
 
         ts::shared_ptr<contact_c> c;
@@ -273,7 +276,9 @@ public:
 
 class gui_notice_network_c : public gui_notice_c
 {
-    GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SAVED);
+    typedef gui_notice_c super;
+
+    GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SL);
     GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_notice_network_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_notice_network_c, ISOGM_V_UPDATE_CONTACT);
@@ -291,8 +296,10 @@ class gui_notice_network_c : public gui_notice_c
     ts::str_c pubid;
     int flashing = 0;
     int networkid = 0;
+    int reconnect_in = 0;
     system_query_e clicka = SQ_NOP;
     cmd_result_e curstate = CR_OK;
+    int connection_bits = 0;
     bool refresh = false;
     bool is_autoconnect = false;
 
@@ -329,6 +336,8 @@ public:
 
 class gui_noticelist_c : public gui_vscrollgroup_c
 {
+    typedef gui_vscrollgroup_c super;
+
     DUMMY(gui_noticelist_c);
     GM_RECEIVER(gui_noticelist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_noticelist_c, ISOGM_V_UPDATE_CONTACT);
@@ -390,6 +399,7 @@ class gui_messagelist_c;
 class gui_message_item_c : public gui_label_ex_c
 {
     DUMMY(gui_message_item_c);
+    typedef gui_label_ex_c super;
 
     enum cols__
     {
@@ -414,9 +424,8 @@ class gui_message_item_c : public gui_label_ex_c
     };
     struct addition_file_data_s : public addition_data_s
     {
-        struct btn_s
+        struct btn_s : public ts::movable_flag<true>
         {
-            MOVABLE( true );
             RID rid;
             int r = -1;
             bool used = false;
@@ -677,6 +686,7 @@ public:
 class gui_messagelist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_messagelist_c);
+    typedef gui_vscrollgroup_c super;
     
     GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_NOPROFILE_UI);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DO_POSTEFFECT);
@@ -693,7 +703,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_REFRESH_SEARCH_RESULT );
     GM_RECEIVER(gui_messagelist_c, ISOGM_CHANGED_SETTINGS );
     GM_RECEIVER(gui_messagelist_c, GM_UI_EVENT );
-    GM_RECEIVER(gui_messagelist_c, ISOGM_PROFILE_TABLE_SAVED );
+    GM_RECEIVER(gui_messagelist_c, ISOGM_PROFILE_TABLE_SL );
     
     static const ts::flags32_s::BITS F_SEARCH_RESULTS_HERE = F_VSCROLLFREEBITSTART << 0;
     static const ts::flags32_s::BITS F_EMPTY_MODE          = F_VSCROLLFREEBITSTART << 1;
@@ -731,14 +741,13 @@ class gui_messagelist_c : public gui_vscrollgroup_c
 
 
     time_t last_seen_post_time = 0;
-    tm last_post_time = {};
+    ts::localtime_s last_post_time;
     ts::shared_ptr<contact_root_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
     uint64 first_message_utag = 0;
 
-    struct protodesc_s
+    struct protodesc_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::str_c desc;
         int ap;
     };
@@ -788,6 +797,7 @@ public:
 
 #ifdef _DEBUG
     void check_list();
+    void set_historian(contact_root_c *h) { historian = h; }
 #endif // _DEBUG
 
     void update_first();
@@ -801,7 +811,7 @@ public:
     /*virtual*/ void children_repos_info(cri_s &info) const override;
     /*virtual*/ void children_repos() override;
 
-    bool insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time );
+    bool insert_date_separator( ts::aint index, ts::localtime_s &prev_post_time, time_t next_post_time );
     void restore_date_separator( ts::aint index, ts::aint cnt );
 
     void find_prev_next(uint64 *prevutag, uint64 *nextutag);
@@ -820,14 +830,16 @@ public:
             last_seen_post_time = t + 1; // refresh time of items we see
     }
 
+
+    bool is_empty_mode() const { return flags.is(F_EMPTY_MODE); }
+
 };
 
 
 struct spellchecker_s
 {
-    struct chk_word_s
+    struct chk_word_s : public ts::movable_flag<false>
     {
-        MOVABLE( false );
         ts::str_c utf8;
         ts::wstr_c badword; // empty, if valid
         ts::astrings_c suggestions;
@@ -852,6 +864,7 @@ struct spellchecker_s
 class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
 {
     DUMMY(gui_message_editor_c);
+    typedef gui_textedit_c super;
 
     GM_RECEIVER(gui_message_editor_c, ISOGM_SEND_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_MESSAGE);
@@ -899,6 +912,7 @@ public:
 class gui_message_area_c : public gui_group_c
 {
     DUMMY(gui_message_area_c);
+    typedef gui_group_c super;
 
     static const ts::flags32_s::BITS F_INITIALIZED = FLAGS_FREEBITSTART << 0;
     
@@ -936,13 +950,14 @@ template<> struct MAKE_CHILD<gui_conversation_c> : public _PCHILD(gui_conversati
 class gui_conversation_c : public gui_vgroup_c
 {
     DUMMY(gui_conversation_c);
+    typedef gui_vgroup_c super;
 
     GM_RECEIVER(gui_conversation_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_INIT_CONVERSATION);
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
-    GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
+    GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SL);
     GM_RECEIVER(gui_conversation_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_conversation_c, GM_DRAGNDROP );
 
@@ -974,6 +989,8 @@ public:
     void add_text( const ts::wsptr&t );
     void insert_peer_name( const ts::str_c &name );
     void insert_quoted_text( const ts::str_c &text );
+
+    int notice_list_height() const;
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ void created() override;

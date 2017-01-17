@@ -7,9 +7,8 @@ template<> struct MAKE_CHILD<gui_filterbar_c> : public _PCHILD(gui_filterbar_c)
     ~MAKE_CHILD();
 };
 
-struct found_item_s
+struct found_item_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
     time_t mintime = 0;
     contact_key_s historian;
     ts::tbuf_t<uint64> utags;
@@ -24,6 +23,7 @@ struct found_stuff_s
 class gui_filterbar_c : public gui_label_ex_c
 {
     DUMMY(gui_filterbar_c);
+    typedef gui_label_ex_c super;
 
     GM_RECEIVER(gui_filterbar_c, ISOGM_CHANGED_SETTINGS);
 
@@ -56,7 +56,7 @@ class gui_filterbar_c : public gui_label_ex_c
 
         bool reader(int row, ts::SQLITE_DATAGETTER getta);
 
-        /*virtual*/ int iterate() override;
+        /*virtual*/ int iterate(ts::task_executor_c *e) override;
         /*virtual*/ void done(bool canceled) override;
     };
 
@@ -111,7 +111,7 @@ public:
 
     bool is_tag_all() const
     {
-        if (!prf().get_options().is(UIOPT_TAGFILETR_BAR))
+        if (!prf_options().is(UIOPT_TAGFILETR_BAR))
             return true;
 
         if (0 != (bitags & (1 << BIT_ALL)))

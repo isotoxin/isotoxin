@@ -1,5 +1,15 @@
 #include "stdafx.h"
 
+#ifdef _MSC_VER
+#pragma warning (disable:4127)
+#endif
+
+#ifdef _NIX
+#include <win32emu/win32emu.h>
+#define min(a,b) (((a)<(b))?(a):(b))
+#endif // _NIX
+
+
 #define IPCVER 2
 
 #ifndef __STR1__
@@ -33,7 +43,7 @@ struct handshake_ask_s
     int datasize = sizeof(handshake_ask_s);
     int datatype = DATATYPE_HANDSHAKE_ASK;
     int version = IPCVER;
-    DWORD pid = GetCurrentProcessId(); // processid
+    uint32_t pid = GetCurrentProcessId(); // processid
 };
 
 struct handshake_answer_s
@@ -41,7 +51,7 @@ struct handshake_answer_s
     int datasize = sizeof(handshake_ask_s);
     int datatype = DATATYPE_HANDSHAKE_ANSWER;
     int version = IPCVER;
-    DWORD pid = GetCurrentProcessId(); // processid
+    uint32_t pid = GetCurrentProcessId(); // processid
 };
 
 struct new_xchg_buffer_s
@@ -74,8 +84,8 @@ struct xchg_buffer_header_s
     spinlock::long3264 sync;
     int allocated;
     int sendsize;
-    DWORD pid; // owner / sender
-    DWORD lastusetime;
+    uint32_t pid; // owner / sender
+    uint32_t lastusetime;
     bstate_e st;
 
     void *getptr() const;
@@ -97,7 +107,7 @@ namespace
     };
 }
 
-_inline void *xchg_buffer_header_s::getptr() const
+inline void *xchg_buffer_header_s::getptr() const
 {
     char *p = (char *)this;
     return p + XCHG_BUF_HDR_SIZE;
@@ -116,7 +126,7 @@ struct ipc_data_s
     void *par_data;
     void *par_idlejob;
 
-    
+
     struct exchange_buffer_s
     {
         HANDLE mapping;
@@ -136,7 +146,7 @@ struct ipc_data_s
 
     void remove_xchg_buffer(int index)
     {
-#ifdef _DEBUG
+#if defined _DEBUG && defined _WIN32
         if (!sync || index >= xchg_buffers_count)
             __debugbreak();
 #endif // _DEBUG
@@ -146,7 +156,7 @@ struct ipc_data_s
 
 
     HANDLE watchdog[2];
-    DWORD other_pid;
+    uint32_t other_pid;
     volatile bool quit_quit_quit;
     volatile bool watch_dog_works;
     volatile bool cleaup_buffers_signal;
@@ -161,7 +171,7 @@ struct ipc_data_s
     {
         SIMPLELOCK(sync);
 
-        DWORD w = 0;
+        uint32_t w = 0;
         if (cleaup_buffers_signal)
         {
             signal_s<DATATYPE_CLEANUP_BUFFERS> cdb;
@@ -187,7 +197,7 @@ struct ipc_data_s
     {
         SIMPLELOCK(sync);
 
-        DWORD w = 0;
+        uint32_t w = 0;
         if (cleaup_buffers_signal)
         {
             signal_s<DATATYPE_CLEANUP_BUFFERS> cdb;
@@ -201,7 +211,7 @@ struct ipc_data_s
 
     void insert_buffer( exchange_buffer_s *newexchb )
     {
-#ifdef _DEBUG
+#if defined _DEBUG && defined _WIN32
         if (!sync || xchg_buffers_count >= MAX_XCHG_BUFFERS)
             __debugbreak(); // sync must be locked, xchg_buffers_count must be < MAX_XCHG_BUFFERS
 #endif // _DEBUG
@@ -224,13 +234,13 @@ struct ipc_data_s
 
     void cleanup_buffers()
     {
-#ifdef _DEBUG
+#if defined _DEBUG && defined _WIN32
         if (!sync)
             __debugbreak(); // sync must be locked
 #endif // _DEBUG
 
         //DWORD pid = GetCurrentProcessId();
-        DWORD timestump = GetTickCount();
+        uint32_t timestump = GetTickCount();
 
         for (int i = xchg_buffers_count-1; i >= 0 ; --i)
         {
@@ -250,10 +260,10 @@ struct ipc_data_s
                 }
             } else if (XCHG_BUFFER_LOCK_TIMEOUT > 0 && b.ptr->st == xchg_buffer_header_s::BST_LOCKED)
             {
+                #if defined _DEBUG && defined _WIN32
                 if (int(timestump - b.ptr->lastusetime) > XCHG_BUFFER_LOCK_TIMEOUT)
-                {
                     __debugbreak();
-                }
+                #endif
 
             } else if (b.ptr->st == xchg_buffer_header_s::BST_DEAD)
                 goto remove_i;
@@ -264,7 +274,7 @@ struct ipc_data_s
 
 #define OOPS do { quit_quit_quit = true; return false; } while(0,false)
 //-V:OOPS:521
-    
+
     bool tick()
     {
         if (quit_quit_quit)
@@ -272,7 +282,7 @@ struct ipc_data_s
 
         data_s d;
 
-        DWORD r;
+        uint32_t r;
         ReadFile(pipe_in, &d, sizeof(d), &r, nullptr);
         if (r != sizeof(d))
         {
@@ -287,7 +297,7 @@ struct ipc_data_s
         case DATATYPE_HANDSHAKE_ASK:
             if (other_pid || d.datasize != sizeof(handshake_ask_s))
                 OOPS;
-            
+
             {
                 handshake_ask_s hsh;
 
@@ -352,7 +362,7 @@ struct ipc_data_s
             return true;
         case DATATYPE_BUFFER_SENT:
             {
-                DWORD pid = GetCurrentProcessId();
+                uint32_t pid = GetCurrentProcessId();
                 spinlock::auto_simple_lock l(sync);
                 for (int i = 0; i < xchg_buffers_count;++i)
                 {
@@ -373,7 +383,7 @@ struct ipc_data_s
                         return true;
                     }
                 }
-#ifdef _DEBUG
+#if defined _DEBUG && defined _WIN32
                 __debugbreak();
 #endif // _DEBUG
             }
@@ -435,6 +445,7 @@ struct ipc_data_s
 
 }
 
+#ifdef _WIN32
 DWORD WINAPI watchdog(LPVOID p)
 {
     ipc_data_s &d = *(ipc_data_s *)p;
@@ -481,6 +492,16 @@ DWORD WINAPI watchdog(LPVOID p)
     d.watch_dog_works = false;
     return 0;
 }
+#endif
+
+#ifdef _NIX
+uint32_t watchdog(void *p)
+{
+
+    return 0;
+}
+#endif
+
 
 int ipc_junction_s::start( const char *junction_name )
 {
@@ -490,7 +511,12 @@ int ipc_junction_s::start( const char *junction_name )
 
     bool is_client = false;
 
+    #ifdef _WIN32
     strcpy(buf, "\\\\.\\pipe\\_ipcp0_" __STR1__(IPCVER) "_");
+    #endif
+    #ifdef _NIX
+    strcpy(buf, "ipcp0_" __STR1__(IPCVER) "_");
+    #endif
     strcat(buf, junction_name);
 
     d.pipe_in = CreateNamedPipeA( buf, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, BIG_DATA_SIZE, BIG_DATA_SIZE, 0, nullptr );
@@ -599,8 +625,10 @@ void ipc_junction_s::stop()
     ipc_data_s &d = (ipc_data_s &)(*this);
     if (d.pipe_in == nullptr && d.pipe_out == nullptr)
     {
+        #if defined _DEBUG && defined _WIN32
         if (!stop_called || d.watch_dog_works)
             __debugbreak();
+        #endif
 
         return; // already cleared
     }
@@ -634,7 +662,7 @@ void ipc_junction_s::stop()
 
     d.quit_quit_quit = true;
     for( ; d.watch_dog_works; ) Sleep(1);
-    
+
     if (d.pipe_in) CloseHandle(d.pipe_in);
     if (d.pipe_out) CloseHandle(d.pipe_out);
 
@@ -745,7 +773,7 @@ void ipc_junction_s::unlock_send_buffer(const void *ptr, int sendsize)
     {
         ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
         spinlock::auto_simple_lock x(b.ptr->sync);
-        
+
         if (b.ptr->isptr( ptr ))
         {
 #ifdef _DEBUG

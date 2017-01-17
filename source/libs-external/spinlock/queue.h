@@ -43,7 +43,7 @@ spinlock_queue_s
             node_t* stack_next_free;
         };
 		T value;
-        node_t(){ data = {} }
+        node_t(){ data = {}; }
 
         pointer_t& next() { return *(pointer_t*)data; }
 	};

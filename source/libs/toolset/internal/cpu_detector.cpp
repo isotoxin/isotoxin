@@ -13,8 +13,27 @@
 
 namespace ts
 {
+
+#if defined(__GNUC__) && __GNUC__
+#ifdef MODE64
+#define cpuid(func, func2, ax, bx, cx, dx)\
+  __asm__ __volatile__ (\
+                        "cpuid           \n\t" \
+                        : "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) \
+                        : "a" (func), "c" (func2));
+#else
+#define cpuid(func, func2, ax, bx, cx, dx)\
+  __asm__ __volatile__ (\
+                        "mov %%ebx, %%edi   \n\t" \
+                        "cpuid              \n\t" \
+                        "xchg %%edi, %%ebx  \n\t" \
+                        : "=a" (ax), "=D" (bx), "=c" (cx), "=d" (dx) \
+                        : "a" (func), "c" (func2));
+#endif
+#else
 #ifdef MODE64
 #if defined(_MSC_VER) && _MSC_VER > 1500
+//void __cpuidex(int CPUInfo[4], int info_type, int ecxvalue);
 #pragma intrinsic(__cpuidex)
 #define cpuid(func, func2, a, b, c, d) do {\
     int regs[4];\
@@ -22,13 +41,13 @@ namespace ts
     a = regs[0];  b = regs[1];  c = regs[2];  d = regs[3];\
   } while(0)
 #else
-    void __cpuid(int CPUInfo[4], int info_type);
+void __cpuid(int CPUInfo[4], int info_type);
 #pragma intrinsic(__cpuid)
 #define cpuid(func, func2, a, b, c, d) do {\
     int regs[4];\
     __cpuid(regs, func); \
     a = regs[0];  b = regs[1];  c = regs[2];  d = regs[3];\
-      } while (0)
+  } while (0)
 #endif
 #else
 #define cpuid(func, func2, a, b, c, d)\
@@ -40,6 +59,7 @@ namespace ts
   __asm mov c, ecx\
   __asm mov d, edx
 #endif
+#endif /* end others */
 
 #if !defined(__native_client__) && (defined(__i386__) || defined(__x86_64__))
     static INLINE uint64_t xgetbv(void) {
@@ -81,7 +101,7 @@ uint32 detect_cpu_caps()
 
     if (max_cpuid_val < 1)
         return 0;
-    
+
     uint32 flags = 0;
 
     /* Get the standard feature flags */

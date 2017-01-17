@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "libsodium/src/libsodium/include/sodium.h"
 
 using namespace ts;
 
@@ -27,18 +26,12 @@ struct data4test_s
     fastdelegate::FastDelegate<void ()> process_f = do_nothing;
 
 #ifdef _WIN32
-#define RSLTPATH "C:\\2\\1\\"
+#define RSLTPATH "t:\\1\\"
 #elif defined _NIX
-#define RSLTPATH "/tmp/"
-#include "win32emu/win32emu.h"
+#define RSLTPATH "~/dev/__temp/"
 #endif
 
-#if defined _MSC_VER && _MSC_VER <= 1800
-#define P(fn) ts::wsptr( JOINMACRO1( L, RSLTPATH ) JOINMACRO1( L, fn ) )
-#else
 #define P(fn) CONSTWSTR(RSLTPATH fn)
-#endif
-
 
     data4test_s(int test, uint8 av):test(test), alpha_v(av)
     {
@@ -150,15 +143,15 @@ struct data4test_s
                     ts::add_font("default", fp);
 
                     txt.set_size( ts::ivec2(1920,1200) );
-                    fd.assign("default");
+                    fd.assign(ts::str_c(CONSTASTR("default")));
                     txt.set_font( &fd );
                     ts::g_default_text_font = fd;
-                    
+
                     ts::wstr_c t( CONSTWSTR("fmiweifisfjweiriji sdf iweoi fio weoiriof sodf oiweoit fs doifwf sdf owieowei fsd foiwe fseoifweoiweifsdfsd f sdoiwe fos d " ));
                     ts::wstr_c t2(t);
 
                     for (int i=0;i<100;++i) t.append(t2);
-                    
+
                     t.insert(0, CONSTWSTR("<font=default><color=22,255,23>") );
 
                     txt.set_text(t, nullptr, false);
@@ -180,7 +173,7 @@ struct data4test_s
                 Print("bad test num %i\n", test);
                 break;
         }
-    
+
     }
 
     void process()
@@ -213,7 +206,7 @@ struct data4test_s
     void process_shrink2x86()
     {
         // x86 - 303
-        
+
         if (bmpt.info().sz != (bmp.info().sz-ts::ivec2(2))/2)
             bmpt.create_ARGB((bmp.info().sz-ts::ivec2(2))/2);
 
@@ -321,7 +314,7 @@ struct data4test_s
 
 struct gchkey_s
 {
-    byte key[32];
+    uint8_t key[32];
     int closest[4];
 };
 
@@ -380,7 +373,7 @@ void addclosest( gchkey_s *keys, int to, int k )
         }
     }
 
-    if (index < ARRAY_SIZE( keys->closest )) 
+    if (index < ARRAY_SIZE( keys->closest ))
     {
         int rmpeer = keys[to].closest[index];
         keys[to].closest[index] = k;

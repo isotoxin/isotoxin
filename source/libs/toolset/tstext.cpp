@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "internal/platform.h"
 
 namespace ts
 {
@@ -34,6 +35,36 @@ INLINE void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
 
     dst = B | (G << 8) | (R << 16) | (A << 24);
 }
+
+#if LCD_RENDER_MODE
+INLINE void write_pixel_lcd(TSCOLOR &dst, TSCOLOR src, const uint8 *glyph_rgb)
+{
+    TSCOLOR c = dst;
+
+    extern uint8 ALIGN(256) multbl[256][256];
+
+#define CMUL(a,b) multbl[a][b]
+
+    auto grayscale = [](const uint8 *glyph_rgb)->int
+    {
+        return ts::lround(float(glyph_rgb[0]) * 0.0722f + float(glyph_rgb[1]) * 0.7152f + float(glyph_rgb[2]) * 0.2126f);
+    };
+
+
+    uint8 a = CMUL(grayscale(glyph_rgb ), ALPHA(src));
+    uint16 not_a = 255 - a;
+
+
+    uint B = CMUL(not_a, BLUE(c)) + CMUL(a, CMUL(glyph_rgb[0], BLUE(src)));
+    uint G = CMUL(not_a, GREEN(c)) + CMUL(a, CMUL(glyph_rgb[1], GREEN(src)));
+    uint R = CMUL(not_a, RED(c)) + CMUL(a, CMUL(glyph_rgb[2], RED(src)));
+    uint A = CMUL(not_a, ALPHA(c)) + a;
+
+#undef CMUL
+
+    dst = B | (G << 8) | (R << 16) | (A << 24);
+}
+#endif
 
 static const ALIGN(16) uint8 prepare_4alphas[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 0, 255, 1, 255, 2, 255, 3 };
 static const ALIGN(16) uint16 add1[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
@@ -78,8 +109,16 @@ static void write_row_sse( uint8 *dst_argb, const uint8 *src_argb, int w, const 
 }
 
 
-void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int src_pitch, int width, int height, TSCOLOR color)
+static void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int src_pitch, int width, int height, TSCOLOR color)
 {
+#if LCD_RENDER_MODE
+
+    for (; height; height--, src_alpha += src_pitch, dst_argb += dst_pitch)
+        for (int i = 0; i < width; ++i)
+            write_pixel_lcd(((TSCOLOR*)dst_argb)[i], color, src_alpha + (i<<2));
+
+#else
+
     if (CCAPS(CPU_SSSE3))
     {
         int w = width & ~3;
@@ -116,6 +155,7 @@ void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int
     for (; height; height--, src_alpha += src_pitch, dst_argb += dst_pitch)
         for (int i = 0; i < width; ++i)
             write_pixel(((TSCOLOR*)dst_argb)[i], color, src_alpha[i]);
+#endif
 }
 
 
@@ -230,8 +270,12 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
             continue; // pointer value < 16 means special glyph. Special glyph should be skipped while rendering
         }
 
-		int bpp = glyph.color ? 1 : 4; // bytes per pixel
-		int glyphPitch = glyph.pitch;
+#if LCD_RENDER_MODE
+        const int srcbpp = 4; // bytes per pixel
+#else
+        int srcbpp = glyph.color ? 1 : 4; // bytes per pixel
+#endif
+        bool srcglyph = glyph.color != 0;
 		ivec4 glyphColor = TSCOLORtoVec4(glyph.color);
 		ivec2 pos( glyph.pos() );  pos += offset; // glyph rendering position
         ts::TSCOLOR gcol = glyph.color;
@@ -248,7 +292,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 			if (end.x > start.x && end.y > start.y)
 			{
 				dst = dst_ + start.y * pitch;
-				ivec4 c = bpp == 1 ? glyphColor : ivec4(255);
+				ivec4 c = srcglyph ? glyphColor : ivec4(255);
 				ivec4 ca(c.rgb(), ts::lround(c.a*(1 + thick - d)));
 				// begin
 				for (int i=start.x; i<end.x; i++) writePixelBlended(((TSCOLOR*)dst)[i], ca);
@@ -267,8 +311,8 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 		int clipped_height = glyph.height;
 		const uint8 *src = glyph.pixels;
 		// clipping
-		if (pos.x < 0) src -= pos.x*bpp       , clipped_width  += pos.x, pos.x = 0;
-		if (pos.y < 0) src -= pos.y*glyphPitch, clipped_height += pos.y, pos.y = 0;
+		if (pos.x < 0) src -= pos.x*srcbpp    , clipped_width  += pos.x, pos.x = 0;
+		if (pos.y < 0) src -= pos.y*glyph.pitch, clipped_height += pos.y, pos.y = 0;
 		if (pos.x + clipped_width  > width ) clipped_width  = width  - pos.x;
 		if (pos.y + clipped_height > height) clipped_height = height - pos.y;
 
@@ -276,16 +320,17 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 
 		dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
 
-        if (bpp == 1)
+        if (srcglyph)
         {
-            __special_blend( dst, pitch, src, glyphPitch, clipped_width, clipped_height, gcol );
+            __special_blend( dst, pitch, src, glyph.pitch, clipped_width, clipped_height, gcol );
 
             //for (; clipped_height; clipped_height--, src += glyphPitch, dst += pitch)
             //    for (int i = 0; i < clipped_width; i++)
             //        write_pixel( ((TSCOLOR*)dst)[i], gcol, src[i] );
         } else
         {
-            for (; clipped_height; clipped_height--, src += glyphPitch, dst += pitch)
+            aint glyph_pitch = glyph.pitch;
+            for (; clipped_height; clipped_height--, src += glyph_pitch, dst += pitch)
                 for (int i = 0; i < clipped_width; i++)
                     ((TSCOLOR*)dst)[i] = ALPHABLEND_PM( ((TSCOLOR*)dst)[i], ((TSCOLOR*)src)[i] );
         }

@@ -424,22 +424,40 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 			case ts::SSK_X:
 				res = cut_(cp);
 				break;
-			case ts::SSK_LEFT:
-				for (;cp>0 &&  IS_WORDB(text.get(cp-1).as_char());cp--);
-				for (;cp>0 && !IS_WORDB(text.get(cp-1).as_char());cp--);
-				set_caret_pos(cp);
-				res = true;
-				break;
-			case ts::SSK_RIGHT:
-				for (;cp<text.size() && !IS_WORDB(text.get(cp).as_char());cp++);
-				for (;cp<text.size() &&  IS_WORDB(text.get(cp).as_char());cp++);
-				set_caret_pos(cp);
-				res = true;
-				break;
+            case ts::SSK_BACKSPACE:
+                if (is_readonly()) break;
+                // no break
+            case ts::SSK_LEFT:
+                {
+                    int scp = cp;
+                    for (; cp > 0 && IS_WORDB(text.get(cp - 1).as_char()); cp--);
+                    for (; cp > 0 && !IS_WORDB(text.get(cp - 1).as_char()); cp--);
+                    set_caret_pos(cp);
+                    if (ts::SSK_BACKSPACE == scan)
+                        text_erase(cp, scp - cp);
+                    res = true;
+                }
+                break;
+            case ts::SSK_DELETE:
+                if (is_readonly()) break;
+                // no break
+            case ts::SSK_RIGHT:
+                {
+                    int scp = cp;
+                    for (; cp < text.size() && !IS_WORDB(text.get(cp).as_char()); cp++);
+                    for (; cp < text.size() && IS_WORDB(text.get(cp).as_char()); cp++);
+                    if (ts::SSK_DELETE == scan)
+                        text_erase(scp, cp - scp);
+                    else
+                        set_caret_pos(cp);
+
+                    res = true;
+                }
+			break;
             case ts::SSK_ENTER:
                 cp=get_caret_char_index();
                 goto do_enter_key;
-			}
+            }
 		}
 		else
 		{
@@ -588,7 +606,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
                 ts::wchar c = charcode;
                 text_replace(cp, ts::wsptr(&c,1));
             }
-			
+
 			res = true;
 			break;
 		}
@@ -824,7 +842,7 @@ void gui_textedit_c::prepare_texture()
 	if (!CHECK(w > 0 && asize.y > 0)) return;
     texture.ajust_ARGB(ts::ivec2(w, asize.y), false);
 
-	
+
     texture.fill(ts::ivec2(0), ts::ivec2(w, asize.y), 0);
 
 	ts::TSCOLOR current_color = 0;
@@ -1102,7 +1120,7 @@ bool gui_textedit_c::summoncontextmenu( ts::aint cp)
     flags.init(F_PREV_SB_VIS, is_vsb());
 
     set_font( nullptr );
-    __super::created();
+    super::created();
 
     color = get_default_text_color();
     caret_color = color;
@@ -1124,7 +1142,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
 
 /*virtual*/ void gui_textedit_c::disable( bool f )
 {
-    __super::disable( f );
+    super::disable( f );
     getroot()->register_afocus( this, accept_focus() );
 }
 
@@ -1192,7 +1210,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
         }
         break;
     case SQ_MOUSE_LUP:
-        if (gui->end_mousetrack(getrid(), MTT_SBMOVE) || gui->end_mousetrack(getrid(), MTT_TEXTSELECT)) ; else 
+        if (gui->end_mousetrack(getrid(), MTT_SBMOVE) || gui->end_mousetrack(getrid(), MTT_TEXTSELECT)) ; else
         {
             bool d = true;
             for (const kbd_press_callback_s &cb : kbdhandlers)
@@ -1296,7 +1314,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
 
     default:
     default_stuff:
-        if (__super::sq_evt(qp, rid, data)) return true;
+        if (super::sq_evt(qp, rid, data)) return true;
     }
 
     switch (qp)
@@ -1351,7 +1369,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
             }
 
             root.draw( drawarea.lt, texture.extbody(ts::irect(ts::ivec2(0), drawarea.size() - ts::ivec2( rb_margin_from > 0 ? 0 : margins_rb.x, 0))), true );
-            
+
             if (gray)
                 root.end_draw();
 

@@ -23,6 +23,7 @@
     <ClInclude Include="stkwlk.h">
       <Filter>crashhandler</Filter>
     </ClInclude>
+    <ClInclude Include="std_lite.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp" />

@@ -18,7 +18,7 @@ namespace ts
 
 font_c::~font_c()
 {
-	for (int i=0; i<ARRAY_SIZE(glyphs); i++)
+	for (aint i=0; i<ARRAY_SIZE(glyphs); ++i)
 		if (glyphs[i])
 		{
 			if (glyphs[i]->outlined) MM_FREE(glyphs[i]->outlined);
@@ -31,31 +31,47 @@ glyph_s &font_c::operator[](wchar c)
 	if (glyphs[c]) return *glyphs[c];
 
 	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );
-	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER /*| FT_LOAD_TARGET_LCD*/ ) == 0);
+#if LCD_RENDER_MODE
+	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER | FT_LOAD_TARGET_LCD ) == 0);
+#else
+    CHECK(FT_Load_Char(face, c, font_params.flags | FT_LOAD_RENDER) == 0);
+#endif
 
 	FT_Bitmap &b = face->glyph->bitmap;
 
 	//some checks
-	ASSERT(b.num_grays == 256 && b.pixel_mode == FT_PIXEL_MODE_GRAY);
-	ASSERT(face->glyph->format == FT_GLYPH_FORMAT_BITMAP);
-	ASSERT((unsigned)b.pitch == b.width);//?
+#if LCD_RENDER_MODE
+    ASSERT(b.num_grays == 256 && b.pixel_mode == FT_PIXEL_MODE_LCD);
+    int pixelwidth = b.width / 3;
+    int bytewidth = pixelwidth * 4;
+#else
+    ASSERT(b.num_grays == 256 && b.pixel_mode == FT_PIXEL_MODE_GRAY);
+    ASSERT((unsigned)b.pitch == b.width);//?
+    int pixelwidth = b.width;
+    int bytewidth = pixelwidth;
+#endif
+    ASSERT(b.pitch >= 0);
+    ASSERT(face->glyph->format == FT_GLYPH_FORMAT_BITMAP);
 
-	glyphs[c] = (glyph_s*)MM_ALLOC(sizeof(glyph_s) + b.width*b.rows);
+	glyphs[c] = (glyph_s*)MM_ALLOC(sizeof(glyph_s) + bytewidth*b.rows);
 
 	//fill glyph fields
 	glyphs[c]->left	   = face->glyph->bitmap_left;
 	glyphs[c]->top	   = face->glyph->bitmap_top;
 	glyphs[c]->advance = (face->glyph->advance.x + 32) >> 6; // +32 need to round integer number of pixels due glyph->advance is in fixed point 26.6
-	glyphs[c]->width   = b.width;
+	glyphs[c]->width   = pixelwidth;
 	glyphs[c]->height  = b.rows;
 	glyphs[c]->char_index = FT_Get_Char_Index(face, c);
 	glyphs[c]->outlined = nullptr;
 
-	//copy bitmap data
-	const char *src = (const char*)b.buffer;
-	char *dst = (char*)(glyphs[c]+1);
-	for (int row=0; row<(int)b.rows; row++, src+=b.pitch, dst+=b.width) // pitch may be negative, so memcpy can't be used here
-		memcpy(dst, src, b.width); // but can be used to copy a while row
+#if LCD_RENDER_MODE
+    const uint8 *src = (const uint8*)b.buffer;
+    uint8 *dst = (uint8*)(glyphs[c] + 1);
+    img_helper_copy(dst, src, imgdesc_s(ts::ivec2(pixelwidth, static_cast<int>(b.rows)), 32), imgdesc_s(ts::ivec2(pixelwidth, static_cast<int>(b.rows)), 24, static_cast<int16>(b.pitch)));
+#else
+    char *dst = (char*)(glyphs[c] + 1);
+    memcpy( dst, b.buffer, bytewidth*b.rows );
+#endif
 
 	return *glyphs[c];
 }
@@ -161,9 +177,10 @@ namespace
         {
             //FreeType
             FT_Init_FreeType(&ftlibrary);
-
+#ifdef TT_INTERPRETER_VERSION_40
             FT_UInt     interpreter_version = TT_INTERPRETER_VERSION_40;
             FT_Property_Set( ftlibrary, "truetype", "interpreter-version", &interpreter_version );
+#endif // TT_INTERPRETER_VERSION_40
 
         }
         ~internal_data_s()
@@ -206,7 +223,7 @@ blob_c load_image( const wsptr&fn )
 
 bmpcore_exbody_s get_image(const wsptr&name)
 {
-    scaled_image_key_s sik = { name, ivec2(100) };
+    scaled_image_key_s sik = { wstr_c(name), ivec2(100) };
     scaled_image_container_s *i = idata().scaled_images_cache.get(sik);
     bmpcore_exbody_s eb;
     if (i)
@@ -223,7 +240,7 @@ bmpcore_exbody_s get_image(const wsptr&name)
 void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect)
 {
     bool added;
-    scaled_image_key_s sik = {name, ivec2(100)};
+    scaled_image_key_s sik = { wstr_c(name), ivec2(100)};
     scaled_image_container_s &i = idata().scaled_images_cache.add(sik, added);
     i.bitmap = bmp;
     i.width = rect.width();
@@ -235,7 +252,7 @@ void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect)
 void add_image(const wsptr&name, const uint8* data, const imgdesc_s &imgdesc, bool copyin)
 {
     bool added;
-    scaled_image_key_s sik = { name, ivec2(100) };
+    scaled_image_key_s sik = { wstr_c(name), ivec2(100) };
     scaled_image_container_s &i = idata().scaled_images_cache.add(sik, added);
 
     ASSERT(imgdesc.bytepp() == 4);
@@ -354,7 +371,7 @@ int font_c::kerning_ci(int left, int right)
 
 scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 {
-	scaled_image_key_s sik = {filename_, scale};
+	scaled_image_key_s sik = {wstr_c(filename_), scale};
 	bool added;
 	scaled_image_container_s &i = idata().scaled_images_cache.add(sik, added);
 	if (added)
@@ -415,7 +432,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 void font_params_s::setup(const asptr &fparams)
 {
     token<char> t(fparams, ',');
-    
+
     filename = to_wstr(*t);
 
     ++t; token<char> tt(*t, '/');

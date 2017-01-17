@@ -36,7 +36,7 @@ bool special_command( contact_root_c *h, contact_c *r, ts::str_c utf8t )
         ts::wstr_c alltw = from_utf8( b.cstr() );
         int backsecs = alltw.get_length() / symbols_per_mesage;
         backsecs *= 3600;
-        time_t pt = now() - backsecs;
+        time_t pt = ts::now() - backsecs;
         auto &ht = prf().get_table_history();
 
         int ii = symbols_per_mesage;
@@ -300,7 +300,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
 
 /*virtual*/ ts::ivec2 gui_notice_c::get_max_size() const
 {
-    ts::ivec2 m = __super::get_max_size();
+    ts::ivec2 m = super::get_max_size();
     m.y = get_min_size().y;
     return m;
 }
@@ -308,7 +308,7 @@ void gui_notice_c::created()
 {
     defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
     flags.set(F_DIRTY_HEIGHT_CACHE);
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ bool gui_notice_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -317,7 +317,7 @@ void gui_notice_c::created()
     {
     case SQ_DRAW:
         {
-            __super::sq_evt(qp, rid, data);
+            super::sq_evt(qp, rid, data);
             return true;
         }
     case SQ_RECT_CHANGED:
@@ -357,7 +357,7 @@ void gui_notice_c::created()
         break;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 /*virtual*/ void gui_notice_c::get_link_prolog( ts::wstr_c &r, int linknum ) const
@@ -378,7 +378,7 @@ int gui_notice_c::get_height_by_width(int w) const
 {
     if (flags.is(F_DIRTY_HEIGHT_CACHE))
     {
-        for (int i = 0; i < ARRAY_SIZE(height_cache); ++i)
+        for (ts::aint i = 0; i < ARRAY_SIZE(height_cache); ++i)
             height_cache[i] = ts::ivec2(-1);
         next_cache_write_index = 0;
         const_cast<ts::flags32_s &>(flags).clear(F_DIRTY_HEIGHT_CACHE);
@@ -386,7 +386,7 @@ int gui_notice_c::get_height_by_width(int w) const
     }
     else
     {
-        for (int i = 0; i < ARRAY_SIZE(height_cache); ++i)
+        for (ts::aint i = 0; i < ARRAY_SIZE(height_cache); ++i)
             if (height_cache[i].x == w) return height_cache[i].y;
     }
 
@@ -426,7 +426,7 @@ int gui_notice_c::get_height_by_width(int w) const
 bool gui_notice_c::b_turn_off_spelling(RID, GUIPARAM)
 {
     prf().set_options(0, MSGOP_SPELL_CHECK);
-    g_app->F_SHOW_SPELLING_WARN = false;
+    g_app->F_SHOW_SPELLING_WARN(false);
     TSDEL(this);
     return true;
 }
@@ -756,7 +756,7 @@ void gui_notice_c::setup(contact_c *sender_)
             bool video_supported = false;
             if (active_protocol_c *ap = prf().ap(sender->getkey().protoid))
                 video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
-            
+
             int n = video_supported ? 3 : 2;
             int i = 0;
 
@@ -987,7 +987,7 @@ void gui_notice_conference_c::created()
         clicklink = -1;
     }
 
-    return gui_notice_c::sq_evt( qp, rid, data );
+    return super::sq_evt( qp, rid, data );
 }
 
 bool gui_notice_conference_c::check_indicator( RID, GUIPARAM )
@@ -1198,7 +1198,7 @@ void gui_notice_callinprogress_c::acquire_display()
 {
     if ( !sender )
         return;
-    
+
     uint ap = sender->getkey().protoid;
     uint cid = sender->getkey().contactid;
 
@@ -1214,7 +1214,7 @@ void gui_notice_callinprogress_c::acquire_display()
         return;
     }
 
-    common.display = g_app->video_displays.get( contact_key_s( cid, ap ) );
+    common.display = g_app->video_displays.get( contact_key_s( contact_id_s(contact_id_s::CONTACT,cid), ap ) );
     if (common.display->notice == nullptr)
         common.display->notice = this;
 }
@@ -1244,7 +1244,7 @@ gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
 
 /*virtual*/ void gui_notice_callinprogress_c::created()
 {
-    __super::created();
+    super::created();
 }
 
 const ts::irect *gui_notice_callinprogress_c::vrect()
@@ -1267,7 +1267,7 @@ const ts::irect *gui_notice_callinprogress_c::vrect()
     case SQ_DRAW:
         if (rid == getrid() && fsvideo.expired())
         {
-            __super::sq_evt(qp, rid, data);
+            super::sq_evt(qp, rid, data);
 
             if (flags.is(F_WAITANIM) && !is_cam_init_anim() && !camera)
             {
@@ -1276,7 +1276,7 @@ const ts::irect *gui_notice_callinprogress_c::vrect()
                 r.rb.y -= common.b_hangup->get_min_size().y + 5;
                 draw_initialization(&getengine(), common.pa.bmp, r, get_default_text_color(), TTT("Waiting for video...",343));
             }
-            
+
             bool tlm = false;
 
             if (common.flags.is(common.F_RECTSOK))
@@ -1342,7 +1342,7 @@ const ts::irect *gui_notice_callinprogress_c::vrect()
         break;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 
 }
 
@@ -1370,7 +1370,7 @@ namespace
 
         enum_video_devices_s(gui_notice_callinprogress_c *notice) :notice(notice) {}
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -1380,7 +1380,7 @@ namespace
             if (!canceled && notice)
                 notice->set_video_devices(std::move(video_devices));
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
 
     };
@@ -1402,10 +1402,10 @@ void gui_notice_callinprogress_c::setup_callinprogress()
     bool video_supported = false;
     if (active_protocol_c *ap = prf().ap( sender->getkey().protoid ))
         video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
-    
+
     av_contact_s &avc = g_app->avcontacts().get(historian->getkey() | sender->getkey(), av_contact_s::AV_INPROGRESS);
     avcp = &avc;
-    
+
     common.create_buttons( this, getrid(), video_supported );
 
     if (video_supported)
@@ -1589,7 +1589,7 @@ bool gui_notice_callinprogress_c::b_extra(RID erid, GUIPARAM)
             }
 
         }
-        
+
         gui_popup_menu_c::show(menu_anchor_s(HOLD(erid)().getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_TU), m);
     }
 
@@ -1691,7 +1691,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_PEER_STREAM_OPTION
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 {
-    time_t tt = now();
+    time_t tt = ts::now();
     if (tt != showntime)
     {
         showntime = tt;
@@ -1820,7 +1820,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_CAMERA_TICK> &cc)
     }
 
     clear_cam_init_anim();
-    
+
     if (!fsvideo.expired())
         fsvideo->camera_tick();
     else
@@ -1981,7 +1981,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     getengine().trunc_children(0); // just kill all buttons
 
     pubid = pubid_;
-    
+
     ts::wstr_c sost, plugdesc, uname, ustatus, netname, idname( CONSTWSTR("ID") );
     curstate = CR_OK;
     is_autoconnect = false;
@@ -1990,7 +1990,12 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
         if (contact_c *c = contacts().find_subself(ap.getid()))
             if ((networkid == 0 && c->get_pubid() == pubid) || (networkid == ap.getid()))
             {
-                curstate = ap.get_current_state();
+                curstate = ap.get_current_state(reconnect_in);
+
+                if (curstate == CR_NETWORK_ERROR && reconnect_in > 0)
+                    DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, resetup), 0 );
+
+                connection_bits = ap.get_connection_bits();
                 networkid = ap.getid();
                 plugdesc = from_utf8(ap.get_infostr(IS_PROTO_DESCRIPTION));
                 netname = from_utf8(ap.get_name());
@@ -2018,7 +2023,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             get_default_text_color(COLOR_ONLINE_STATUS),
                             get_default_text_color(COLOR_OFFLINE_STATUS),
                             c->get_state(), 1
-                            ));
+                        ));
                         sost.append(CONSTWSTR("<l>"));
                     }
 
@@ -2028,7 +2033,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                     switch (curstate)
                     {
                         case CR_NETWORK_ERROR:
-                            errs = TTT("Network error",335);
+                            errs = TTT("Network error, reconnect in $...",335) / ts::wmake(reconnect_in);
                             break;
                         case CR_CORRUPT:
                             errs = TTT("Data corrupt",336);
@@ -2039,22 +2044,45 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                         case CR_AUTHENTICATIONFAILED:
                             errs = TTT("Authentication failed",379);
                             break;
+                        case CR_UNTRUSTED_CONNECTION:
+                            errs = TTT("Untrusted connection disallowed",521);
+                            break;
+                        case CR_NOT_ENCRYPTED_CONNECTION:
+                            errs = TTT("Server doesn't support encryption",522);
+                            break;
+                        case CR_SERVER_CLOSED_CONNECTION:
+                            errs = TTT("Server closed the connection",525);
+                            break;
                         default:
-                            errs = TTT("Error $",334)/ts::wmake<uint>( curstate );
+                            errs = TTT("Error #$",334)/ts::wmake<uint>( curstate );
                             break;
                     }
-                    sost.append( CONSTWSTR( "</l><b>" ) );
-                    appendtag_color( sost, get_default_text_color( COLOR_ERROR_STATUS ) )
-                        .append( CONSTWSTR( "<cstm=a1>" ) )
-                        .append( errs )
-                        .append( CONSTWSTR( "<cstm=b1>" ) )
-                        .append( CONSTWSTR( "</color></b><l>" ) );
 
-                    
+                    sost.append(CONSTWSTR("</l><b>"));
+                    appendtag_color(sost, get_default_text_color(COLOR_ERROR_STATUS))
+                        .append(CONSTWSTR("<cstm=a1>"))
+                        .append(errs)
+                        .append(CONSTWSTR("<cstm=b1>"))
+                        .append(CONSTWSTR("</color></b><l>"));
+
                 }
 
                 if (CS_ONLINE == c->get_state())
                 {
+                    if (0 == (connection_bits & CB_ENCRYPTED))
+                    {
+                        sost.append(CONSTWSTR(", <b><s>"));
+                        appendtag_color(sost, get_default_text_color(COLOR_ERROR_STATUS));
+                        sost.append(TTT("Encrypted", 519)).append(CONSTWSTR("</s></b></color>"));
+                    }
+
+                    if (0 == (connection_bits & CB_TRUSTED))
+                    {
+                        sost.append(CONSTWSTR(", <b><s>"));
+                        appendtag_color(sost, get_default_text_color(COLOR_ERROR_STATUS));
+                        sost.append(TTT("Trusted", 520)).append(CONSTWSTR("</s></b></color>"));
+                    }
+
                     int online = 0, all = 0;
                     contacts().iterate_proto_contacts([&](contact_c *c) {
 
@@ -2066,6 +2094,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                         return true;
                     });
                     sost.append(CONSTWSTR(" [")).append_as_int(online).append_char('/').append_as_int(all).append_char(']');
+
                 }
 
 
@@ -2130,14 +2159,17 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_setup.leech(TSNEW(leech_dock_top_right_s, sz1.x, sz1.y, 3, 3));
     b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
-    
+
     fake_margin.x = g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x + 6;
     setup_tail();
 
 }
 
-ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
+ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&p)
 {
+    if (!p.saved)
+        return 0;
+
     if (p.tabi == pt_active_protocol && p.pass == 0)
     {
         auto *row = prf().get_table_active_protocol().find<true>(networkid);
@@ -2162,7 +2194,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT>&c)
 
 ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CMD_RESULT> &rslt)
 {
-    if ((rslt.cmd == AQ_SET_CONFIG || rslt.cmd == AQ_ONLINE) && rslt.networkid == networkid)
+    if ((rslt.cmd == AQ_SET_CONFIG || rslt.cmd == AQ_SIGNAL) && rslt.networkid == networkid)
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, resetup), nullptr);
 
     return 0;
@@ -2201,15 +2233,15 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 /*virtual*/ void gui_notice_network_c::created()
 {
     DMSG( "gui_notice_network_c: " << getrid() );
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ int gui_notice_network_c::get_height_by_width(int width) const
 {
     MEMT( MEMT_NOTICE_NETWORK );
 
-    if (width == -INT_MAX) return __super::get_height_by_width(width);
-    return __super::get_height_by_width( width - fake_margin.x );
+    if (width == -INT_MAX) return super::get_height_by_width(width);
+    return super::get_height_by_width( width - fake_margin.x );
 }
 
 void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
@@ -2227,6 +2259,7 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
     {
         if ( active_protocol_c *ap = prf().ap( networkid ) )
         {
+            curstate = CR_OK;
             ap->set_autoconnect( true );
             is_autoconnect = true;
             DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, resetup ), nullptr );
@@ -2261,7 +2294,7 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
             ext.ext = CONSTWSTR( "*.*" );
             ts::extensions_s exts( &ext, 1, 0 );
 
-            ts::wstr_c fn = getroot()->load_filename_dialog( iroot, CONSTWSTR( "" ), exts, loc_text( loc_import_from_file ) );
+            ts::wstr_c fn = getroot()->load_filename_dialog( iroot, ts::wsptr(), exts, ts::wstr_c(loc_text( loc_import_from_file )) );
 
             if ( !fn.is_empty() && ts::is_file_exists(fn) )
             {
@@ -2301,10 +2334,29 @@ void gui_notice_network_c::show_link_submenu()
             mnu.add( TTT("Import again...",449), 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "imp" ) );
         } else
         {
-            if ( is_autoconnect )
-                mnu.add( TTT( "Switch off", 98 ), 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "off" ) );
-            else
-                mnu.add( TTT( "Connect", 99 ), ( curstate != CR_OK ) ? MIF_DISABLED : 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "on" ) );
+            bool menu_connect = false;
+            bool menu_connect_enabled = false;
+            switch (curstate)
+            {
+            case CR_UNKNOWN_ERROR:
+            case CR_MEMORY_ERROR:
+            case CR_NETWORK_ERROR:
+            case CR_AUTHENTICATIONFAILED:
+            case CR_UNTRUSTED_CONNECTION:
+            case CR_NOT_ENCRYPTED_CONNECTION:
+            case CR_SERVER_CLOSED_CONNECTION:
+                menu_connect = true;
+                menu_connect_enabled = true;
+                break;
+            default:
+                if (is_autoconnect)
+                    mnu.add(TTT("Switch off", 98), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("off"));
+                else
+                    menu_connect = true, menu_connect_enabled = curstate == CR_OK;
+                break;
+            }
+            if (menu_connect)
+                mnu.add(TTT("Connect", 99), menu_connect_enabled ? 0 : MIF_DISABLED, DELEGATE(this, ctx_onlink_do), CONSTASTR("on"));
 
         }
 
@@ -2327,7 +2379,7 @@ void gui_notice_network_c::moveup(const ts::str_c&)
         int my_sf = me->sort_factor();
         int other_sf = 0;
         prf().iterate_aps( [&](active_protocol_c &ap) {
-            
+
             int sf = ap.sort_factor();
             if (sf < my_sf)
             {
@@ -2546,7 +2598,7 @@ int gui_notice_network_c::sortfactor() const
 
                 int sortfactor = 0, minsortfactor = 0, maxsortfactor = 0;
                 prf().iterate_aps([&](const active_protocol_c &ap) {
-                
+
                     int sf = ap.sort_factor();
                     if (ap.getid() == networkid)
                         sortfactor = sf;
@@ -2557,7 +2609,7 @@ int gui_notice_network_c::sortfactor() const
                         if (maxsortfactor == 0 || maxsortfactor < sf)
                             maxsortfactor = sf;
                     }
-            
+
                 });
 
                 bool allow_move_up = minsortfactor < sortfactor;
@@ -2579,7 +2631,7 @@ int gui_notice_network_c::sortfactor() const
         break;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 void gui_notice_network_c::flash()
@@ -2630,7 +2682,7 @@ gui_noticelist_c::~gui_noticelist_c()
 }
 /*virtual*/ ts::ivec2 gui_noticelist_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     if (!historian || historian->getkey().is_self)
     {
         sz.y = 0;
@@ -2638,13 +2690,14 @@ gui_noticelist_c::~gui_noticelist_c()
         for (rectengine_c *e : getengine())
             if (e) { sz.y += e->getrect().get_height_by_width(w); }
 
-        int parh = HOLD(getparent())().getprops().size().y / 2;
+        int parh = HOLD(getparent()).as<gui_conversation_c>().notice_list_height();
         if (parh != 0)
             if (sz.y > parh)
                 sz.y = parh;
 
     } else
         sz.y = get_min_size().y;
+
     return sz;
 }
 
@@ -2652,13 +2705,13 @@ gui_noticelist_c::~gui_noticelist_c()
 {
     set_theme_rect(CONSTASTR("noticelist"), false);
     defaultthrdraw = DTHRO_BASE;
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ void gui_noticelist_c::children_repos()
 {
     bool sb = is_sb_visible();
-    __super::children_repos();
+    super::children_repos();
     if (!sb && is_sb_visible())
         scroll_to_begin();
 }
@@ -2692,7 +2745,7 @@ bool gui_noticelist_c::resort_children(RID, GUIPARAM)
             DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, resort_children), 0 );
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 gui_notice_c &gui_noticelist_c::create_notice(notice_e n)
@@ -2754,7 +2807,7 @@ ts::uint32 gui_noticelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
     if ( c.conversation && c.conversation != getparent() )
         return 0;
 
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
         historian = c.contact;
 
     return 0;
@@ -2765,7 +2818,7 @@ void gui_noticelist_c::on_rotten_contact()
     clear_list();
     historian = nullptr;
 
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
     {
         desktop_rect_c *dr = ts::ptr_cast<desktop_rect_c *>( &getroot()->getrect() );
         dr->close_req();
@@ -2776,7 +2829,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 {
     if ( historian == nullptr ) return 0;
 
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
         if ( historian != p.contact->get_historian() )
             return 0;
 
@@ -2851,7 +2904,7 @@ void gui_noticelist_c::refresh()
     gui->repos_children(this);
     bool vis = false;
     for (rectengine_c *e : getengine())
-        if (e) 
+        if (e)
         {
             vis = true;
             break;
@@ -2878,7 +2931,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     if (NOTICE_KILL_CALL_INPROGRESS == n.n)
         return 0;
 
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
     {
         if ( !historian || historian != n.owner )
             return 0;
@@ -2891,14 +2944,14 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 
         if ( historian->getkey().is_self )
         {
-            if (g_app->newversion())
+            if (g_app->F_NEWVERSION())
             {
                 not_at_end();
                 gui_notice_c &nn = create_notice(NOTICE_NEWVERSION);
                 nn.setup( cfg().autoupdate_newver() );
             }
 
-            if (g_app->F_SHOW_SPELLING_WARN && prf().is_any_active_ap())
+            if (g_app->F_SHOW_SPELLING_WARN() && prf().is_any_active_ap())
             {
                 gui_notice_c &nn = create_notice(NOTICE_WARN_NODICTS);
                 nn.setup(ts::str_c());
@@ -3004,7 +3057,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
         }
         refresh();
     }
-    
+
     return 0;
 }
 
@@ -3041,7 +3094,7 @@ gui_message_item_c::~gui_message_item_c()
 
 /*virtual*/ ts::ivec2 gui_message_item_c::get_max_size() const
 {
-    ts::ivec2 m = __super::get_max_size();
+    ts::ivec2 m = super::get_max_size();
     m.y = get_min_size().y;
     return m;
 }
@@ -3050,7 +3103,7 @@ void gui_message_item_c::created()
 {
     defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
     flags.set(F_DIRTY_HEIGHT_CACHE);
-    __super::created();
+    super::created();
 }
 
 void gui_message_item_c::mark_found()
@@ -3212,7 +3265,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
     if (rid != getrid())
     {
         if (SQ_MOUSE_WHEELDOWN == qp || SQ_MOUSE_WHEELUP == qp)
-            return __super::sq_evt(qp, getrid(), data);
+            return super::sq_evt(qp, getrid(), data);
 
         // from submenu
         if (popupmenu && popupmenu->getrid() == rid)
@@ -3281,7 +3334,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
                     glyphs_pos = sz + ca.lt;
 
-                    __super::draw(dd, tdp);
+                    super::draw(dd, tdp);
 
                     if ( is_file() )
                     {
@@ -3346,7 +3399,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             case MTA_CALL_ACCEPTED:
             case MTA_HANGUP:
 
-                __super::sq_evt( qp, rid, data );
+                super::sq_evt( qp, rid, data );
 
                 if ( m_engine )
                 {
@@ -3368,7 +3421,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 break;
 
             CASE_MESSAGE:
-                
+
                 gui_control_c::sq_evt(qp, rid, data);
                 if (m_engine)
                 {
@@ -3386,7 +3439,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         draw_data_s &dd = m_engine->begin_draw();
 
                         text_draw_params_s tdp;
-                        ts::ivec2 sz(0), oo(dd.offset); 
+                        ts::ivec2 sz(0), oo(dd.offset);
 
                         dd.offset += ca.lt;
                         dd.size = ca.size();
@@ -3413,7 +3466,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         tdp.textoptions = &f;
                         tdp.rectupdate = DELEGATE(this, updrect_emoticons);
 
-                        __super::draw( dd, tdp );
+                        super::draw( dd, tdp );
 
                         glyphs_pos = sz + ca.lt;
                         if ( selectable_core_s *selcore = gui->get_selcore( getrid() ) )
@@ -3423,7 +3476,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                             dd.size.x = timestrwidth + 1;
                             dd.size.y = GET_FONT(font_conv_time)->height();
                             dd.offset = oo + ca.rb - dd.size;
-                                
+
                             tdp.font = GET_FONT(font_conv_time);
                             ts::TSCOLOR c = get_default_text_color(MICOL_TIME);
                             tdp.forecolor = &c; //-V506
@@ -3438,7 +3491,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 }
                 break;
             }
-            
+
         }
         return true;
     case SQ_MOUSE_LUP:
@@ -3457,7 +3510,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             }
             flags.clear( F_AUTHOR_LBDN );
 
-        } if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+        } else if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
         {
             ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
             if (!lnk.is_empty()) ctx_menu_golink(lnk);
@@ -3706,7 +3759,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
     }
 
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 void gui_message_item_c::init_date_separator( const tm &tmtm )
@@ -3734,7 +3787,7 @@ void gui_message_item_c::init_request( const ts::asptr &pre_utf8 )
         t.append(TTT("Key restored",199));
     } else
     {
-        ts::str_c message = pre_utf8;
+        ts::str_c message(pre_utf8);
         text_adapt_user_input(message);
         t.append(from_utf8(message));
     }
@@ -3815,7 +3868,7 @@ void gui_message_item_c::refresh_typing()
 
 /*virtual*/ ts::wstr_c gui_message_item_c::get_selected_text_part_header( gui_label_c *prevlabel ) const
 {
-    ts::wstr_c h( __super::get_selected_text_part_header(prevlabel) );
+    ts::wstr_c h(super::get_selected_text_part_header(prevlabel) );
     if ( gui_message_item_c *previtm = dynamic_cast<gui_message_item_c *>( prevlabel ) )
     {
         if ( get_author() && previtm->get_author() != get_author() )
@@ -3829,7 +3882,7 @@ void gui_message_item_c::refresh_typing()
     }
     else if ( get_author() )
         goto addauthor;
-        
+
     return h;
 }
 
@@ -3993,10 +4046,10 @@ rectengine_c *gui_message_item_c::split_super_message( ts::aint index, rectengin
         ++sfrom;
         break;
     }
-    
+
     rectengine_c *r1 = nullptr;
 
-    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( e_parent.getrid(), historian, author, CONSTASTR("mine"), MTA_MESSAGE );
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( e_parent.getrid(), historian, author, ts::str_c(CONSTASTR("mine")), MTA_MESSAGE );
     e_parent.child_move_to( index+1, &r.getengine() );
     if ( r.setup_super_message( historian, sfrom, sto ) )
         r1 = &r.getengine();
@@ -4006,14 +4059,14 @@ rectengine_c *gui_message_item_c::split_super_message( ts::aint index, rectengin
     if ( sm->to == sm->from )
     {
         setup_normal( historian->get_history( sm->from ) );
-        
+
         if (splt == SMSPLIT_FIRST)
             r1 = &this->getengine();
     }
 
     if ( sto2 > index_split )
     {
-        gui_message_item_c &rtail = MAKE_CHILD<gui_message_item_c>( e_parent.getrid(), historian, author, CONSTASTR( "mine" ), MTA_MESSAGE );
+        gui_message_item_c &rtail = MAKE_CHILD<gui_message_item_c>( e_parent.getrid(), historian, author, ts::str_c(CONSTASTR("mine")), MTA_MESSAGE );
         e_parent.child_move_to( index + 2, &rtail.getengine() );
         rtail.setup_super_message( historian, index_split + 1, sto2 );
     }
@@ -4136,7 +4189,7 @@ ts::wstr_c gui_message_item_c::cvt_intext()
     if ( !intext )
         return ts::wstr_c();
 
-    ts::str_c message = intext->cstr();
+    ts::str_c message( intext->cstr() );
     if ( message.is_empty() ) message.set( CONSTASTR( "error" ) );
     else {
         text_adapt_user_input( message );
@@ -4161,6 +4214,7 @@ ts::wstr_c gui_message_item_c::cvt_intext()
                     message.insert( qe, CONSTASTR( "</p></color>" ) );
                     message.cut( i, 9 ).kill_chars( i, CONSTASTR( " \t" ) );
                     message.insert( i, maketag_color<char>( cq ).append( CONSTASTR( "<p=l,10,0,3>" ) ) );
+                    cnt = message.get_length() - 9;
                     i = qe;
                     continue;
                 }
@@ -4249,9 +4303,9 @@ void gui_message_item_c::setup_text( const post_s &post )
 {
     if ( is_super_message() )
     {
-        supermessage_s *sm = ts::ptr_cast<supermessage_s *>( addition.get() );
-
 #ifdef _DEBUG
+        supermessage_s *sm = ts::ptr_cast<supermessage_s *>(addition.get());
+
         ts::aint index = historian->find_post_index( &post );
         ASSERT( index >= sm->from && index <= sm->to );
 #endif // _DEBUG
@@ -4330,7 +4384,7 @@ void gui_message_item_c::setup_text( const post_s &post )
             intext = post.message_utf8;
             undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(MICOL_TEXT_UND) : 0;
 
-            ts::wstr_c newtext; 
+            ts::wstr_c newtext;
             prepare_text(newtext);
 
             textrect.set_font( GET_FONT( font_conv_text ) );
@@ -4339,7 +4393,7 @@ void gui_message_item_c::setup_text( const post_s &post )
             mark_found();
         }
         break;
-    
+
     }
     flags.set(F_DIRTY_HEIGHT_CACHE);
 }
@@ -4347,16 +4401,15 @@ void gui_message_item_c::setup_text( const post_s &post )
 void gui_message_item_c::prepare_text_time(time_t posttime)
 {
     if (posttime == 0)
-        posttime = now();
+        posttime = ts::now();
 
     if ( posttime == rcv_time )
         return;
 
     timestr.clear();
 
-    tm tt;
-    _localtime64_s(&tt, &posttime);
-    if (prf().get_options().is(MSGOP_SHOW_DATE))
+    ts::localtime_s tt(posttime);
+    if (prf_options().is(MSGOP_SHOW_DATE))
     {
         ts::swstr_t<-128> tstr;
         text_set_date(tstr, from_utf8(prf().date_msg_template()), tt);
@@ -4482,7 +4535,7 @@ void gui_message_item_c::repl_button( int r_from, int r_to )
         tt.replace(ri + 6, f.get_length() - 7, t);
         textrect.set_text_only(tt, false);
     }
-    
+
     if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>( addition.get() ))
     {
         for( addition_file_data_s::btn_s &b : ftb->btns )
@@ -4509,7 +4562,7 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
             }
         }
     }
-        
+
     // hint! remove rect tag from text, to avoid button creation on next redraw
     int ri = textrect.get_text().find_pos( ts::wstr_c(CONSTWSTR("<rect=")).append_as_uint(r).append_char(',') );
     if (ri >= 0)
@@ -4727,7 +4780,7 @@ void gui_message_item_c::update_text(int for_width)
             int oldh = for_width ? 0 : get_height_by_width(rectw);
 
             set_selectable(false);
-            
+
             addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
             if (ftb)
                 for (addition_file_data_s::btn_s &b : ftb->btns)
@@ -4790,7 +4843,7 @@ void gui_message_item_c::update_text(int for_width)
                     int prgrs = ft->progress( bps, cursz );
                     ab.pbtext.set( text_sizebytes( cursz, true ) ).append(CONSTWSTR(" (<b>")).append_as_uint( prgrs ).append(CONSTWSTR("</b>%), "));
                     ab.progress = (float)prgrs * (float)(1.0/100);
-                    
+
                     if ( bps >= file_transfer_s::BPSSV_ALLOW_CALC )
                     {
                         if ( active_protocol_c *ap = prf().ap( ft->sender.protoid ) )
@@ -4802,7 +4855,7 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         if (bps == file_transfer_s::BPSSV_PAUSED_BY_ME)
                             insert_button( BTN_UNPAUSE, g_app->preloaded_stuff().unpauseb->size );
-                        if (bps == file_transfer_s::BPSSV_WAIT_FOR_ACCEPT) 
+                        if (bps == file_transfer_s::BPSSV_WAIT_FOR_ACCEPT)
                             ab.pbtext.append(TTT("waiting",185));
                         else
                             ab.pbtext.append(TTT("pause",186));
@@ -4833,7 +4886,7 @@ void gui_message_item_c::update_text(int for_width)
                     else
                         newtext.append(TTT("File: $",192) / fn);
 
-                    if ( !ab.disable_loading && !ab.imgloader && image_loader_c::is_image_fn(intext->cstr()) && prf().get_options().is(MSGOP_SHOW_INLINE_IMG))
+                    if ( !ab.disable_loading && !ab.imgloader && image_loader_c::is_image_fn(intext->cstr()) && prf_options().is(MSGOP_SHOW_INLINE_IMG))
                         ab.imgloader.initialize<image_loader_c>( this, from_utf8(intext->cstr()) );
                 }
             }
@@ -4970,7 +5023,7 @@ ts::wstr_c gui_message_item_c::hdr() const
 
 
     text_adapt_user_input(n);
-    if ( !flags.is( F_DESKTOP_NOTIFICATION ) && prf().is_loaded() && prf().get_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_conference() )
+    if ( !flags.is( F_DESKTOP_NOTIFICATION ) && prf().is_loaded() && prf_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_conference() )
         if ( gui_messagelist_c *ml = list() )
             n.append( ml->protodesc( author->getkey().protoid ) );
 
@@ -4995,7 +5048,7 @@ ts::wstr_c gui_message_item_c::hdr() const
             return true;
         }
     }
-    return __super::custom_tag_parser(r,tv);
+    return super::custom_tag_parser(r,tv);
 }
 
 
@@ -5118,7 +5171,7 @@ update_size_mode:
     return height;
 }
 
-gui_messagelist_c::gui_messagelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) 
+gui_messagelist_c::gui_messagelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data)
 {
 }
 
@@ -5223,7 +5276,7 @@ const ts::str_c &gui_messagelist_c::protodesc( int apid )
 
     set_theme_rect(CONSTASTR("msglist"), false);
     defaultthrdraw = DTHRO_BASE;
-    __super::created();
+    super::created();
 }
 
 void gui_messagelist_c::update_first()
@@ -5251,7 +5304,7 @@ void gui_messagelist_c::update_first()
         info.from = getengine().children_count();
     }
     else
-        __super::children_repos_info(info);
+        super::children_repos_info(info);
 }
 
 static void do_collapse( rectengine_c &lste, ts::aint stop, ts::aint ci )
@@ -5300,7 +5353,7 @@ static void do_collapse( rectengine_c &lste, ts::aint stop, ts::aint ci )
 
     for(;;)
     {
-        __super::children_repos();
+        super::children_repos();
 
         if ( visible_from >= 0 )
         {
@@ -5375,7 +5428,7 @@ static void do_collapse( rectengine_c &lste, ts::aint stop, ts::aint ci )
                     ~indraw() { ASSERT( current_draw_list ); current_draw_list = nullptr; }
                 } indraw_( this );
 
-                bool r = __super::sq_evt( qp, rid, data );
+                bool r = super::sq_evt( qp, rid, data );
 
                 if ( historian && !historian->keep_history() && historian->is_live() )
                     g_app->preloaded_stuff().nokeeph->draw( *m_engine.get(), ts::ivec2( getprops().size().x - 10 - g_app->preloaded_stuff().nokeeph->info().sz.x, 10 ) );
@@ -5402,18 +5455,17 @@ static void do_collapse( rectengine_c &lste, ts::aint stop, ts::aint ci )
             break;
         }
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
-bool gui_messagelist_c::insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time )
+bool gui_messagelist_c::insert_date_separator( ts::aint index, ts::localtime_s &prev_post_time, time_t next_post_time )
 {
     MEMT( MEMT_MESSAGE_ITEM );
 
-    tm tmtm;
-    _localtime64_s(&tmtm, &next_post_time);
+    ts::localtime_s tmtm(next_post_time);
     if (tmtm.tm_year != prev_post_time.tm_year || tmtm.tm_mon != prev_post_time.tm_mon || tmtm.tm_mday != prev_post_time.tm_mday)
     {
-        gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, nullptr, CONSTASTR("date"), MTA_DATE_SEPARATOR);
+        gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, nullptr, ts::str_c(CONSTASTR("date")), MTA_DATE_SEPARATOR);
         sep.init_date_separator(tmtm);
         if (index >= 0) getengine().child_move_to(index, &sep.getengine());
         prev_post_time = tmtm;
@@ -5434,11 +5486,9 @@ void gui_messagelist_c::restore_date_separator( ts::aint index, ts::aint cnt )
         if ( mi && mi_next && !mi->is_date_separator() && !mi->is_super_message() && !mi_next->is_date_separator() && !mi_next->is_super_message() )
         {
             bool date_sep = false;
-            if ( prf().get_options().is( MSGOP_SHOW_DATE_SEPARATOR ) && mi->get_post_recv_time() && mi_next->get_post_recv_time() )
+            if ( prf_options().is( MSGOP_SHOW_DATE_SEPARATOR ) && mi->get_post_recv_time() && mi_next->get_post_recv_time() )
             {
-                tm tmtm;
-                time_t rcv_time = mi->get_post_recv_time();
-                _localtime64_s( &tmtm, &rcv_time );
+                ts::localtime_s tmtm(mi->get_post_recv_time());
                 date_sep = insert_date_separator( index, tmtm, mi_next->get_post_recv_time() ); // separator shows recv time
             }
 
@@ -5474,7 +5524,7 @@ void gui_messagelist_c::insert_history_load_item( ts::aint load_n )
     if ( load_n <= 0 )
         return;
 
-    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, historian, CONSTASTR( "load" ), MTA_HISTORY_LOAD_BUTTON );
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, historian, ts::str_c(CONSTASTR("load")), MTA_HISTORY_LOAD_BUTTON );
     getengine().child_move_to( index, &r.getengine() );
     r.init_load( load_n );
 }
@@ -5509,10 +5559,9 @@ gui_message_item_c *gui_messagelist_c::insert_message_item( gmsg<ISOGM_SUMMON_PO
         if (!mi.is_date_separator())
         {
             bool date_sep = false;
-            if (prf().get_options().is(MSGOP_SHOW_DATE_SEPARATOR) && p.post.recv_time )
+            if (prf_options().is(MSGOP_SHOW_DATE_SEPARATOR) && p.post.recv_time )
             {
-                tm tmtm;
-                _localtime64_s(&tmtm, &p.post.recv_time);
+                ts::localtime_s tmtm(p.post.recv_time);
                 date_sep = insert_date_separator(index, tmtm, mi.get_post_recv_time()); // separator shows recv time
             }
 
@@ -5524,7 +5573,7 @@ gui_message_item_c *gui_messagelist_c::insert_message_item( gmsg<ISOGM_SUMMON_PO
 
     MEMT( MEMT_MESSAGE_ITEM_1 );
 
-    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, skin, p.post.mt() );
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, ts::str_c(skin), p.post.mt() );
     getengine().child_move_to(index, &r.getengine());
     keep_top_visible();
     return &r;
@@ -5542,7 +5591,7 @@ void gui_messagelist_c::add_typing_item( contact_c *typer )
         }
         if ( mi->get_author() == typer )
         {
-            if ( same_author ( getengine().get_prev_child( &mi->getengine() ), typer, CONSTASTR( "other" ) ) )
+            if ( same_author ( getengine().get_prev_child( &mi->getengine() ), typer, ts::str_c(CONSTASTR("other")) ) )
                 mi->set_no_author();
             mi->refresh_typing();
             return;
@@ -5550,9 +5599,9 @@ void gui_messagelist_c::add_typing_item( contact_c *typer )
     }
 
     rectengine_c *prev = getengine().get_last_child();
-    gui_message_item_c &mi = MAKE_CHILD<gui_message_item_c>( getrid(), historian, typer, CONSTASTR( "other" ), MTA_TYPING );
+    gui_message_item_c &mi = MAKE_CHILD<gui_message_item_c>( getrid(), historian, typer, ts::str_c(CONSTASTR("other")), MTA_TYPING );
     mi.refresh_typing();
-    if ( same_author ( prev, typer, CONSTASTR( "other" ) ) )
+    if (same_author(prev, typer, ts::str_c(CONSTASTR("other"))))
         mi.set_no_author();
 
     ts::safe_ptr<gui_message_item_c> smi( &mi );
@@ -5602,14 +5651,14 @@ gui_message_item_c *gui_messagelist_c::add_message_item( gmsg<ISOGM_SUMMON_POST>
             }
         }
 
-    if ( prf().get_options().is( MSGOP_SHOW_DATE_SEPARATOR ) && p.post.recv_time )
+    if ( prf_options().is( MSGOP_SHOW_DATE_SEPARATOR ) && p.post.recv_time )
         insert_date_separator( -1, last_post_time, p.post.recv_time );
 
     ts::asptr skin = calc_message_skin( p.post.mt(), p.post.sender );
 
     if ( is_special_mt( p.post.mt() ) )
     {
-        gui_message_item_c &mi = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, skin, p.post.mt() );
+        gui_message_item_c &mi = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, ts::str_c(skin), p.post.mt() );
         return &mi;
     }
 
@@ -5622,8 +5671,8 @@ gui_message_item_c *gui_messagelist_c::add_message_item( gmsg<ISOGM_SUMMON_POST>
         typing.clear();
     }
 
-    bool is_same_author = same_author( getengine().get_last_child(), author, skin );
-    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, skin, p.post.mt() );
+    bool is_same_author = same_author( getengine().get_last_child(), author, ts::str_c(skin) );
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>( getrid(), historian, author, ts::str_c(skin), p.post.mt() );
     if (is_same_author) r.set_no_author();
     keep_top_visible();
     return &r;
@@ -5645,7 +5694,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
     p.current = true;
     bool at_and = p.post.sender.is_self || is_at_end();
 
-    gmsg<ISOGM_SUMMON_POST>( p.post, nullptr ).send();
+    gmsg<ISOGM_SUMMON_POST>( p.post, false ).send();
 
     if (at_and) scroll_to_end();
 
@@ -5775,7 +5824,7 @@ void gui_messagelist_c::scroll( ts::aint shift )
     target_offset = shift;
     prevdelta = 1 + ts::lround(0.3f * (target_offset - sbshift()));
     flags.set(F_SCROLLING_TO_TGT);
-    __super::on_manual_scroll();
+    super::on_manual_scroll();
     scroll_do(RID(), nullptr);
 }
 
@@ -5813,7 +5862,7 @@ void gui_messagelist_c::goto_item(uint64 utag)
                 break;
             }
 
-            if ( const found_item_s *f = fi() )
+            if ( nullptr != fi() )
                 if (mi->is_super_message())
                 {
                     ts::ivec2 r = mi->smrange();
@@ -5831,7 +5880,7 @@ void gui_messagelist_c::goto_item(uint64 utag)
                         break;
                 }
         }
-    
+
     if ( smi )
     {
         rectengine_c *itme = smi->split_super_message( chi, getengine(), SMSPLIT_INDEX, split );
@@ -5956,7 +6005,7 @@ void gui_messagelist_c::clear_list(bool empty_mode)
     conference_apid = 0;
     my_name_in_conference.clear();
 
-    if ( empty_mode && (!prf().is_loaded() || prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR)))
+    if ( empty_mode && (!prf().is_loaded() || prf_options().is(UIOPT_SHOW_NEWCONN_BAR)))
     {
         if (!flags.is(F_EMPTY_MODE))
         {
@@ -5984,6 +6033,7 @@ namespace
 {
     class gui_new_proto_c : public gui_label_ex_c
     {
+        typedef gui_label_ex_c super;
         int addh = 100;
         struct avprots_s : public available_protocols_s
         {
@@ -6021,7 +6071,7 @@ namespace
         /*virtual*/ void created() override
         {
             set_theme_rect(CONSTASTR("newproto"), false);
-            __super::created();
+            super::created();
         }
 
         bool _new_connection(RID, GUIPARAM)
@@ -6063,7 +6113,7 @@ namespace
                 MODIFY(b).visible(true);
                 textrect.set_margins(ts::ivec2(0, minsz.y + 5));
                 addh = minsz.y + 10;
-            } else if (!g_app->F_MAINRECTSUMMON)
+            } else if (!g_app->F_MAINRECTSUMMON())
             {
                 ts::wstr_c lt(CONSTWSTR("<p=c>"), loc_text(loc_please_create_profile));
                 set_text(lt);
@@ -6093,12 +6143,11 @@ namespace
 
             if (qp == SQ_DRAW && rid == getrid())
             {
-                __super::sq_evt(qp, rid, data);
-
+                super::sq_evt(qp, rid, data);
                 return true;
             }
 
-            if (__super::sq_evt(qp, rid, data)) return true;
+            if (super::sq_evt(qp, rid, data)) return true;
 
             return false;
         }
@@ -6281,8 +6330,11 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
+ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SL>&p )
 {
+    if (!p.saved)
+        return 0;
+
     if ( p.tabi == pt_active_protocol )
     {
         protodescs.clear(); // just clear proto descs due connection name can be changed
@@ -6315,7 +6367,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 
     } else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self)
         historian->reselect(0);
-    else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+    else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf_options().is(UIOPT_SHOW_NEWCONN_BAR))
     {
         getengine().trunc_children(0);
         create_empty_mode_stuff();
@@ -6327,7 +6379,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 {
     if (f.bits & application_c::PEF_RECREATE_CTLS_MSG)
     {
-        if (flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+        if (flags.is(F_EMPTY_MODE) && prf_options().is(UIOPT_SHOW_NEWCONN_BAR))
         {
             getengine().trunc_children(0);
             create_empty_mode_stuff();
@@ -6348,7 +6400,7 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_SUMMON_NOPROFILE_UI> & )
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
-    if (prf().get_options().is(UIOPT_SHOW_TYPING_MSGLIST) && historian)
+    if (prf_options().is(UIOPT_SHOW_TYPING_MSGLIST) && historian)
     {
         if ( historian->getkey().is_conference() )
         {
@@ -6384,11 +6436,11 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
     switch (p.post.mt())
     {
         case MTA_FRIEND_REQUEST:
-            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, p.post.message_utf8->cstr()).send();
+            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, ts::str_c(p.post.message_utf8->cstr())).send();
             break;
         case MTA_INCOMING_CALL:
             if (!historian->get_aaac())
-                gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message_utf8->cstr()).send();
+                gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, ts::str_c(p.post.message_utf8->cstr())).send();
             break;
         default:
         {
@@ -6428,7 +6480,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &p )
 {
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
         if ( p.contact != historian )
             return 0;
 
@@ -6525,7 +6577,7 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     if (self_selected)
         return 0;
 
-    time_t before = now();
+    time_t before = ts::now();
     if (historian->history_size()) before = historian->get_history(0).recv_time;
 
     int min_hist_size = prf().min_history_load(false);
@@ -6574,7 +6626,7 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     if (filler)
         filler->dont_scroll = true;
     flags.clear(F_SCROLLING_TO_TGT);
-    __super::on_manual_scroll();
+    super::on_manual_scroll();
 }
 
 gui_messagelist_c::filler_s::filler_s( gui_messagelist_c *owner, ts::aint loadn ) :owner( owner ), found_item( nullptr ), fillindex_up( -1 ), fillindex_down( 0 ), fillindex_down_end( 0 ), options( RSEL_INSERT_NEW ), load_n( loadn )
@@ -6652,7 +6704,7 @@ gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item
     }
 
     if (fillindex_down > 0)
-        _localtime64_s(&owner->last_post_time, &h->get_history(fillindex_down-1).recv_time);
+        owner->last_post_time.init( h->get_history(fillindex_down-1).recv_time );
 
     tick();
 }
@@ -6872,7 +6924,8 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     }
 
     if (historian == nullptr) return true;
-    contact_c *receiver = historian->subget_for_send(); // get default subcontact for message
+    why_this_subget_e why;
+    contact_c *receiver = historian->subget_smart(why); // get default subcontact for message
     if (receiver == nullptr) return true;
 
 #ifdef _DEBUG
@@ -6925,7 +6978,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
     MEMT( MEMT_MESSAGE_EDIT );
 
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
         if ( p.contact != historian )
             return 0;
 
@@ -6968,7 +7021,7 @@ ts::uint32 gui_message_editor_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     if (cp >= 0) set_caret_pos(cp);
 
     check_text_func = och;
-    if (check_text_func) 
+    if (check_text_func)
         check_text_func(t, false /* no change */);
 
     return 0;
@@ -7006,7 +7059,7 @@ ts::uint32 gui_message_editor_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     bad_words = DELEGATE(this, bad_words_handler);
     ctx_menu_func = DELEGATE(this, suggestions);
 
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ bool gui_message_editor_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -7019,7 +7072,7 @@ ts::uint32 gui_message_editor_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
         redraw();
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
@@ -7108,7 +7161,7 @@ ts::ivec2 calc_smls_position(const ts::irect &buttonrect, const ts::ivec2 &menus
     ts::irect maxsize = ts::wnd_get_max_size(buttonrect);
 
     int x = (buttonrect.rb.x + buttonrect.lt.x - menusize.x)/2;
-    
+
     if (x + menusize.x > maxsize.rb.x)
         x = maxsize.rb.x - menusize.x;
 
@@ -7245,7 +7298,7 @@ bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
 
         return;
     }
-    __super::paste_(cp);
+    super::paste_(cp);
 }
 
 /*virtual*/ void gui_message_editor_c::cb_scrollbar_width(int w)
@@ -7261,7 +7314,7 @@ gui_message_area_c::~gui_message_area_c()
 
 /*virtual*/ ts::ivec2 gui_message_area_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     int miny = 0;
     if ( guirect_c * r = send_button )
     {
@@ -7297,7 +7350,8 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
         if ( contact_root_c * contact = message_editor->get_historian() )
             if ( !contact->getkey().is_self )
             {
-                contact_c *tgt = contact->subget_for_send();
+                why_this_subget_e why;
+                contact_c *tgt = contact->subget_smart(why);
                 if ( tgt && tgt->get_state() == CS_ONLINE )
                     if (active_protocol_c *ap = prf().ap( tgt->getkey().protoid ))
                         ap->typing( t.is_empty() ? contact_key_s() : tgt->getkey() );
@@ -7317,14 +7371,14 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
     send_button->set_face_getter(BUTTON_FACE(send));
     send_button->tooltip( TOOLTIP( TTT("Send",7) ) );
     send_button->set_handler( DELEGATE(g_app, b_send_message), nullptr );
-    
+
     MODIFY(*send_button).visible(true).size(send_button->get_min_size());
 
     update_buttons();
 
     set_theme_rect(CONSTASTR("msgarea"), false);
     defaultthrdraw = DTHRO_BASE;
-    __super::created();
+    super::created();
 
     flags.set( F_INITIALIZED );
 }
@@ -7479,13 +7533,38 @@ void gui_conversation_c::created()
     DMSG("MESSAGEAREA RID: " << messagearea->getrid());
     DMSG("NOTICELIST RID: " << noticelist->getrid());
 
-    return __super::created();
+    return super::created();
+}
+
+int gui_conversation_c::notice_list_height() const
+{
+    if (caption->contacted() && !caption->getcontact().getkey().is_self)
+        return getprops().size().y / 2;
+
+    if (prf_options().is(UIOPT_SHOW_NEWCONN_BAR))
+    {
+        if (msglist->is_empty_mode())
+        {
+            if (const rectengine_c *e = msglist->getengine().children_count() ? msglist->getengine().get_child(0) : nullptr)
+            {
+                if (const gui_new_proto_c *npp = dynamic_cast<const gui_new_proto_c *>(&e->getrect()))
+                {
+                    return getprops().size().y - GET_THEME_VALUE(mecontactheight) - 5 - npp->get_min_size().y;
+                }
+            }
+        }
+
+
+        return getprops().size().y / 2;
+    }
+
+    return getprops().size().y - GET_THEME_VALUE(mecontactheight) - 5;
 }
 
 void gui_conversation_c::add_text( const ts::wsptr&t )
 {
     if ( message_editor )
-        HOLD( message_editor ).as<gui_message_editor_c>().insert_text(t);
+        HOLD( message_editor ).as<gui_message_editor_c>().insert_text(ts::wstr_c(t));
 }
 
 void gui_conversation_c::insert_peer_name( const ts::str_c& name )
@@ -7515,7 +7594,7 @@ bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
         else
             caption->getcontact().subiterate([&](contact_c *c) {
                 if (show) return;
-                if (c->is_protohit(true))
+                if (c->get_options().unmasked().is(contact_c::F_ALLOWACCEPTDATA))
                     show = true;
             });
     }
@@ -7526,7 +7605,7 @@ bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
 bool gui_conversation_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     MEMT( MEMT_CONVERSATION );
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
@@ -7565,6 +7644,9 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 
     if (f.bits & application_c::PEF_UPDATE_BUTTONS_HEAD)
         caption->update_buttons();
+
+    if (f.bits & application_c::PEF_UPDATE_PROTOS_HEAD)
+        caption->generate_protocols();
 
     if (f.bits & application_c::PEF_SHOW_HIDE_EDITOR)
         hide_show_messageeditor();
@@ -7610,7 +7692,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
 
 ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &p )
 {
-    if ( g_app->F_SPLIT_UI )
+    if (g_app->F_SPLIT_UI())
     {
         if ( p.contact != caption->getcontact_ptr() )
             return 0;
@@ -7638,7 +7720,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
     {
         static_cast<sound_capture_handler_c *>(g_app)->start_capture();
 
-        if ( !g_app->F_SPLIT_UI )
+        if (!g_app->F_SPLIT_UI())
             g_app->avcontacts().iterate([&](av_contact_s & avc){
                 if (avc.core->state != av_contact_s::AV_INPROGRESS)
                     return;
@@ -7693,8 +7775,11 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return 0;
 }
 
-ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&p)
 {
+    if (!p.saved)
+        return 0;
+
     if (p.tabi == pt_active_protocol)
     {
         if ( caption )
@@ -7849,7 +7934,7 @@ bool spellchecker_s::update_bad_words(RID, GUIPARAM)
                         break;
                     }
                 if (c) continue;
-                
+
                 index = fndi + w.badword.get_length();
 
                 if (fndi == 0 || (fndi > 0 && text_non_letters().find_pos(text.get_char(fndi-1))>=0))
@@ -7858,7 +7943,7 @@ bool spellchecker_s::update_bad_words(RID, GUIPARAM)
                         for( int i = index - 1; i >= fndi; --i )
                             badwords.set_bit( i, true );
                 }
-                    
+
             }
         }
     }

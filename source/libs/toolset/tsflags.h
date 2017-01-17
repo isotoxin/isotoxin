@@ -4,7 +4,7 @@
 
 #define COPYBITS( t, s, m ) t = ((t) & ~(m)) | ((s) & (m))
 
-#define SETBIT(x) ((1U)<<(x))
+#define SETBIT(x) (static_cast<size_t>(1)<<(x))
 #define SETFLAG(f,mask) (f)|=(mask)
 #define RESETFLAG(f,mask) (f)&=~(mask)
 #define INVERTFLAG(f,mask) (f)^=(mask)

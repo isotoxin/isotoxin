@@ -1,22 +1,26 @@
 #include "rectangles.h"
 
-bool RID::operator<(const RID&or) const
+#ifdef _NIX
+#define _alloca alloca
+#endif // _NIX
+
+bool RID::operator<(RID r) const
 {
     HOLD me(*this);
-    HOLD other(or);
+    HOLD other(r);
     int x = ts::SIGN(me().getprops().zindex() - other().getprops().zindex());
-    x = x == 0 ? (ts::SIGN((ts::aint)&me.engine() - (ts::aint)&other.engine())) : x;
+    x = x == 0 ? (ts::SIGN(reinterpret_cast<ts::aint>(&me.engine()) - reinterpret_cast<ts::aint>(&other.engine()))) : x;
     return x < 0;
 }
 
-bool RID::operator>(const RID&or) const
+bool RID::operator>(RID r) const
 {
-    return HOLD(or)().getparent() == *this;
+    return HOLD(r)().getparent() == *this;
 }
-bool RID::operator>>(const RID&or) const
+bool RID::operator>>(RID r) const
 {
-    if (!or) return false;
-    HOLD ror(or);
+    if (!r) return false;
+    HOLD ror(r);
     if (!ror) return false;
     RID parent = ror().getparent();
     if (!parent) return false;
@@ -159,7 +163,7 @@ MODIFY::MODIFY(RID id)
     }
 }
 
-MODIFY::MODIFY(guirect_c &r):client(&r) 
+MODIFY::MODIFY(guirect_c &r):client(&r)
 {
 	set( client->getprops().update_screenpos() );
     client->__spec_inmod(1);
@@ -207,7 +211,7 @@ bool rectprops_c::change_to(const rectprops_c &p)
     bool ac_changed = is_active() != p.is_active();
     bool vis_changed = is_visible() != p.is_visible();
     ts::ivec2 posdelta = p.screenpos() - screenpos();
-    
+
     set(p); m_size = evtd.rectchg.rect.get().size(); // change current property set
     m_flags.set(F_RECT_MEMBER);
 
@@ -243,12 +247,12 @@ bool rectprops_c::change_to(const rectprops_c &p)
         engine.sq_evt(SQ_ZINDEX_CHANGED, engine.getrid(), evtd);
     if (hl_changed || ac_changed)
         guirect.sq_evt(SQ_THEMERECT_CHANGED, engine.getrid(), evtd);
-        
+
     if (evtd.changed.pos_changed || evtd.changed.size_changed || vis_changed)
         gui->dirty_hover_data();
 
 #ifdef _DEBUG
-    engine.getrect().sq_evt(SQ_DEBUG_CHANGED_SOME, engine.getrid(), evtd); 
+    engine.getrect().sq_evt(SQ_DEBUG_CHANGED_SOME, engine.getrid(), evtd);
 #endif // _DEBUG
 
     return is_visible() && (ac_changed || hl_changed || vis_changed || evtd.changed.size_changed);
@@ -284,7 +288,7 @@ guirect_c::guirect_c(initial_rect_data_s &data):m_rid(data.id), m_parent(data.pa
     m_root = __spec_find_root();
 }
 
-guirect_c::~guirect_c() 
+guirect_c::~guirect_c()
 {
     if ( gui )
     {
@@ -388,9 +392,16 @@ void guirect_c::apply(const rectprops_c &pss)
         return (m_test_00 = false);
     }
 #endif
+
+    ts::tmp_array_safe_t<sqhandler_i, 0> tmpl;
+
     for (sqhandler_i *h : m_leeches)
+        if (h) tmpl.add(h);
+    
+    for (sqhandler_i *h : tmpl)
         if (h)
             h->sq_evt(qp, _rid, data);
+
     return false;
 }
 
@@ -426,7 +437,7 @@ void gui_control_c::created()
             if (tr->is_alphablend(SI_any))
                 MODIFY(*this).makealphablend();
 
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ bool gui_control_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
@@ -474,7 +485,7 @@ void gui_control_c::created()
         break;
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 void gui_control_c::set_theme_rect( const ts::asptr &thrn, bool ajust_defdraw )
@@ -534,7 +545,7 @@ MAKE_CHILD<gui_panel_c>::~MAKE_CHILD()
 
 bool gui_button_c::default_handler(RID r, GUIPARAM)
 {
-    WARNING( __FUNCTION__ " called" );
+    WARNING( "%s called", __FUNCTION__ );
     return false;
 }
 
@@ -563,7 +574,7 @@ bool gui_button_c::group_handler(gmsg<GM_GROUP_SIGNAL> & signal)
                     flags.clear(F_MARK);
                     break;
                 }
-                
+
             if (flags.is(F_MARK))
                 signal.mask |= as_int(param);
         }
@@ -598,8 +609,8 @@ void gui_button_c::draw()
             }
             int y = (sz.y - desc->rects[drawstate].height()) / 2;
             m_engine->draw(ts::ivec2(0, y), desc->src.extbody(desc->rects[drawstate]), desc->is_alphablend(drawstate));
-            
-            if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED)) 
+
+            if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED))
                 m_engine->end_draw();
         }
 
@@ -649,7 +660,7 @@ void gui_button_c::draw()
                         dd.offset.x += thi->info().sz.x + 3;
                     }
             }
-            
+
             text_draw_params_s tdp;
             tdp.forecolor = desc->colors + drawstate;
             ts::flags32_s f; f.set(ts::TO_VCENTER); if (flags.is(F_CONSTANT_SIZE_X)) f.set(ts::TO_HCENTER);
@@ -774,8 +785,8 @@ void gui_button_c::set_text_internal( const ts::wsptr&t )
         if (flags.is(F_CONSTANT_SIZE_Y)) rtnr.y = textsize.y;
         return rtnr;
     }
-    
-    ts::ivec2 rtnr = __super::get_min_size();
+
+    ts::ivec2 rtnr = super::get_min_size();
     if (flags.is(F_CONSTANT_SIZE_X)) rtnr.x = textsize.x;
     if (flags.is(F_CONSTANT_SIZE_Y)) rtnr.y = textsize.y;
     return rtnr;
@@ -813,18 +824,18 @@ void gui_button_c::set_text_internal( const ts::wsptr&t )
 
             if (flags.is(F_CONSTANT_SIZE_Y))
             {
-                ts::ivec2 sz = __super::get_max_size();
+                ts::ivec2 sz = super::get_max_size();
                 sz.y = get_min_size().y;
                 return sz;
             }
 
-            return __super::get_max_size();
+            return super::get_max_size();
         }
 
         return desc->rects[curstate].size();
     }
 
-    return __super::get_max_size();
+    return super::get_max_size();
 }
 
 /*virtual*/ bool gui_button_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
@@ -836,7 +847,7 @@ void gui_button_c::set_text_internal( const ts::wsptr&t )
         getengine().redraw();
     }
 
-    if (__super::sq_evt(qp,rid,data)) return true;
+    if (super::sq_evt(qp,rid,data)) return true;
 
     bool action = false;
 
@@ -955,16 +966,19 @@ void gui_label_c::set_selectable(bool f)
     if (oldf != f) getengine().redraw();
 }
 
-void gui_label_c::draw()
+void gui_label_c::draw(ts::ivec2 *glyph_pos)
 {
     if (ASSERT(m_engine) && !textrect.get_text().is_empty())
     {
         ts::irect ca = get_client_area();
         draw_data_s &dd = getengine().begin_draw();
 
-        
+
         if ( selectable_core_s *selcore = flags.is( FLAGS_SELECTABLE ) ? gui->get_selcore( getrid() ) : nullptr )
             selcore->glyphs_pos = ca.lt;
+
+        if (glyph_pos)
+            *glyph_pos = ca.lt;
 
         dd.offset += ca.lt;
         dd.size = ca.size();
@@ -1087,7 +1101,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 
 /*virtual*/ ts::ivec2 gui_label_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
@@ -1099,7 +1113,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 
 /*virtual*/ ts::ivec2 gui_label_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
@@ -1111,13 +1125,13 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 
 /*virtual*/ bool gui_label_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     switch (qp)
     {
     case SQ_DRAW:
         if (rid != getrid()) return false;
-        draw();
+        draw(nullptr);
         return true;
     case SQ_MOUSE_L2CLICK:
         if (flags.is(FLAGS_SELECTABLE))
@@ -1316,8 +1330,13 @@ ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
                     data.detectarea.area = AREA_HAND;
             }
             break;
+        case SQ_DRAW:
+            if (rid != getrid()) return false;
+            gui_control_c::sq_evt(qp, rid, data); // draw background
+            draw(&glyphs_pos);
+            return true;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 void gui_label_ex_c::get_link_prolog(ts::wstr_c &r, int linknum) const
@@ -1371,7 +1390,7 @@ ts::wstr_c gui_label_simplehtml_c::tt() const
 void gui_label_simplehtml_c::created()
 {
     set_theme_rect(CONSTASTR("html"), false);
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ void gui_label_simplehtml_c::set_text(const ts::wstr_c&text, bool full_height_last_line)
@@ -1393,7 +1412,7 @@ void gui_label_simplehtml_c::created()
         ct.set_char(6,'a');
         t.replace(x,y+2-x,ct);
     }
-    __super::set_text(t, full_height_last_line);
+    super::set_text(t, full_height_last_line);
 }
 
 /*virtual*/ bool gui_label_simplehtml_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -1404,7 +1423,7 @@ void gui_label_simplehtml_c::created()
             on_link_click( links.get(overlink) );
         return true;
     }
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 //________________________________________________________________________________________________________________________________ gui tooltip
@@ -1430,8 +1449,8 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
             return true;
         }
     }
-    guirect_c &or = HOLD( ownrect )();
-    const ts::wstr_c &tt = or .tooltip();
+    guirect_c &othr = HOLD( ownrect )();
+    const ts::wstr_c &tt = othr .tooltip();
     if (tt.is_empty())
     {
         MODIFY( *this ).hide();
@@ -1449,8 +1468,8 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         }
         if (const theme_rect_s *thr = themerect())
             sz = thr->size_by_clientsize(sz + 5, false);
-        
-        ts::irect maxsz = ts::wnd_get_max_size( or .getprops().screenrect() );
+
+        ts::irect maxsz = ts::wnd_get_max_size( othr .getprops().screenrect() );
         bool fixx = false;
         if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x, fixx = true;
         if ( fixx && cp.y + sz.y >= maxsz.rb.y ) cp.y = cp.y - 27 - sz.y;
@@ -1468,13 +1487,13 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
 
 ts::ivec2 gui_tooltip_c::get_min_size() const
 {
-    return __super::get_min_size();
+    return super::get_min_size();
 }
 
 /*virtual*/ void gui_tooltip_c::created()
 {
     set_theme_rect(CONSTASTR("tooltip"), false);
-    __super::created();
+    super::created();
     textrect.set_margins(ts::ivec2(5),0);
     DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_text), nullptr );
     HOLD(ownrect)().leech(this);
@@ -1507,7 +1526,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
         return false;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 void gui_tooltip_c::create(RID owner)
@@ -1564,7 +1583,7 @@ void gui_group_c::children_repos_info( cri_s &info ) const
 
 bool gui_group_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     switch (qp)
     {
@@ -1663,6 +1682,7 @@ void gui_hgroup_c::children_repos()
     // get min max size
     int szt = 0;
     int minsz = 0;
+    int numpolicymax = 0;
     for (ts::aint t = 0; t < info.count; ++t)
     {
         rsize &ww = rsizes.add();
@@ -1683,13 +1703,17 @@ void gui_hgroup_c::children_repos()
             continue;
         }
         szpol_override[t] = ww.sizepolicy = (ts::uint8)r.size_policy();
-        ww.szmin = (ts::int16)r.get_min_size()[vecindex];
-        ww.szmax = (ts::int16)r.get_max_size()[vecindex];
+        ww.szmin = static_cast<ts::int16>(r.get_min_size()[vecindex]);
+        ww.szmax = static_cast<ts::int16>(r.get_max_size()[vecindex]);
         ww.szsplit = 0;
-        ww.sz = (ts::int16)r.getprops().size()[vecindex];
+        ww.sz = static_cast<ts::int16>(r.getprops().size()[vecindex]);
         szt += ww.sz;
         minsz += ww.szmin;
+        if (ww.sizepolicy == SP_NORMAL_MAX)
+            ++numpolicymax;
     }
+
+    ASSERT(numpolicymax <= 1);
 
     if (szt > 0)
         for (ts::aint t = 0; t < info.count; ++t)
@@ -1724,21 +1748,21 @@ void gui_hgroup_c::children_repos()
 
         if (opd || ww.sz == 0)
         {
-            ww.sz = (ts::int16)ts::lround((double)current_size_goal * tpropo[t] / proposum_working);
+            ww.sz = static_cast<ts::int16>(ts::lround((double)current_size_goal * tpropo[t] / proposum_working));
         } else
         {
             switch (ww.sizepolicy)
             {
             case SP_NORMAL:
             case SP_ANY:
-                ww.sz = (ts::int16)ts::lround((double)current_size_goal * tpropo[t] / proposum_working);
+                ww.sz = static_cast<ts::int16>(ts::lround((double)current_size_goal * tpropo[t] / proposum_working));
                 break;
             case SP_NORMAL_MIN:
                 ww.sz = ww.szmin;
                 break;
             case SP_NORMAL_MAX:
                 ww.sz = ww.szmax;
-                if (ww.sz > current_size_goal) ww.sz = (ts::int16)current_size_goal;
+                if (ww.sz > current_size_goal) ww.sz = static_cast<ts::int16>(current_size_goal);
                 break;
             }
         }
@@ -1749,9 +1773,17 @@ void gui_hgroup_c::children_repos()
             bad_prop_size_detected |= (ww.sz < ww.szmin || ww.sz > ww.szmax);
     }
 
-    if ( bad_prop_size_detected || current_prop_vsize != (info.areasize-splitters_sz) )
+    while ( bad_prop_size_detected || current_prop_vsize != (info.areasize-splitters_sz) )
     {
-        looploop: // uncondition loop to fix limit size
+        ts::aint nloop = -1;
+
+    looploop: // unconditional loop to fix limit size
+
+        ++nloop;
+
+        if (nloop > info.count)
+            break;
+
         current_size_goal = info.areasize-splitters_sz;
         if (minsz > current_size_goal)
             current_size_goal = minsz;
@@ -1766,21 +1798,21 @@ void gui_hgroup_c::children_repos()
                 int newsz_unclamped = ts::lround((double)current_size_goal * ts::tabs(tpropo[t]) / proposum_working);
                 polices |= SETBIT(szpol_override[t]);
                 if (opd)
-                    ww.sz = (ts::int16)ts::CLAMP(newsz_unclamped, ww.szmin, ww.szmax);
+                    ww.sz = static_cast<ts::int16>(ts::CLAMP(newsz_unclamped, ww.szmin, ww.szmax));
                 else switch (szpol_override[t])
                 {
                     case SP_NORMAL:
-                        ww.sz = (ts::int16)ts::CLAMP(newsz_unclamped, ww.szmin, ww.szmax);
+                        ww.sz = static_cast<ts::int16>(ts::CLAMP(newsz_unclamped, ww.szmin, ww.szmax));
                         break;
                     case SP_ANY:
-                        ww.sz = (ts::int16)newsz_unclamped;
+                        ww.sz = static_cast<ts::int16>(newsz_unclamped);
                         break;
                     case SP_NORMAL_MIN:
                         ww.sz = ww.szmin;
                         break;
                     case SP_NORMAL_MAX:
                         ww.sz = ww.szmax;
-                        if (ww.sz > current_size_goal) ww.sz = (ts::int16)current_size_goal;
+                        if (ww.sz > current_size_goal) ww.sz = static_cast<ts::int16>(current_size_goal);
                         break;
                     case SP_KEEP:
                         break;
@@ -1797,15 +1829,24 @@ void gui_hgroup_c::children_repos()
                         if (tpropo[i] < 0) continue;
                         sum_other += tpropo[i];
                     }
-                    double need_sum_other = sum_other + oldt + tpropo[t]; // remember, tpropo[t] is negative now
-                    double k = need_sum_other / sum_other;
-                    
-                    for (int i = 0; i < info.count; ++i)
-                    {
-                        if (tpropo[i] < 0) continue;
-                        tpropo[i] *= (float)k;
-                    }
 
+                    if (sum_other > 0)
+                    {
+                        double need_sum_other = sum_other + oldt + tpropo[t]; // remember, tpropo[t] is negative now
+                        double k = need_sum_other / sum_other;
+
+                        proposum = 0;
+                        for (int i = 0; i < info.count; ++i)
+                        {
+                            if (tpropo[i] < 0)
+                            {
+                                proposum -= tpropo[i];
+                                continue;
+                            }
+                            tpropo[i] *= (float)k;
+                            proposum += tpropo[i];
+                        }
+                    }
                     goto looploop;
                 }
                 current_size_goal -= ww.sz;
@@ -1848,6 +1889,8 @@ void gui_hgroup_c::children_repos()
                 goto looploop;
             }
         }
+
+        break;
     }
 
     if (opd)
@@ -1920,7 +1963,7 @@ void gui_hgroup_c::children_repos()
 
 /*virtual*/ ts::ivec2 gui_hgroup_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     int cminy = 0;
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
@@ -1958,7 +2001,7 @@ void gui_hgroup_c::children_repos()
 
 /*virtual*/ ts::ivec2 gui_hgroup_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
         sz.y = get_min_size().y;
@@ -2048,7 +2091,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         return false;
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     switch (qp)
     {
@@ -2462,8 +2505,8 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         default:
             return false;
         }
-    } else 
-        if (__super::sq_evt(qp, rid, data)) return true;
+    } else
+        if (super::sq_evt(qp, rid, data)) return true;
 
     switch (qp)
     {
@@ -2539,7 +2582,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         gui->end_mousetrack(getrid(), MTT_SBMOVE);
         break;
     case SQ_MOUSE_MOVE_OP:
-        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE)) 
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE))
         {
             int dmouse = data.mouse.screenpos().y - opd->mpos.y;
 
@@ -2659,7 +2702,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     if (height_decreased)
     {
         gui->repos_children(this);
-        
+
     } else
     {
         ts::irect clar = get_client_area();
@@ -2684,7 +2727,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
 {
     if (getrid() >>= gui->get_focus()) return false;
     int lv = -1;
-    if (RID fr = gui->get_focus()) 
+    if (RID fr = gui->get_focus())
     {
         if (fr == hostrid) return false;
         lv = fr.call_get_menu_level();
@@ -2739,7 +2782,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, update_size), nullptr);
         return true;
     case SQ_DRAW:
-        return is_sb_visible() ? __super::sq_evt(qp,getrid(),data) : gui_control_c::sq_evt(qp,getrid(),data);
+        return is_sb_visible() ? super::sq_evt(qp,getrid(),data) : gui_control_c::sq_evt(qp,getrid(),data);
     case SQ_KEYDOWN:
         if (data.kbd.scan == ts::SSK_ESC)
             gmsg<GM_KILLPOPUPMENU_LEVEL>(menu.lv()).send();
@@ -2753,14 +2796,14 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
         return false;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 /*virtual*/ void gui_popup_menu_c::created()
 {
     set_theme_rect(CONSTASTR("menu"), false);
     flags.set(F_SB_OVER_ITEMS);
-    __super::created();
+    super::created();
 }
 
 void gui_popup_menu_c::menu_item_click( const click_data_s &prm )
@@ -2817,7 +2860,7 @@ ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> &p )
     }
     return 0;
 }
-    
+
 ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_POPUPMENU_DIED> &p)
 {
     if (p.level == menu.lv() + 1)
@@ -2874,7 +2917,7 @@ gui_menu_item_c::~gui_menu_item_c()
             return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
         }
     }
-    return __super::get_min_size();
+    return super::get_min_size();
 }
 
 /*virtual*/ bool gui_menu_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -2980,13 +3023,13 @@ gui_menu_item_c::~gui_menu_item_c()
 
         return true;
     }
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 /*virtual*/ void gui_menu_item_c::created()
 {
     set_theme_rect(CONSTASTR("menuitem"), false);
-    __super::created();
+    super::created();
 }
 
 MAKE_CHILD<gui_menu_item_c>::~MAKE_CHILD()
@@ -3041,7 +3084,7 @@ gui_menu_item_c & gui_menu_item_c::separator(bool f)
 
 gui_menu_item_c & gui_menu_item_c::submenu(const menu_c &m)
 {
-    if (textrect.get_text().is_empty()) textrect.set_text_only( CONSTWSTR("???"), true );
+    if (textrect.get_text().is_empty()) textrect.set_text_only( ts::wstr_c(CONSTWSTR("???")), true );
     flags.clear(F_SEPARATOR);
     submnu = m;
     MODIFY(getrid()).sizeh( get_min_size().y );
@@ -3141,12 +3184,12 @@ void gui_textfield_c::badvalue( bool b )
     set_theme_rect(CONSTASTR("textfield"), false);
     defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
 
-    __super::created();
+    super::created();
 }
 
 /*virtual*/ ts::ivec2 gui_textfield_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     if (height)
     {
         sz.y = height;
@@ -3157,7 +3200,7 @@ void gui_textfield_c::badvalue( bool b )
 }
 /*virtual*/ ts::ivec2 gui_textfield_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     if (height)
     {
         sz.y = height;
@@ -3180,11 +3223,11 @@ void gui_textfield_c::badvalue( bool b )
     }
     if (qp == SQ_CTL_ENABLE)
     {
-        __super::sq_evt(qp,rid,data);
+        super::sq_evt(qp,rid,data);
         if (selector) selector->sq_evt(qp,rid,data);
         return true;
     }
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 ////
@@ -3203,13 +3246,13 @@ MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
 /*virtual*/ void gui_vtabsel_c::created()
 {
     set_theme_rect(CONSTASTR("vtab"), false);
-    __super::created();
+    super::created();
     {
         ts::pair_s<RID, int> cp(RID(), 0);
         menu.iterate_items(*this, cp);
     }
     gui->repos_children(this);
-    
+
 }
 
 ts::uint32 gui_vtabsel_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
@@ -3296,13 +3339,13 @@ ts::uint32 gui_vtabsel_c::gm_handler( gmsg<GM_HEARTBEAT> & )
         return true;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>&, const ts::wsptr& txt) {return true;}
 bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, const menu_c &sm)
 {
-    MAKE_CHILD<gui_vtabsel_item_c> make(getrid(), txt, cp.second);
+    MAKE_CHILD<gui_vtabsel_item_c> make(getrid(), ts::wstr_c(txt), cp.second);
     make << sm << cp.first;
     if (cp.first)
         cp.first = make;
@@ -3337,7 +3380,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }
-    return __super::get_min_size();
+    return super::get_min_size();
 }
 
 /*virtual*/ ts::ivec2 gui_vtabsel_item_c::get_max_size() const
@@ -3348,7 +3391,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }
-    return __super::get_max_size();
+    return super::get_max_size();
 }
 
 /*virtual*/ bool gui_vtabsel_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -3367,7 +3410,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
         if (submnu)
         {
             getparent().call_open_group( getrid() );
-        } else 
+        } else
         {
             MODIFY(*this).active(true);
             if (handler)
@@ -3406,13 +3449,13 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 
         return true;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 /*virtual*/ void gui_vtabsel_item_c::created()
 {
     set_theme_rect(CONSTASTR("vtabitem"), false);
-    __super::created();
+    super::created();
 }
 
 //________________________________________________________________________________________________________________________________ gui_htabsel_c
@@ -3428,7 +3471,7 @@ MAKE_CHILD<gui_htabsel_c>::~MAKE_CHILD()
 
 /*virtual*/ void gui_htabsel_c::created()
 {
-    __super::created();
+    super::created();
 
     set_theme_rect(CONSTASTR("htab"), false);
 
@@ -3510,13 +3553,13 @@ ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 
 /*virtual*/ ts::ivec2 gui_htabsel_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     sz.y = height;
     return sz;
 }
 /*virtual*/ ts::ivec2 gui_htabsel_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     sz.y = height;
     return sz;
 }
@@ -3546,7 +3589,7 @@ ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         MODIFY(*this).pos(p).size(s);
     }
 
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt) { return true; }
@@ -3570,7 +3613,7 @@ gui_htabsel_item_c::~gui_htabsel_item_c()
 
 /*virtual*/ ts::ivec2 gui_htabsel_item_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     sz.x = tw;
     if (const theme_rect_s *thr = themerect())
         sz.x += thr->clborder_x();
@@ -3579,7 +3622,7 @@ gui_htabsel_item_c::~gui_htabsel_item_c()
 
 /*virtual*/ ts::ivec2 gui_htabsel_item_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     sz.x = tw;
     if (const theme_rect_s *thr = themerect())
         sz.x += thr->clborder_x();
@@ -3634,13 +3677,13 @@ void gui_htabsel_item_c::activate()
 
             return true;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 /*virtual*/ void gui_htabsel_item_c::created()
 {
     set_theme_rect(CONSTASTR("htabitem"), false);
-    __super::created();
+    super::created();
 }
 
 
@@ -3709,7 +3752,7 @@ void gui_hslider_c::set_level(float level_)
 
 /*virtual*/ ts::ivec2 gui_hslider_c::get_min_size() const
 {
-    ts::ivec2 sz = __super::get_min_size();
+    ts::ivec2 sz = super::get_min_size();
     if (const theme_rect_s *th = themerect())
         sz.y = th->sis[SI_TOP].height();
 
@@ -3717,7 +3760,7 @@ void gui_hslider_c::set_level(float level_)
 }
 /*virtual*/ ts::ivec2 gui_hslider_c::get_max_size() const
 {
-    ts::ivec2 sz = __super::get_max_size();
+    ts::ivec2 sz = super::get_max_size();
     if (const theme_rect_s *th = themerect())
         sz.y = th->sis[SI_TOP].height();
 
@@ -3734,7 +3777,7 @@ void gui_hslider_c::set_level(float level_)
         levelshift.y = (ts::int16)s.y;
     }
 
-    __super::created();
+    super::created();
 }
 /*virtual*/ bool gui_hslider_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -3880,7 +3923,7 @@ void gui_hslider_c::set_level(float level_)
         }
         return true;
     }
-    return __super::sq_evt(qp, rid, data);
+    return super::sq_evt(qp, rid, data);
 }
 
 bool gui_hslider_c::onclick(RID, GUIPARAM p)

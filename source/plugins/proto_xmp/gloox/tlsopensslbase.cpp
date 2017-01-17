@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2009-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2009-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -23,6 +23,7 @@
 
 #include <openssl/err.h>
 #include <openssl/comp.h>
+#include <openssl/x509v3.h>
 
 namespace gloox
 {
@@ -262,8 +263,15 @@ namespace gloox
       m_certInfo.date_to = openSSLTime2UnixTime( (char*) (peer->cert_info->validity->notAfter->data) );
       std::string p( peer_CN );
       std::transform( p.begin(), p.end(), p.begin(), tolower );
+
+#if defined OPENSSL_VERSION_NUMBER && ( OPENSSL_VERSION_NUMBER >= 0x10002000 )
+      res = X509_check_host( peer, p.c_str(), p.length(), X509_CHECK_FLAG_MULTI_LABEL_WILDCARDS, 0 );
+      if( res <= 0 ) // 0: verification failed; -1: internal error; -2 input is malformed
+        m_certInfo.status |= CertWrongPeer;
+#else
       if( p != m_server )
         m_certInfo.status |= CertWrongPeer;
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000
 
       if( ASN1_UTCTIME_cmp_time_t( X509_get_notBefore( peer ), time( 0 ) ) != -1 )
         m_certInfo.status |= CertNotActive;

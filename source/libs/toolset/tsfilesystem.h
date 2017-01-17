@@ -16,14 +16,21 @@
 namespace ts
 {
 
+#ifdef _WIN32
 #define NATIVE_SLASH '\\'
 #define ENEMY_SLASH '/'
+#endif
+#ifdef _NIX
+#define NATIVE_SLASH '/'
+#define ENEMY_SLASH '\\'
+#endif
 
 INLINE bool __is_slash(const wchar c)
 {
     return c == NATIVE_SLASH || c == ENEMY_SLASH;
 }
 
+aint  TSCALL get_exe_full_name( char *buf, aint buflen );
 wstr_c  TSCALL get_exe_full_name();
 void    TSCALL set_work_dir(wstr_c &wd, wstr_c *exename = nullptr);
 inline void    set_work_dir()
@@ -54,12 +61,12 @@ bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
 uint64 TSCALL get_free_space( const wstr_c &path );
 
-struct extension_s
+struct extension_s : public movable_flag<true>
 {
-    MOVABLE( true );
     ts::wstr_c ext;
     ts::wstr_c desc;
 };
+
 struct extensions_s
 {
     extensions_s():exts(nullptr, 0) {}
@@ -159,7 +166,9 @@ class enum_files_c
     bool prepare_file();
     void next_int();
 #endif
-
+#ifdef _NIX
+    STUB("");
+#endif
 
 public:
 
@@ -180,7 +189,7 @@ public:
 
 template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &base, RCV &pred, const str_t<wchar, STRCORE> &path = str_t<wchar, STRCORE>(), const wsptr &wildcard = CONSTWSTR("*.*"))
 {
-    enum_files_c ef( base, path, wildcard );
+    enum_files_c ef( base, path, ts::wstr_c(wildcard) );
     for ( ;ef; ++ef )
     {
         if ( ef.is_folder() )
@@ -207,7 +216,7 @@ enum copy_rslt_e
     CRSLT_FAIL
 };
 copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn );
-bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn );
+bool TSCALL ren_or_move_file( const wsptr &existingfn, const wsptr &newfn );
 
 bool TSCALL is_64bit_os();
 

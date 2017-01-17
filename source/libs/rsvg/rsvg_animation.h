@@ -29,6 +29,7 @@ public:
 
 class rsvg_animation_transform_c : public rsvg_animation_c
 {
+    typedef rsvg_animation_c super;
 protected:
     cairo_matrix_t m;
     /*virtual*/ void activate(uint st, bool f) override;

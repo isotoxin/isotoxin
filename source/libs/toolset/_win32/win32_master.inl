@@ -85,7 +85,7 @@ int APIENTRY WinMain( HINSTANCE hInstance, HINSTANCE, LPSTR, int )
     ts::master_internal_stuff_s &istuff = *(ts::master_internal_stuff_s *)&ts::master().internal_stuff;
     istuff.inst = hInstance;
 
-    wchar_t *cmdlb = GetCommandLineW();
+    ts::wchar *cmdlb = GetCommandLineW();
     if ( !ts::app_preinit( cmdlb ) ) return 0;
 
     ts::master().do_app_loop();
@@ -810,7 +810,7 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                 // wow! unicode! ... hm... WM_WCHAR?
 
                 if ( master().on_char )
-                    if (master().on_char( (wchar_t)msg.wParam ))
+                    if (master().on_char( static_cast<ts::wchar>(msg.wParam) ))
                         dispatch = false;
             }
             break;
@@ -881,8 +881,53 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                         if ( GetKeyState( VK_SHIFT ) < 0 ) casw |= casw_shift;
                         if ( GetKeyState( VK_LWIN ) < 0 || GetKeyState( VK_RWIN ) < 0 ) casw |= casw_win;
                     }
+                    int scan = lp2key(msg.lParam);
+                    switch (msg.wParam)
+                    {
+                    case VK_DELETE:
+                        if (scan == SSK_PADDEL)
+                            scan = SSK_DELETE;
+                        break;
+                    case VK_HOME:
+                        if (scan == SSK_PAD7)
+                            scan = SSK_HOME;
+                        break;
+                    case VK_END:
+                        if (scan == SSK_PAD1)
+                            scan = SSK_END;
+                        break;
+                    case VK_PRIOR:
+                        if (scan == SSK_PAD9)
+                            scan = SSK_PGUP;
+                        break;
+                    case VK_NEXT:
+                        if (scan == SSK_PAD3)
+                            scan = SSK_PGDN;
+                        break;
+                    case VK_UP:
+                        if (scan == SSK_PAD8)
+                            scan = SSK_UP;
+                        break;
+                    case VK_DOWN:
+                        if (scan == SSK_PAD2)
+                            scan = SSK_DOWN;
+                        break;
+                    case VK_LEFT:
+                        if (scan == SSK_PAD4)
+                            scan = SSK_LEFT;
+                        break;
+                    case VK_RIGHT:
+                        if (scan == SSK_PAD6)
+                            scan = SSK_RIGHT;
+                        break;
+                    case VK_INSERT:
+                        if (scan == SSK_PAD0)
+                            scan = SSK_INSERT;
+                        break;
 
-                    if ( master().on_keyboard( lp2key( msg.lParam ), downkey, casw ) )
+                    }
+
+                    if ( master().on_keyboard( scan, downkey, casw ) )
                         dispatch = false;
                 }
                 break;

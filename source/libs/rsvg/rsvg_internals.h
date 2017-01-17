@@ -9,9 +9,8 @@ struct rsvg_load_context_s
     ts::astrings_c targets; // per filter results
     allinims_t allanims;
 
-    struct junk_on_end_s
+    struct junk_on_end_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         rsvg_animation_c *a;
         ts::str_c id;
     };

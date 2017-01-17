@@ -4,13 +4,17 @@
 
 */
 #pragma once
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #include <intrin.h>
 #pragma warning(push)
 #pragma warning(disable:4189) // 'val': local variable is initialized but not referenced
 #endif
-#if defined(__GNUC__)
+#ifdef __GNUC__
 #include <x86intrin.h>
+#endif
+#ifdef __linux__
+#include <pthread.h>
+#include <unistd.h>
 #endif
 
 #ifndef JOINMACRO1
@@ -402,8 +406,9 @@ inline void simple_unlock(volatile long3264 &lock)
     #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock != myv)
         __debugbreak();
+    long3264 val =
     #endif
-    long3264 val = SLxInterlockedCompareExchange(&lock, 0, myv);
+    SLxInterlockedCompareExchange(&lock, 0, myv);
     #if defined(_MSC_VER) && !defined(_FINAL)
     if (val != myv)
         __debugbreak();
@@ -413,13 +418,13 @@ inline void simple_unlock(volatile long3264 &lock)
 
 struct auto_simple_lock
 {
-    long3264 *lockvar;
-    auto_simple_lock( long3264& _lock, bool) : lockvar(&_lock)
+    volatile long3264 *lockvar;
+    auto_simple_lock(volatile long3264& _lock, bool) : lockvar(&_lock)
     {
         if (!try_simple_lock(*lockvar))
             lockvar = nullptr;
     }
-    auto_simple_lock( long3264& _lock) : lockvar(&_lock)
+    auto_simple_lock(volatile long3264& _lock) : lockvar(&_lock)
     {
         simple_lock(*lockvar);
     }

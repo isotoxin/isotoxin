@@ -3,7 +3,6 @@
 #define HUNSPELL_STATIC
 #define LIBHUNSPELL_DLL_EXPORTED
 
-#define _CSTDIO_
 #define FILEMGR_HXX_
 
 #define BUFSIZE  65536
@@ -12,7 +11,7 @@
 
 #define HUNSPELL_WARNING(...) (1,false)
 
-#include <string>
+#include <zstrings/z_str_fake_std.h>
 
 struct hunspell_file_s
 {
@@ -38,29 +37,31 @@ namespace std
         void open( ... ) {}
     };
 
-    template<typename T1, typename T2, typename T3> class basic_ostringstream
-    {
-        string s;
-    public:
-        //basic_ostringstream() {}
-        //basic_ostringstream( const string &s ):s(s) {}
-        const string &str() const { return s; }
-        basic_ostringstream &operator<<( unsigned short f )
-        {
-            char ss[ 32 ];
-            _itoa_s(f, ss, 31, 10);
-            s.append(ss);
-            return *this;
-        }
-    };
-    template<typename T1, typename T2, typename T3> class basic_stringstream
+
+    class stringstream
     {
     public:
         hunspell_file_s f;
         size_t ptr = 0;
-        basic_stringstream( const string &s ) :f( (const unsigned char *)s.c_str(), s.length() )
+        /*basic_stringstream*/ stringstream( const string &s ) :f( (const unsigned char *)s.c_str(), s.length() )
         {
         }
+    };
+
+    class ifstream
+    {
+    public:
+        void open( const wchar_t *, int ) {}
+        void open( const char *, int ) {}
+    };
+
+    class ios_base
+    {
+    public:
+        enum openmode
+        {
+            dummy,
+        };
     };
 
     inline bool getline( stringstream& strem, string &s, char breakchar )

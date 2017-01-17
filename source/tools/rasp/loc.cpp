@@ -77,8 +77,8 @@ svovasearch:
     if ( tttp >= 0 )
     {
         workindex = tttp + 7;
-        const wchar_t * chch = L">.#_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        if (tttp > 0 && CHARz_find<wchar_t>(chch, ll.get_char(tttp-1)) >= 0) goto svovasearch;
+        const wchar * chch = WIDE2(">.#_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        if (tttp > 0 && CHARz_find<wchar>(chch, ll.get_char(tttp-1)) >= 0) goto svovasearch;
         if (ll.get_length() <= tttp+3 || (ll.get_char(tttp+3) != ' ' && ll.get_char(tttp+3) != '(')) goto svovasearch;
         int skoba = ll.skip(tttp + 3);
         if (skoba >= ll.get_length()) return false;
@@ -130,10 +130,8 @@ static void savelines(const wsptr&fn, const wstrings_c & lines)
     fclose(f);
 }
 
-struct rpl_s
+struct rpl_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
-
     wstr_c fn;
     wstr_c txt;
     int ln;
@@ -286,7 +284,7 @@ int proc_lochange(const wstrings_c & pars)
         Print(FOREGROUND_RED, "path-to-loc not found: %s", ptl.cstr()); return 0;
     }
 
-    wstr_c tolocale = CONSTWSTR("en");
+    wstr_c tolocale( CONSTWSTR("en") );
     if (pars.size() >= 4)
         tolocale = pars.get(3);
 

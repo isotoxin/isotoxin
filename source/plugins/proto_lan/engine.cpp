@@ -287,7 +287,7 @@ void lan_engine::media_stuff_s::video_frame( u64 msmonotonic, int /*framen*/, co
             mdt.video_frame[ 1 ] = dest->planes[ 1 ];
             mdt.video_frame[ 2 ] = dest->planes[ 2 ];
             mdt.msmonotonic = msmonotonic;
-            engine->hf->av_data( 0, owner->id, &mdt );
+            engine->hf->av_data(contact_id_s(), owner->id, &mdt );
 
             vpx_img_free( dest );
         }
@@ -433,9 +433,9 @@ void lan_engine::media_stuff_s::tick(contact_s *c, int ct)
 
 
 #if LOGGING
-asptr pid_name(packet_id_e pid)
+std::asptr pid_name(packet_id_e pid)
 {
-#define DESC_PID( p ) case p: return CONSTASTR( #p )
+#define DESC_PID( p ) case p: return STD_ASTR( #p )
     switch (pid)
     {
         DESC_PID( PID_NONE );
@@ -451,7 +451,7 @@ asptr pid_name(packet_id_e pid)
         DESC_PID( PID_REJECT );
         DESC_PID( PID_KEEPALIVE );
     }
-    return CONSTASTR("pid unknown");
+    return STD_ASTR("pid unknown");
 }
 
 void log_auth_key( const char * /*what*/, const byte * /*key*/ )
@@ -765,7 +765,7 @@ int tcp_listner::open()
 void tcp_listner::close()
 {
     state.lock_write()().acceptor_should_stop = true;
-    __super::close();
+    super::close();
     for (; state.lock_read()().wait_acceptor_stop(); Sleep(0));
 
     tcp_pipe *p;
@@ -919,11 +919,11 @@ static bool check_pubid_valid(const byte *raw_pub_id_i)
     return 0 == memcmp(raw_pub_id+PUB_ID_INDEP_SIZE, raw_pub_id_i+PUB_ID_INDEP_SIZE,PUB_ID_CHECKSUM_SIZE);
 }
 
-bool make_raw_pub_id( byte *raw_pub_id, const asptr &pub_id )
+bool make_raw_pub_id( byte *raw_pub_id, const std::asptr &pub_id )
 {
     if (ASSERT(pub_id.l == SIZE_PUBID * 2))
     {
-        pstr_c(pub_id).hex2buf<SIZE_PUBID>(raw_pub_id);
+        std::pstr_c(pub_id).hex2buf<SIZE_PUBID>(raw_pub_id);
         return true;
     }
     return false;
@@ -1082,7 +1082,7 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
 
         if ( IS_TLM( TLM_AUDIO_SEND_BYTES ) )
         {
-            tlm_data_s d1 = { static_cast<u64>(id), static_cast<u64>( datasize + datasize1 ) };
+            tlm_data_s d1 = { static_cast<u64>(id.id), static_cast<u64>( datasize + datasize1 ) };
             engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
 
@@ -1099,14 +1099,14 @@ u64 lan_engine::contact_s::send_block( datablock_s *b )
     case BT_AUDIO_FRAME:
         if ( IS_TLM(TLM_AUDIO_SEND_BYTES) )
         {
-            tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( b->len ) };
+            tlm_data_s d1 = { static_cast<u64>( id.id ), static_cast<u64>( b->len ) };
             engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
         break;
     case BT_VIDEO_FRAME:
         if ( IS_TLM(TLM_VIDEO_SEND_BYTES) )
         {
-            tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( b->len ) };
+            tlm_data_s d1 = { static_cast<u64>( id.id ), static_cast<u64>( b->len ) };
             engine->hf->telemetry( TLM_VIDEO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
         break;
@@ -1131,6 +1131,161 @@ void lan_engine::contact_s::calculate_pub_id( const byte *pk )
     public_id.clear().append_as_hex(raw_public_id, SIZE_PUBID);
 }
 
+enum chunks_e // HADR ORDER!!!!!!!!
+{
+    chunk_secret_key,
+    chunk_contacts,
+
+    chunk_contact,
+
+    chunk_contact_id,
+    chunk_contact_public_key,
+    chunk_contact_name,
+    chunk_contact_statusmsg,
+    chunk_contact_state,
+    chunk_contact_changedflags,
+
+    chunk_contact_invitemsg,
+    chunk_contact_tmpkey,
+    chunk_contact_authkey,
+    __unused__chunk_contact_sendmessages,
+
+    __unused__chunk_contact_sendmessage,
+    __unused__chunk_contact_sendmessage_type,
+    __unused__chunk_contact_sendmessage_body,
+    __unused__chunk_contact_sendmessage_utag,
+    __unused__chunk_contact_sendmessage_createtime,
+
+    chunk_magic,
+
+    chunk_contact_avatar_hash,
+    chunk_contact_avatar_tag,
+
+};
+
+//lan_engine::contact_s *contact;
+
+void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
+{
+    if (c.state == lan_engine::contact_s::ROTTEN) return;
+    //contact = const_cast<lan_engine::contact_s *>(&c);
+
+    chunk cc(chunkm.b, chunk_contact);
+
+    chunk(chunkm.b, chunk_contact_id) << c.id;
+    chunk(chunkm.b, chunk_contact_public_key) << bytes(c.public_key, SIZE_PUBLIC_KEY);
+    chunk(chunkm.b, chunk_contact_name) << c.name;
+    chunk(chunkm.b, chunk_contact_statusmsg) << c.statusmsg;
+    chunk(chunkm.b, chunk_contact_state) << (i32)c.state;
+
+
+    if (c.state == lan_engine::contact_s::SEARCH
+        || c.state == lan_engine::contact_s::MEET
+        || c.state == lan_engine::contact_s::INVITE_SEND
+        || c.state == lan_engine::contact_s::INVITE_RECV)
+    {
+        chunk(chunkm.b, chunk_contact_invitemsg) << c.invitemessage;
+    }
+
+    if (c.state != lan_engine::contact_s::ONLINE && c.state != lan_engine::contact_s::OFFLINE && c.state != lan_engine::contact_s::BACKCONNECT)
+    {
+        chunk(chunkm.b, chunk_contact_tmpkey) << bytes(c.temporary_key, SIZE_KEY);
+
+    }
+    else if (!c.id.is_self())
+    {
+        chunk(chunkm.b, chunk_contact_authkey) << bytes(c.authorized_key + SIZE_KEY_NONCE_PART, SIZE_KEY_PASS_PART);
+
+        log_auth_key("saved", c.authorized_key);
+    }
+
+    /*
+    if (c.sendblock_f)
+    chunk(chunkm.b, chunk_contact_sendmessages) << serlist<datablock_s>(c.sendblock_f);
+    */
+
+    chunk(chunkm.b, chunk_contact_changedflags) << (i32)c.changed_self;
+
+    auto sbs = const_cast<lan_engine::contact_s &>(c).sendblocks.lock_write();
+    for (datablock_s *m = sbs().sendblock_f; m; )
+    {
+        datablock_s *x = m; m = m->next;
+        if (x->bt > __bt_no_need_ater_save_begin && x->bt < __bt_no_need_ater_save_end)
+        {
+            LIST_DEL(x, sbs().sendblock_f, sbs().sendblock_l, prev, next);
+            x->die();
+        }
+    }
+    sbs.unlock();
+
+    chunk(chunkm.b, chunk_contact_avatar_tag) << c.avatar_tag;
+    if (c.avatar_tag != 0)
+    {
+        chunk(chunkm.b, chunk_contact_avatar_hash) << bytes(c.avatar_hash, 16);
+    }
+
+
+}
+
+
+void lan_engine::contact_s::fill_data(contact_data_s &cd, savebuffer *protodata)
+{
+    data_changed = false;
+
+    cd.id = id;
+    cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG;
+    cd.public_id = public_id.cstr();
+    cd.public_id_len = (int)public_id.get_length();
+    cd.name = name.cstr();
+    cd.name_len = static_cast<int>(name.get_length());
+    cd.status_message = statusmsg.cstr();
+    cd.status_message_len = static_cast<int>(statusmsg.get_length());
+    cd.avatar_tag = 0;
+    switch (state)
+    {
+    case lan_engine::contact_s::SEARCH:
+    case lan_engine::contact_s::MEET:
+    case lan_engine::contact_s::INVITE_SEND:
+        cd.state = CS_INVITE_SEND;
+        break;
+    case lan_engine::contact_s::REJECTED:
+        cd.state = CS_REJECTED;
+        break;
+    case lan_engine::contact_s::INVITE_RECV:
+    case lan_engine::contact_s::TRAPPED:
+    case lan_engine::contact_s::REJECT:
+    case lan_engine::contact_s::ACCEPT_RESTORE_CONNECT:
+        cd.state = CS_INVITE_RECEIVE;
+        break;
+    case lan_engine::contact_s::ACCEPT:
+        cd.state = CS_WAIT;
+        break;
+    case lan_engine::contact_s::ONLINE:
+        cd.state = CS_ONLINE;
+        break;
+    case lan_engine::contact_s::OFFLINE:
+    case lan_engine::contact_s::BACKCONNECT:
+        cd.state = CS_OFFLINE;
+        break;
+    case lan_engine::contact_s::ROTTEN:
+    case lan_engine::contact_s::ALMOST_ROTTEN:
+        cd.state = CS_ROTTEN;
+        break;
+    }
+    cd.ostate = ostate;
+    cd.gender = gender;
+    cd.avatar_tag = avatar_tag;
+
+    if (protodata)
+    {
+        chunk s(*protodata);
+        s << *this;
+        cd.data = protodata->data();
+        cd.data_size = static_cast<int>(protodata->size());
+        cd.mask |= CDM_DATA;
+    }
+
+}
 
 void lan_engine::setup_communication_stuff()
 {
@@ -1230,7 +1385,7 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     if (c->key_sent)
                     {
-                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent", c->id, c->state );
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent", c->id.id, c->state );
 
                         // oops. no invite still received
                         // it means no valid connection
@@ -1245,7 +1400,7 @@ void lan_engine::tick(int *sleep_time_ms)
                             c->nextactiontime = ct + 2000;
                         } else
                         {
-                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id, c->state );
+                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id.id, c->state );
                             c->pipe.close();
                         }
                     }
@@ -1267,7 +1422,7 @@ void lan_engine::tick(int *sleep_time_ms)
                     {
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
-                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id, c->state, c->nextactiontime);
+                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id.id, c->state, c->nextactiontime);
                     }
                 }
                 break;
@@ -1282,7 +1437,7 @@ void lan_engine::tick(int *sleep_time_ms)
                         c->data_changed = true;
                     } else
                     {
-                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / invite send fail", c->id, c->state );
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / invite send fail", c->id.id, c->state );
                         c->pipe.close();
                         c->nextactiontime = ct;
                     }
@@ -1298,7 +1453,7 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     if (c->key_sent)
                     {
-                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent / time: %i", c->id, c->state, c->nextactiontime );
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent / time: %i", c->id.id, c->state, c->nextactiontime );
                         c->pipe.close();
                     } else
                     {
@@ -1310,11 +1465,11 @@ void lan_engine::tick(int *sleep_time_ms)
                             c->key_sent = true;
                             c->nextactiontime = ct + 5000; // waiting PID_READY in 5 seconds, then disconnect
 
-                            MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / key sent ok / time: %i", c->id, c->state, c->nextactiontime );
+                            MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / key sent ok / time: %i", c->id.id, c->state, c->nextactiontime );
 
                         } else
                         {
-                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id, c->state );
+                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id.id, c->state );
                             c->pipe.close();
                             c->nextactiontime = ct;
                         }
@@ -1322,18 +1477,18 @@ void lan_engine::tick(int *sleep_time_ms)
 
                 } else
                 {
-                    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / not connected", c->id, c->state);
+                    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / not connected", c->id.id, c->state);
 
                     if (c->key_sent)
                     {
-                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ++reconnect", c->id, c->state);
+                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ++reconnect", c->id.id, c->state);
 
                         ++c->reconnect;
                         c->key_sent = false;
 
                         if (c->reconnect > 10)
                         {
-                            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / max reconnect", c->id, c->state);
+                            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / max reconnect", c->id.id, c->state);
                             c->state = contact_s::OFFLINE;
                         }
                     }
@@ -1344,7 +1499,7 @@ void lan_engine::tick(int *sleep_time_ms)
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
 
-                        MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id, c->state, c->nextactiontime );
+                        MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id.id, c->state, c->nextactiontime );
                     }
                 }
                 break;
@@ -1417,7 +1572,7 @@ void lan_engine::tick(int *sleep_time_ms)
             case contact_s::ALMOST_ROTTEN:
                 if (c->pipe.connected())
                 {
-                    MaskLog(LFLS_CLOSE, "c: %i, state: %i / almost rotten", c->id, c->state);
+                    MaskLog(LFLS_CLOSE, "c: %i, state: %i / almost rotten", c->id.id, c->state);
                     c->pipe.close();
                 }
                 break;
@@ -1479,8 +1634,8 @@ void lan_engine::tick(int *sleep_time_ms)
 
     if (first->data_changed) // send self status
     {
-        contact_data_s cd(0, 0);
-        first->fill_data(cd);
+        contact_data_s cd(contact_id_s(), 0);
+        first->fill_data(cd, nullptr);
         hf->update_contact(&cd);
     }
 
@@ -1600,7 +1755,7 @@ void lan_engine::pp_hallo( unsigned int IPv4, int back_port, int mastertag, cons
             c->reconnect = 0;
             c->nextactiontime = time_ms();
 
-            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / on hallo from: %i.%i.%i.%i", c->id, c->state, (int)(IPv4&0xff), (int)((IPv4>>8)&0xff), (int)((IPv4>>16)&0xff), (int)((IPv4>>24)&0xff));
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / on hallo from: %i.%i.%i.%i", c->id.id, c->state, (int)(IPv4&0xff), (int)((IPv4>>8)&0xff), (int)((IPv4>>16)&0xff), (int)((IPv4>>24)&0xff));
         }
     }
 }
@@ -1690,7 +1845,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
 
     contact_s *c = find_by_rpid(pubid);
 
-    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / nonce", (c ? c->id : -1), (c ? c->state : -1));
+    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / nonce", (c ? c->id.id : -1), (c ? c->state : -1));
 
     if (c == nullptr || (c->state != contact_s::OFFLINE))
     {
@@ -1702,7 +1857,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             c->state = contact_s::OFFLINE;
             c->key_sent = false;
 
-            MaskLog(LFLS_CLOSE, "c: %i, state: %i / race condition win", c->id, c->state);
+            MaskLog(LFLS_CLOSE, "c: %i, state: %i / race condition win", c->id.id, c->state);
 
         } else
         {
@@ -1710,12 +1865,12 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             // or race condition loose
             // disconnect
 
-            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / race condition loose", (c ? c->id : -1), (c ? c->state : -1));
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / race condition loose", (c ? c->id.id : -1), (c ? c->state : -1));
             return pipe;
         }
     }
 
-    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / concurrent ok", c->id, c->state);
+    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / concurrent ok", c->id.id, c->state);
 
     //log_auth_key("c auth_key", c->authorized_key);
     //log_bytes("c public_key", c->public_key, SIZE_PUBLIC_KEY);
@@ -1723,7 +1878,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     const byte *nonce = r.read(crypto_box_NONCEBYTES);
     if (!nonce)
     {
-        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no nonce yet", c->id, c->state);
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no nonce yet", c->id.id, c->state);
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
@@ -1735,7 +1890,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     const byte *cipher = r.read(cipher_len);
     if (!cipher)
     {
-        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no cipher yet", c->id, c->state);
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no cipher yet", c->id.id, c->state);
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
@@ -1745,7 +1900,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
 
     if (crypto_box_open_easy(c->authorized_key, cipher, cipher_len, nonce, peer_public_key, my_secret_key) != 0)
     {
-        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / cipher cannot be decrypted", c->id, c->state);
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / cipher cannot be decrypted", c->id.id, c->state);
         return pipe;
     }
 
@@ -1754,7 +1909,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     const byte *rhash = r.read(crypto_generichash_BYTES);
     if (!rhash)
     {
-        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no hash yet", c->id, c->state);
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no hash yet", c->id.id, c->state);
 
         tcp_in.accepted.push(pipe);
         return nullptr;
@@ -1785,15 +1940,15 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             pg_ready(c->raw_public_id, c->authorized_key);
             bool send_ready = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
 
-            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / send ready: %s", c->id, c->state, (send_ready ? "yes" : "no"));
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / send ready: %s", c->id.id, c->state, (send_ready ? "yes" : "no"));
         } else
         {
-            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / fail public key", c->id, c->state);
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / fail public key", c->id.id, c->state);
         }
     } else
     {
         // authorized_key is damaged
-        c->invitemessage = CONSTASTR("\1restorekey");
+        c->invitemessage.set( STD_ASTR("\1restorekey") );
         c->state = contact_s::SEARCH;
         c->data_changed = true;
     }
@@ -1834,14 +1989,80 @@ void lan_engine::stop_encoder()
 
 }
 
-
-void lan_engine::goodbye()
+void lan_engine::app_signal(app_signal_e s)
 {
-    stop_encoder();
-    set_cfg_called = false;
-    delete this;
-    engine = nullptr;
+    switch (s)
+    {
+    case APPS_INIT_DONE:
+        {
+            // send contacts to host
+            savebuffer sb;
+            contact_data_s cd(contact_id_s(), 0);
+            for (contact_s *c = first; c; c = c->next)
+            {
+                sb.clear();
+                c->fill_data(cd, c == first ? nullptr : &sb);
+                hf->update_contact(&cd);
+            }
+        }
+        break;
+    case APPS_ONLINE:
+        if (first->state == contact_s::OFFLINE)
+            setup_communication_stuff();
+
+        if (broadcast_trap.ready())
+        {
+            hf->connection_bits(CB_ENCRYPTED | CB_TRUSTED);
+
+            first->state = contact_s::ONLINE;
+            first->data_changed = true;
+
+            contact_data_s cd(contact_id_s(), 0);
+            first->fill_data(cd, nullptr);
+            hf->update_contact(&cd);
+
+        }
+        break;
+    case APPS_OFFLINE:
+        stop_encoder();
+
+        if (first->state == contact_s::ONLINE)
+        {
+            first->state = contact_s::OFFLINE;
+
+            contact_data_s cd(contact_id_s(), 0);
+            first->fill_data(cd, nullptr);
+            hf->update_contact(&cd);
+
+            savebuffer sb;
+            for (contact_s *c = first->next; c; c = c->next)
+            {
+                if (c->pipe.connected())
+                {
+                    MaskLog(LFLS_CLOSE, "c: %i, state: %i / offline", c->id.id, c->state);
+                    c->pipe.flush_and_close();
+                }
+                if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
+                    c->state = contact_s::OFFLINE;
+                if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
+                    c->state = contact_s::SEARCH;
+                sb.clear();
+                c->fill_data(cd, c == first ? nullptr : &sb);
+                hf->update_contact(&cd);
+            }
+
+            shutdown_communication_stuff();
+        }
+        break;
+    case APPS_GOODBYE:
+        stop_encoder();
+        set_cfg_called = false;
+        delete this;
+        engine = nullptr;
+        break;
+    }
 }
+
 void lan_engine::set_name(const char*utf8name)
 {
     first->name = utf8name;
@@ -1863,38 +2084,6 @@ void lan_engine::set_gender(int gender)
     first->gender = (contact_gender_e)gender;
     changed_some |= CDM_GENDER;
 }
-
-enum chunks_e // HADR ORDER!!!!!!!!
-{
-    chunk_secret_key,
-    chunk_contacts,
-
-    chunk_contact,
-
-    chunk_contact_id,
-    chunk_contact_public_key,
-    chunk_contact_name,
-    chunk_contact_statusmsg,
-    chunk_contact_state,
-    chunk_contact_changedflags,
-
-    chunk_contact_invitemsg,
-    chunk_contact_tmpkey,
-    chunk_contact_authkey,
-    __unused__chunk_contact_sendmessages,
-
-    __unused__chunk_contact_sendmessage,
-    __unused__chunk_contact_sendmessage_type,
-    __unused__chunk_contact_sendmessage_body,
-    __unused__chunk_contact_sendmessage_utag,
-    __unused__chunk_contact_sendmessage_createtime,
-
-    chunk_magic,
-
-    chunk_contact_avatar_hash,
-    chunk_contact_avatar_tag,
-
-};
 
 void lan_engine::set_avatar(const void*data, int isz)
 {
@@ -1929,6 +2118,132 @@ void lan_engine::set_avatar(const void*data, int isz)
     }
 }
 
+static contact_id_s as_contactid(u32 v)
+{
+    if (v & 0xff000000)
+    {
+        contact_id_s id;
+        *(u32 *)&id = v;
+        return id;
+    }
+    return contact_id_s(contact_id_s::CONTACT, v);
+}
+
+bool lan_engine::load_contact(contact_id_s cid, loader &l)
+{
+    bool loaded = false;
+    if (int contact_size = l(chunk_contact))
+    {
+        contact_s *c = nullptr;
+
+        loader lc(l.chunkdata(), contact_size);
+        if (lc(chunk_contact_id))
+        {
+            contact_id_s id = as_contactid(lc.get_u32());
+            ASSERT(cid.is_empty() || cid == id);
+            hf->use_id(c->id.id);
+
+            if (int pksz = lc(chunk_contact_public_key))
+            {
+                loader pkl(lc.chunkdata(), pksz);
+                int dsz;
+                if (const byte *pk = (const byte *)pkl.get_data(dsz))
+                    if (ASSERT(dsz == SIZE_PUBLIC_KEY))
+                    {
+                        c = first ? find_by_pk( pk ) : nullptr;
+                        if (c)
+                        {
+                            ASSERT(c->id == id);
+
+                        } else
+                        {
+                            c = addnew(id);
+                        }
+
+                        loaded = true;
+                        c->calculate_pub_id(pk);
+                        if (c->id.is_self()) memcpy(my_public_key, c->public_key, SIZE_PUBLIC_KEY);
+                    }
+            }
+        }
+
+        if (c)
+        {
+            if (lc(chunk_contact_name))
+                c->name.set(lc.get_astr());
+
+            if (lc(chunk_contact_statusmsg))
+                c->statusmsg.set(lc.get_astr());
+
+            if (lc(chunk_contact_state))
+                c->state = (decltype(c->state))lc.get_i32();
+
+            if (c->state == contact_s::SEARCH && c->id.is_self())
+                c->state = contact_s::OFFLINE;
+
+            if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
+                c->state = contact_s::OFFLINE;
+
+            if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
+                c->state = contact_s::SEARCH; // if contact not yet authorized - initial search is only valid way to establish connection
+
+            if (c->state == lan_engine::contact_s::SEARCH
+                || c->state == lan_engine::contact_s::MEET
+                || c->state == lan_engine::contact_s::INVITE_SEND
+                || c->state == lan_engine::contact_s::INVITE_RECV)
+                if (lc(chunk_contact_invitemsg))
+                    c->invitemessage.set(lc.get_astr());
+
+            if (c->state != lan_engine::contact_s::ONLINE && c->state != lan_engine::contact_s::OFFLINE)
+            {
+                if (int tksz = lc(chunk_contact_tmpkey))
+                {
+                    loader tkl(lc.chunkdata(), tksz);
+                    int dsz;
+                    if (const void *tk = tkl.get_data(dsz))
+                        if (ASSERT(dsz == SIZE_KEY))
+                            memcpy(c->temporary_key, tk, SIZE_KEY);
+                }
+
+            }
+            else if (!c->id.is_self())
+            {
+                randombytes_buf(c->authorized_key, sizeof(c->authorized_key));
+
+                if (int tksz = lc(chunk_contact_authkey))
+                {
+                    loader tkl(lc.chunkdata(), tksz);
+                    int dsz;
+                    if (const void *tk = tkl.get_data(dsz))
+                        if (ASSERT(dsz == SIZE_KEY_PASS_PART))
+                            memcpy(c->authorized_key + SIZE_KEY_NONCE_PART, tk, SIZE_KEY_PASS_PART);
+                }
+
+                log_auth_key("loaded", c->authorized_key);
+            }
+
+            if (lc(chunk_contact_changedflags))
+                c->changed_self = lc.get_i32();
+
+            if (lc(chunk_contact_avatar_tag))
+                c->avatar_tag = lc.get_i32();
+
+            if (c->avatar_tag != 0)
+            {
+                if (int bsz = lc(chunk_contact_avatar_hash))
+                {
+                    loader hbl(lc.chunkdata(), bsz);
+                    int dsz;
+                    if (const void *mb = hbl.get_data(dsz))
+                        memcpy(c->avatar_hash, mb, min(dsz, 16));
+                }
+            }
+
+        }
+    }
+    return loaded;
+}
+
 void lan_engine::set_config(const void*data, int isz)
 {
     if ( isz < 4 ) return;
@@ -1936,27 +2251,27 @@ void lan_engine::set_config(const void*data, int isz)
 
     bool setproto = false;
 
-    auto parsev = [&] ( const pstr_c &field, const pstr_c &val )
+    auto parsev = [&] ( const std::pstr_c &field, const std::pstr_c &val )
     {
-        if ( field.equals( CONSTASTR( CFGF_VIDEO_CODEC ) ) )
+        if ( field.equals( STD_ASTR( CFGF_VIDEO_CODEC ) ) )
         {
-            if ( val.equals( CONSTASTR( "vp8" ) ) )
+            if ( val.equals( STD_ASTR( "vp8" ) ) )
                 use_vcodec = vc_vp8;
-            if ( val.equals( CONSTASTR( "vp9" ) ) )
+            if ( val.equals( STD_ASTR( "vp9" ) ) )
                 use_vcodec = vc_vp9;
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_VIDEO_BITRATE ) ) )
+        if ( field.equals( STD_ASTR( CFGF_VIDEO_BITRATE ) ) )
         {
             use_vbitrate = val.as_int();
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_VIDEO_QUALITY ) ) )
+        if ( field.equals( STD_ASTR( CFGF_VIDEO_QUALITY ) ) )
         {
             use_vquality = val.as_int();
             return;
         }
-        if ( field.equals( CONSTASTR( CFGF_SETPROTO ) ) )
+        if ( field.equals( STD_ASTR( CFGF_SETPROTO ) ) )
         {
             setproto = val.as_int() != 0;
             return;
@@ -1982,145 +2297,22 @@ void lan_engine::set_config(const void*data, int isz)
             if (ASSERT(dsz == SIZE_SECRET_KEY))
                 memcpy( my_secret_key, sk, SIZE_SECRET_KEY );
     }
+
+    while (first)
+        del(first);
+
     if (int sz = ldr(chunk_contacts))
     {
-        while (first)
-            del(first);
-
         loader l( ldr.chunkdata(), sz );
-        for(int cnt = l.read_list_size();cnt > 0;--cnt)
-            if (int contact_size = l(chunk_contact))
-            {
-                contact_s *c = nullptr;
-
-                loader lc(l.chunkdata(), contact_size);
-                if (lc(chunk_contact_id))
-                    c = addnew( lc.get_i32() );
-                if (c)
-                {
-                    if (int pksz = lc(chunk_contact_public_key))
-                    {
-                        loader pkl(lc.chunkdata(), pksz);
-                        int dsz;
-                        if (const void *pk = pkl.get_data(dsz))
-                            if (ASSERT(dsz == SIZE_PUBLIC_KEY))
-                            {
-                                loaded = true;
-                                c->calculate_pub_id((const byte *)pk);
-                                if (c->id == 0) memcpy( my_public_key, c->public_key, SIZE_PUBLIC_KEY );
-                            }
-                    }
-                    if (lc(chunk_contact_name))
-                        c->name = lc.get_astr();
-
-                    if (lc(chunk_contact_statusmsg))
-                        c->statusmsg = lc.get_astr();
-
-                    if (lc(chunk_contact_state))
-                        c->state = (decltype(c->state))lc.get_i32();
-
-                    if (c->state == contact_s::SEARCH && c->id == 0)
-                        c->state = contact_s::OFFLINE;
-
-                    if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
-                        c->state = contact_s::OFFLINE;
-
-                    if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
-                        c->state = contact_s::SEARCH; // if contact not yet authorized - initial search is only valid way to establish connection
-
-                    if (c->state == lan_engine::contact_s::SEARCH
-                        || c->state == lan_engine::contact_s::MEET
-                        || c->state == lan_engine::contact_s::INVITE_SEND
-                        || c->state == lan_engine::contact_s::INVITE_RECV)
-                        if (lc(chunk_contact_invitemsg))
-                            c->invitemessage = lc.get_astr();
-
-                    //if (c->invitemessage.is_empty() && c->state == lan_engine::contact_s::SEARCH)
-                    //    c->invitemessage = CONSTASTR("\1restorekey");
-
-                    if (c->state != lan_engine::contact_s::ONLINE && c->state != lan_engine::contact_s::OFFLINE)
-                    {
-                        if (int tksz = lc(chunk_contact_tmpkey))
-                        {
-                            loader tkl(lc.chunkdata(), tksz);
-                            int dsz;
-                            if (const void *tk = tkl.get_data(dsz))
-                                if (ASSERT(dsz == SIZE_KEY))
-                                    memcpy( c->temporary_key, tk, SIZE_KEY );
-                        }
-
-                    } else if (c->id)
-                    {
-                        randombytes_buf(c->authorized_key, sizeof (c->authorized_key));
-
-                        if (int tksz = lc(chunk_contact_authkey))
-                        {
-                            loader tkl(lc.chunkdata(), tksz);
-                            int dsz;
-                            if (const void *tk = tkl.get_data(dsz))
-                                if (ASSERT(dsz == SIZE_KEY_PASS_PART))
-                                    memcpy(c->authorized_key + SIZE_KEY_NONCE_PART, tk, SIZE_KEY_PASS_PART);
-                        }
-
-                        log_auth_key( "loaded", c->authorized_key );
-                    }
-
-                    /*
-                    if (int sz = lc(chunk_contact_sendmessages))
-                    {
-                        while (datablock_s *m = c->sendblock_f)
-                        {
-                            LIST_DEL(m, c->sendblock_f, c->sendblock_l, prev, next);
-                            m->die();
-                        }
-
-                        loader l(lc.chunkdata(), sz);
-                        for (int cnt = l.read_list_size(); cnt > 0; --cnt)
-                            if (int msgs_size = l(chunk_contact_sendmessage))
-                            {
-                                loader lcm(l.chunkdata(), msgs_size);
-                                if ( lcm(chunk_contact_sendmessage_type) )
-                                {
-                                    block_type_e mt = (block_type_e)lcm.get_int();
-                                    u64 utag = 0;
-                                    if (lcm(chunk_contact_sendmessage_utag))
-                                        utag = lcm.get_u64();
-                                    if (int mbsz = lcm(chunk_contact_sendmessage_body))
-                                    {
-                                        loader mbl(lcm.chunkdata(), mbsz);
-                                        int dsz;
-                                        if (const void *mb = mbl.get_data(dsz))
-                                            c->send_block(mt, utag, mb, dsz);
-                                    }
-                                }
-                            }
-                    }
-                    */
-
-                    if (lc(chunk_contact_changedflags))
-                        c->changed_self = lc.get_i32();
-
-                    if (lc(chunk_contact_avatar_tag))
-                        c->avatar_tag = lc.get_i32();
-
-                    if (c->avatar_tag != 0)
-                    {
-                        if (int bsz = lc(chunk_contact_avatar_hash))
-                        {
-                            loader hbl(lc.chunkdata(), bsz);
-                            int dsz;
-                            if (const void *mb = hbl.get_data(dsz))
-                                memcpy(c->avatar_hash, mb, min(dsz, 16));
-                        }
-                    }
-
-                }
-            }
+        for (int cnt = l.read_list_size(); cnt > 0; --cnt)
+            loaded |= load_contact( contact_id_s(), l );
     }
 
     if (!loaded)
     {
         // setup default
+        if (!first)
+            first = addnew(contact_id_s::make_self());
 
         crypto_box_keypair(my_public_key, my_secret_key);
         first->calculate_pub_id( my_public_key );
@@ -2129,93 +2321,6 @@ void lan_engine::set_config(const void*data, int isz)
     hf->operation_result( LOP_SETCONFIG, CR_OK );
 }
 
-lan_engine::contact_s *contact;
-
-void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
-{
-    if (c.state == lan_engine::contact_s::ROTTEN) return;
-    contact = const_cast<lan_engine::contact_s *>(&c);
-
-    chunk cc(chunkm.b, chunk_contact);
-
-    chunk(chunkm.b, chunk_contact_id) << c.id;
-    chunk(chunkm.b, chunk_contact_public_key) << bytes(c.public_key, SIZE_PUBLIC_KEY);
-    chunk(chunkm.b, chunk_contact_name) << c.name;
-    chunk(chunkm.b, chunk_contact_statusmsg) << c.statusmsg;
-    chunk(chunkm.b, chunk_contact_state) << (i32)c.state;
-    
-
-    if (c.state == lan_engine::contact_s::SEARCH
-        || c.state == lan_engine::contact_s::MEET
-        || c.state == lan_engine::contact_s::INVITE_SEND
-        || c.state == lan_engine::contact_s::INVITE_RECV)
-    {
-        chunk(chunkm.b, chunk_contact_invitemsg) << c.invitemessage;
-    }
-
-    if (c.state != lan_engine::contact_s::ONLINE && c.state != lan_engine::contact_s::OFFLINE && c.state != lan_engine::contact_s::BACKCONNECT)
-    {
-        chunk(chunkm.b, chunk_contact_tmpkey) << bytes(c.temporary_key, SIZE_KEY);
-
-    } else if (c.id)
-    {
-        chunk(chunkm.b, chunk_contact_authkey) << bytes(c.authorized_key + SIZE_KEY_NONCE_PART, SIZE_KEY_PASS_PART);
-
-        log_auth_key( "saved", c.authorized_key );
-    }
-
-    /*
-    if (c.sendblock_f)
-        chunk(chunkm.b, chunk_contact_sendmessages) << serlist<datablock_s>(c.sendblock_f);
-        */
-
-    chunk(chunkm.b, chunk_contact_changedflags) << (i32)c.changed_self;
-
-    auto sbs = const_cast<lan_engine::contact_s &>(c).sendblocks.lock_write();
-    for (datablock_s *m = sbs().sendblock_f; m; )
-    {
-        datablock_s *x = m; m = m->next;
-        if (x->bt > __bt_no_need_ater_save_begin && x->bt < __bt_no_need_ater_save_end)
-        {
-            LIST_DEL(x, sbs().sendblock_f, sbs().sendblock_l, prev, next);
-            x->die();
-        }
-    }
-    sbs.unlock();
-
-    chunk(chunkm.b, chunk_contact_avatar_tag) << c.avatar_tag;
-    if (c.avatar_tag != 0)
-    {
-        chunk(chunkm.b, chunk_contact_avatar_hash) << bytes(c.avatar_hash, 16);
-    }
-
-
-}
-
-/*
-void operator<<(chunk &chunkm, const datablock_s &m)
-{
-    // some messages here means not all changed values were delivered
-    if (m.mt > __bt_no_save_begin && m.mt < __bt_no_save_end)
-    {
-        switch (m.mt)
-        {
-            case BT_CHANGED_NAME: { contact->changed_self |= CDM_NAME; return; }
-            case BT_CHANGED_STATUSMSG: { contact->changed_self |= CDM_STATUSMSG; return; }
-            case BT_OSTATE: { contact->changed_self |= CDM_ONLINE_STATE; return; }
-            case BT_GENDER: { contact->changed_self |= CDM_GENDER; return; }
-        }
-        return;
-    }
-
-    chunk mm(chunkm.b, chunk_contact_sendmessage);
-
-    chunk(chunkm.b, chunk_contact_sendmessage_type) << (int)m.mt;
-    chunk(chunkm.b, chunk_contact_sendmessage_utag) << m.delivery_tag;
-    chunk(chunkm.b, chunk_contact_sendmessage_body) << bytes(m.data(), m.len);
-}
-*/
-
 void lan_engine::save_config(void *param)
 {
     if (engine && set_cfg_called)
@@ -2223,70 +2328,12 @@ void lan_engine::save_config(void *param)
         savebuffer b;
         chunk(b, chunk_magic) << (u64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
         chunk(b, chunk_secret_key) << bytes(my_secret_key, SIZE_SECRET_KEY);
-        chunk(b, chunk_contacts) << serlist<contact_s>(first);
+        chunk(b, chunk_contacts) << serlist<contact_s, nonext<contact_s> >(first);
         hf->on_save(b.data(), (int)b.size(), param);
     }
 }
 
-void lan_engine::init_done()
-{
-    // send contacts to host
-    contact_data_s cd(0, 0);
-    for(contact_s *c = first; c; c=c->next)
-    {
-        c->fill_data(cd);
-        hf->update_contact(&cd);
-    }
-}
-void lan_engine::online()
-{
-    if (first->state == contact_s::OFFLINE)
-        setup_communication_stuff();
-
-    if (broadcast_trap.ready())
-    {
-        first->state = contact_s::ONLINE;
-        first->data_changed = true;
-
-        contact_data_s cd(0, 0);
-        first->fill_data(cd);
-        hf->update_contact(&cd);
-    }
-}
-
-void lan_engine::offline()
-{
-    stop_encoder();
-
-    if (first->state == contact_s::ONLINE)
-    {
-        first->state = contact_s::OFFLINE;
-
-        contact_data_s cd(0, 0);
-        first->fill_data(cd);
-        hf->update_contact(&cd);
-
-        for (contact_s *c = first->next; c; c = c->next)
-        {
-            if (c->pipe.connected())
-            {
-                MaskLog(LFLS_CLOSE, "c: %i, state: %i / offline", c->id, c->state);
-                c->pipe.flush_and_close();
-            }
-            if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
-                c->state = contact_s::OFFLINE;
-            if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
-                c->state = contact_s::SEARCH;
-            
-            c->fill_data(cd);
-            hf->update_contact(&cd);
-        }
-
-        shutdown_communication_stuff();
-    }
-}
-
-int lan_engine::resend_request(int id, const char* invite_message_utf8)
+int lan_engine::resend_request(contact_id_s id, const char* invite_message_utf8)
 {
     if (contact_s *c = find(id))
         return add_contact( c->public_id, invite_message_utf8 );
@@ -2295,7 +2342,7 @@ int lan_engine::resend_request(int id, const char* invite_message_utf8)
 
 int lan_engine::add_contact(const char* public_id, const char* invite_message_utf8)
 {
-    str_c pubid( public_id );
+    std::string pubid( public_id );
     byte raw_pub_id[SIZE_PUBID];
     make_raw_pub_id(raw_pub_id,pubid.as_sptr());
     if (!check_pubid_valid(raw_pub_id))
@@ -2312,24 +2359,35 @@ int lan_engine::add_contact(const char* public_id, const char* invite_message_ut
         c->public_id = pubid;
         make_raw_pub_id(c->raw_public_id, c->public_id);
     }
-    c->invitemessage = utf8clamp(invite_message_utf8, SIZE_MAX_FRIEND_REQUEST_BYTES);
+    c->invitemessage.set( utf8clamp(std::asptr( invite_message_utf8 ), SIZE_MAX_FRIEND_REQUEST_BYTES) );
     c->state = contact_s::SEARCH;
     if (c->pipe.connected()) c->pipe.close();
 
-    contact_data_s cd(0, 0);
-    c->fill_data(cd);
+    contact_data_s cd(contact_id_s(), 0);
+    savebuffer sb;
+    c->fill_data(cd,&sb);
     hf->update_contact(&cd);
     return CR_OK;
 }
 
-void lan_engine::refresh_details( int id )
+void lan_engine::request(contact_id_s id, request_entity_e re)
 {
-
+    switch (re)
+    {
+    case RE_DETAILS:
+        break;
+    case RE_AVATAR:
+        if (contact_s *c = find(id))
+            c->send_block(BT_GETAVATAR, 0);
+        break;
+    case RE_EXPORT_DATA:
+        break;
+    }
 }
 
-void lan_engine::del_contact(int id)
+void lan_engine::del_contact(contact_id_s id)
 {
-    if (id)
+    if (!id.is_self())
         if (contact_s *c = find(id))
             if (c->state != contact_s::ROTTEN && c->state != contact_s::ALMOST_ROTTEN && c->state != contact_s::REJECT)
             {
@@ -2358,11 +2416,14 @@ lan_engine::contact_s *lan_engine::find_by_rpid(const byte *raw_public_id)
     return nullptr;
 }
 
-lan_engine::contact_s *lan_engine::addnew(int iid)
+lan_engine::contact_s *lan_engine::addnew(contact_id_s iid)
 {
-    int id = iid;
-    if (id == 0)
-        for(;find(id) != nullptr;++id) ; // slooooow. but fast enough on current cpus
+    contact_id_s id = iid;
+    if (id.is_empty())
+    {
+        int x = hf->find_free_id();
+        id = contact_id_s(contact_id_s::CONTACT, x);
+    }
     contact_s *nc = new contact_s( id );
     LIST_ADD(nc,first,last,prev,next);
     return nc;
@@ -2374,10 +2435,10 @@ void lan_engine::del(contact_s *c)
     delete c;
 }
 
-void lan_engine::send_message(int id, const message_s *msg)
+void lan_engine::send_message(contact_id_s id, const message_s *msg)
 {
     if (contact_s *c = find(id))
-        c->send_message( msg->crtime, asptr(msg->message, msg->message_len), msg->utag);
+        c->send_message( msg->crtime, std::asptr(msg->message, msg->message_len), msg->utag);
 }
 
 void lan_engine::del_message( u64 utag )
@@ -2390,7 +2451,7 @@ void lan_engine::del_message( u64 utag )
         }
 }
 
-void lan_engine::accept(int id)
+void lan_engine::accept(contact_id_s id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::INVITE_RECV)
@@ -2402,7 +2463,7 @@ void lan_engine::accept(int id)
         }
 }
 
-void lan_engine::reject(int id)
+void lan_engine::reject(contact_id_s id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::INVITE_RECV)
@@ -2412,18 +2473,18 @@ void lan_engine::reject(int id)
         }
 }
 
-void lan_engine::call(int id, const call_info_s *callinf)
+void lan_engine::call(contact_id_s id, const call_info_s *callinf)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && c->call_status == contact_s::CALL_OFF)
         {
-            c->send_block(BT_CALL, 0);
+            c->send_block( BT_CALL /*callinf->call_type ==  call_info_s::VOICE_CALL ? BT_VOICE_CALL : BT_VIDEO_CALL*/, 0);
             c->call_status = contact_s::OUT_CALL;
             c->call_stop_time = time_ms() + (callinf->duration * 1000);
         }
 }
 
-void lan_engine::stop_call(int id)
+void lan_engine::stop_call(contact_id_s id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && contact_s::CALL_OFF != c->call_status)
@@ -2434,7 +2495,7 @@ void lan_engine::stop_call(int id)
         }
 }
 
-void lan_engine::accept_call(int id)
+void lan_engine::accept_call(contact_id_s id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && contact_s::IN_CALL == c->call_status)
@@ -2444,7 +2505,7 @@ void lan_engine::accept_call(int id)
         }
 }
 
-void lan_engine::stream_options( int id, const stream_options_s *so )
+void lan_engine::stream_options(contact_id_s id, const stream_options_s *so )
 {
     if ( contact_s *c = find( id ) )
         if ( c->state == contact_s::ONLINE )
@@ -2479,7 +2540,7 @@ void lan_engine::stream_options( int id, const stream_options_s *so )
         }
 }
 
-int lan_engine::send_av(int id, const call_info_s * ci)
+int lan_engine::send_av(contact_id_s id, const call_info_s * ci)
 {
     contact_s *c = nullptr;
     if ( ci->audio_data )
@@ -2548,7 +2609,7 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
             // oops
             waiting_keepalive_answer = false;
             pipe.close();
-            MaskLog(LFLS_CLOSE, "c: %i, state: %i / no keepalive", id, state);
+            MaskLog(LFLS_CLOSE, "c: %i, state: %i / no keepalive", id.id, state);
             return;
         }
 
@@ -2693,20 +2754,21 @@ void lan_engine::contact_s::recv()
         if (state == OFFLINE && call_status != CALL_OFF)
             stop_call_activity();
 
-        contact_data_s cd(0, 0);
-        fill_data(cd);
+        contact_data_s cd(contact_id_s(), 0);
+        savebuffer sb;
+        fill_data(cd,&sb);
 
         cd.mask |= CDM_DETAILS;
-        str_c dstr( CONSTASTR("{\"" CDET_PUBLIC_ID "\":\""));
+        std::string dstr( STD_ASTR("{\"" CDET_PUBLIC_ID "\":\""));
         dstr.append( public_id );
 
-        dstr.append( CONSTASTR("\",\"" CDET_CLIENT "\":\""));
+        dstr.append( STD_ASTR("\",\"" CDET_CLIENT "\":\""));
         if (client.is_empty())
-            dstr.append(CONSTASTR("isotoxin/0.?.???"));
+            dstr.append(STD_ASTR("isotoxin/0.?.???"));
         else
             dstr.append(client);
 
-        dstr.append( CONSTASTR("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
+        dstr.append( STD_ASTR("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
 
         cd.details = dstr.cstr();
         cd.details_len = (int)dstr.get_length();
@@ -2718,7 +2780,7 @@ void lan_engine::contact_s::recv()
 
 void lan_engine::contact_s::stop_call_activity(bool notify_me)
 {
-    if (notify_me) engine->hf->message(MT_CALL_STOP, 0, id, now(),  nullptr, 0);
+    if (notify_me) engine->hf->message(MT_CALL_STOP, contact_id_s(), id, now(),  nullptr, 0);
     call_status = CALL_OFF;
     if (media)
     {
@@ -2735,7 +2797,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
     case PID_INVITE:
         {
             name = r.reads();
-            str_c oim = invitemessage;
+            std::string oim = invitemessage;
             invitemessage = r.reads();
             if (state == contact_s::ACCEPT_RESTORE_CONNECT)
             {
@@ -2748,18 +2810,19 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 bool sendrq = invitemessage != oim;
                 state = contact_s::INVITE_RECV;
                 data_changed = true;
-                contact_data_s cd(0, 0);
-                fill_data(cd);
+                contact_data_s cd(contact_id_s(), 0);
+                savebuffer sb;
+                fill_data(cd,&sb);
                 engine->hf->update_contact(&cd);
                 if (sendrq)
-                    engine->hf->message(MT_FRIEND_REQUEST, 0, id, now(), invitemessage.cstr(), (int)invitemessage.get_length());
+                    engine->hf->message(MT_FRIEND_REQUEST, contact_id_s(), id, now(), invitemessage.cstr(), (int)invitemessage.get_length());
             }
         }
         break;
     case PID_ACCEPT:
         if (const byte *key = r.read( SIZE_KEY ))
         {
-            str_c rname = r.reads();
+            std::string rname = r.reads();
             name = rname;
             memcpy( authorized_key, key, SIZE_KEY );
 
@@ -2770,7 +2833,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             state = ONLINE;
             data_changed = true;
 
-            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / accept online", id, state);
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / accept online", id.id, state);
 
             next_keepalive_packet = nextactiontime + 5000;
             engine->pg_sync(false, authorized_key);
@@ -2782,7 +2845,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
         state = REJECTED;
         data_changed = true;
         pipe.close();
-        MaskLog(LFLS_CLOSE, "c: %i, state: %i / reject", id, state);
+        MaskLog(LFLS_CLOSE, "c: %i, state: %i / reject", id.id, state);
         break;
     case PID_READY:
         if (const byte *pubid = r.read(SIZE_PUBID))
@@ -2793,7 +2856,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 data_changed |= state != ONLINE;
                 state = ONLINE;
 
-                MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ready online", id, state);
+                MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ready online", id.id, state);
 
                 if (data_changed)
                 {
@@ -2840,13 +2903,13 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         mdt.audio_frame = media->uncompressed.data();
                         mdt.audio_framesize = sz;
                         mdt.msmonotonic = timelabel;
-                        engine->hf->av_data(0, id, &mdt);
+                        engine->hf->av_data(contact_id_s(), id, &mdt);
                     }
                 }
 
                 if ( IS_TLM( TLM_AUDIO_RECV_BYTES ) )
                 {
-                    tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( flen ) };
+                    tlm_data_s d1 = { static_cast<u64>( id.id ), static_cast<u64>( flen ) };
                     engine->hf->telemetry( TLM_AUDIO_RECV_BYTES, &d1, sizeof( d1 ) );
                 }
 
@@ -2900,11 +2963,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     switch (bt)
                     {
                         case BT_CHANGED_NAME:
-                            name = asptr((const char *)dd.buf.data(), (int)dd.buf.size());
+                            name.set((const char *)dd.buf.data(), (int)dd.buf.size());
                             data_changed = true;
                             break;
                         case BT_CHANGED_STATUSMSG:
-                            statusmsg = asptr((const char *)dd.buf.data(), (int)dd.buf.size());
+                            statusmsg.set((const char *)dd.buf.data(), (int)dd.buf.size());
                             data_changed = true;
                             break;
                         case BT_OSTATE:
@@ -2922,9 +2985,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             }
                             break;
                         case BT_CALL:
+                        //case BT_VOICE_CALL:
+                        //case BT_VIDEO_CALL:
                             if (CALL_OFF == call_status)
                             {
-                                engine->hf->message(MT_INCOMING_CALL, 0, id, now(), "audio", 5);
+                                engine->hf->message(MT_INCOMING_CALL, contact_id_s(), id, now(), /*BT_VOICE_CALL != bt ? "video" :*/ "audio", 5);
                                 call_status = IN_CALL;
                             }
                             break;
@@ -2935,7 +3000,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         case BT_CALL_ACCEPT:
                             if (OUT_CALL == call_status)
                             {
-                                engine->hf->message(MT_CALL_ACCEPTED, 0, id, now(), nullptr, 0);
+                                engine->hf->message(MT_CALL_ACCEPTED, contact_id_s(), id, now(), nullptr, 0);
                                 start_media();
                             }
                             break;
@@ -2949,7 +3014,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 media->remote_so.view_w = ntohl( sos->view_w );
                                 media->remote_so.view_h = ntohl( sos->view_h );
 
-                                engine->hf->av_stream_options( 0, id, &media->remote_so );
+                                engine->hf->av_stream_options(contact_id_s(), id, &media->remote_so );
                             }
                             break;
                         case BT_INITDECODER:
@@ -2978,7 +3043,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
                             if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
                             {
-                                tlm_data_s d1 = { static_cast<u64>( id ), dd.buf.size() };
+                                tlm_data_s d1 = { static_cast<u64>( id.id ), dd.buf.size() };
                                 engine->hf->telemetry( TLM_VIDEO_RECV_BYTES, &d1, sizeof( d1 ) );
                             }
 
@@ -3010,11 +3075,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
                                 if (0 != memcmp( hash, avatar_hash, sizeof( hash ) ))
                                 {
-                                    memcpy(avatar_hash, avatar_hash, sizeof( hash ) );
+                                    memcpy(avatar_hash, hash, sizeof( hash ) );
                                     ++avatar_tag; // new avatar version
                                 }
                                 
-                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), (int)dd.buf.size());
+                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), static_cast<int>(dd.buf.size()));
                             }
                             break;
                         case BT_SENDFILE:
@@ -3023,7 +3088,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 const u64 *d = (u64 *)dd.buf.data();
                                 u64 sid = my_ntohll(d[0]);
                                 u64 fsz = my_ntohll(d[1]);
-                                new incoming_file_s(id, sid, fsz, asptr((const char *)dd.buf.data(), (int)dd.buf.size()).skip(16));
+                                new incoming_file_s(id, sid, fsz, std::string((const char *)dd.buf.data() + 16, dd.buf.size() - 16));
                             }
                             break;
                         case BT_FILE_BREAK:
@@ -3095,13 +3160,13 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             }
                             break;
                         case BT_TYPING:
-                            engine->hf->typing( 0, id );
+                            engine->hf->typing(contact_id_s(), id );
                             break;
                         default:
                             if (bt < __bt_service)
                             {
                                 u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
-                                engine->hf->message((message_type_e)bt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), (int)dd.buf.size() - sizeof(u64));
+                                engine->hf->message((message_type_e)bt, contact_id_s(), id, crtime, (const char *)dd.buf.data() + sizeof(u64), (int)dd.buf.size() - sizeof(u64));
                             }
                             break;
                     }
@@ -3158,7 +3223,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
 }
 
-lan_engine::file_transfer_s::file_transfer_s(const asptr &fn):fn(fn)
+lan_engine::file_transfer_s::file_transfer_s(const std::string &fn):fn(fn)
 {
     LIST_ADD(this, engine->first_ftr, engine->last_ftr, prev, next);
 }
@@ -3182,14 +3247,14 @@ void lan_engine::file_transfer_s::kill(bool from_self)
     delete this;
 }
 
-lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn) :file_transfer_s(fn)
+lan_engine::incoming_file_s::incoming_file_s(contact_id_s cid_, u64 utag_, u64 fsz_, const std::string &fn) :file_transfer_s(fn)
 {
     utag = engine->genfutag();
     sid = utag_;
     fsz = fsz_;
     cid = cid_;
 
-    engine->hf->incoming_file(cid, utag, fsz, fn.s, (int)fn.l);
+    engine->hf->incoming_file(cid, utag, fsz, fn.cstr(), fn.get_length());
 
 }
 
@@ -3289,7 +3354,7 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
     delete this;
 }
 
-lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const asptr &fn) :file_transfer_s(fn)
+lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const std::string &fn) :file_transfer_s(fn)
 {
     fsz = fsz_;
     cid = to_contact->id;
@@ -3301,7 +3366,7 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
         u64 sid;
         u64 fsz;
     } d = { my_htonll( sid ), my_htonll(fsz) };
-    to_contact->send_block(BT_SENDFILE, 0, &d, sizeof(d), fn.s, fn.l);
+    to_contact->send_block(BT_SENDFILE, 0, &d, sizeof(d), fn.cstr(), fn.get_length());
 }
 
 
@@ -3522,14 +3587,14 @@ void lan_engine::tick_ftr(int ct)
 }
 
 
-void lan_engine::file_send(int id, const file_send_info_s *finfo)
+void lan_engine::file_send(contact_id_s id, const file_send_info_s *finfo)
 {
     bool ok = false;
     if (contact_s *c = find(id))
     {
         if (c->state == contact_s::ONLINE)
         {
-            new transmitting_file_s(c, finfo->utag, finfo->filesize, asptr(finfo->filename, finfo->filename_len));
+            new transmitting_file_s(c, finfo->utag, finfo->filesize, std::string(finfo->filename, finfo->filename_len));
             ok = true;
         }
     }
@@ -3638,21 +3703,15 @@ bool lan_engine::file_portion(u64 utag, const file_portion_s *fp)
     return false;
 }
 
-void lan_engine::get_avatar(int id)
-{
-    if (contact_s *c = find(id))
-        c->send_block(BT_GETAVATAR, 0);
-}
-
 void lan_engine::create_conference(const char * /*confaname*/, const char * /*options*/)
 {
 }
 
-void lan_engine::ren_conference(int /*gid*/, const char * /*confaname*/)
+void lan_engine::ren_conference(contact_id_s /*gid*/, const char * /*confaname*/)
 {
 }
 
-void lan_engine::join_conference( int /*gid*/, int /*cid*/ )
+void lan_engine::join_conference(contact_id_s /*gid*/, contact_id_s /*cid*/ )
 {
 }
 void lan_engine::del_conference( const char * /*conference_id*/ )
@@ -3661,19 +3720,32 @@ void lan_engine::del_conference( const char * /*conference_id*/ )
 void lan_engine::enter_conference( const char * /*conference_id*/ )
 {
 }
-void lan_engine::leave_conference( int /*gid*/, int /*keepleave*/ )
+void lan_engine::leave_conference(contact_id_s /*gid*/, int /*keepleave*/ )
 {
 }
 
-void lan_engine::typing(int id)
+void lan_engine::contact(const contact_data_s * cdata)
+{
+    if (cdata->data_size)
+    {
+        loader ldr(cdata->data, cdata->data_size);
+        load_contact(cdata->id, ldr);
+        if (contact_s *c = find(cdata->id))
+        {
+            contact_data_s cd(contact_id_s(), 0);
+            c->fill_data(cd, nullptr);
+            hf->update_contact(&cd);
+        }
+    }
+}
+
+
+void lan_engine::typing(contact_id_s id)
 {
     if (contact_s *c = find(id))
         c->send_block(BT_TYPING, 0);
 }
 
-void lan_engine::export_data()
-{
-}
 void lan_engine::logging_flags(unsigned int f)
 {
     g_logging_flags = f;

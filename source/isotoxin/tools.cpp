@@ -1,9 +1,14 @@
 #include "isotoxin.h"
 
+#ifdef _WIN32
 #pragma warning (push)
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 #pragma warning (pop)
+#endif
+#ifdef _NIX
+#include <sodium.h>
+#endif // _NIX
 
 const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag)
 {
@@ -403,26 +408,159 @@ bool leech_at_right::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     return false;
 }
 
+ts::irect leech_at_left_s::calcrect() const
+{
+    ts::irect cr = of->getprops().rect();
+    ts::ivec2 szo = owner->getprops().size();
+    if (szo == ts::ivec2(0)) szo = owner->get_min_size();
+    return ts::irect::from_lt_and_size(ts::ivec2(cr.lt.x - space - szo.x, cr.lt.y + (cr.height() - szo.y) / 2), szo);
+}
+
 bool leech_at_left_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (!ASSERT(owner)) return false;
     if (!of) return false;
     if (of->getrid() != rid) return false;
-    //ASSERT(of->getparent() == owner->getparent());
 
     if (qp == SQ_RECT_CHANGED)
     {
-        ts::irect cr = of->getprops().rect();
-        ts::ivec2 szo = owner->getprops().size();
-        if (szo == ts::ivec2(0)) szo = owner->get_min_size();
-
-        MODIFY(*owner).size(szo).pos(cr.lt.x - space - szo.x, cr.lt.y + (cr.height() - szo.y) / 2).visible(true);
+        ts::irect t = calcrect();
+        MODIFY(*owner).size(t.size()).pos(t.lt).visible(true);
         return false;
     }
     return false;
 }
 
+leech_at_left_animated_s::leech_at_left_animated_s(guirect_c *of, int space, int time, bool skip_animation) :leech_at_left_s(of, space), time(time), starttime(ts::Time::current())
+{
+    if (skip_animation)
+    {
+        starttime += ts::tabs(time) + 1;
+    }
+    else
+    {
+        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+    }
+}
 
+leech_at_left_animated_s::~leech_at_left_animated_s()
+{
+    if (gui)
+        gui->delete_event( DELEGATE(this, tick) );
+}
+
+bool leech_at_left_animated_s::tick(RID, GUIPARAM)
+{
+    if (!owner)
+    {
+        starttime = ts::Time::current();
+        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+        return true;
+    }
+
+    ts::irect t = calcrect();
+
+    rectengine_c &pare = HOLD(owner->getparent()).engine();
+
+    if (of->getprops().zindex() <= owner->getprops().zindex())
+    {
+        MODIFY(*of).zindex(owner->getprops().zindex() + 0.1f);
+        pare.z_resort_children();
+    }
+
+    MODIFY(*owner).size(t.size()).pos(t.lt).visible(true);
+
+    pare.redraw();
+
+    ts::Time ct = ts::Time::current();
+
+    if (time > 0)
+    {
+        if ((ct - starttime) < time)
+            DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+    }
+    else
+    {
+        if ((ct - starttime) < (-time))
+            DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+        else
+            TSDEL( owner );
+    }
+
+    return true;
+}
+
+void leech_at_left_animated_s::forward()
+{
+    if (time > 0) return;
+    time = -time;
+    starttime = ts::Time::current();
+    DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+}
+
+void leech_at_left_animated_s::reverse()
+{
+    if (time < 0) return;
+    time = -time;
+    starttime = ts::Time::current();
+    DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), 0);
+}
+
+
+ts::irect leech_at_left_animated_s::calcrect() const
+{
+    ts::Time ct = ts::Time::current();
+
+    if (time > 0)
+    {
+        // forward mode
+        if ((ct - starttime) >= time)
+            return leech_at_left_s::calcrect();
+    }
+    else if (time < 0)
+    {
+        if ((ct - starttime) >= -time)
+            return of->getprops().rect();
+    }
+
+
+    float t = owner ? (static_cast<float>(ct - starttime) / static_cast<float>(time)) : 0;
+
+    t = static_cast<float>(0.5f * (sin((t*M_PI) - M_PI_2) + 1));
+    t = static_cast<float>(0.5f * (sin((t*M_PI) - M_PI_2) + 1));
+
+    if (time < 0)
+        t = 1.0f - t;
+
+    ts::irect r0 = of->getprops().rect();
+    ts::irect r1 = leech_at_left_s::calcrect();
+
+    ts::irect r;
+    r.lt.x = ts::lround(LERPFLOAT(r0.lt.x, r1.lt.x, t));
+    r.lt.y = ts::lround(LERPFLOAT(r0.lt.y, r1.lt.y, t));
+
+    r.rb.x = ts::lround(LERPFLOAT(r0.rb.x, r1.rb.x, t));
+    r.rb.y = ts::lround(LERPFLOAT(r0.rb.y, r1.rb.y, t));
+
+    return r;
+}
+
+
+/*virtual*/ bool leech_inout_handler_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (owner->getrid() == rid)
+    {
+        switch (qp)
+        {
+        case SQ_MOUSE_IN:
+            return h(rid, as_param(1));
+        case SQ_MOUSE_OUT:
+            return h(rid, nullptr);
+        }
+    }
+
+    return false;
+}
 
 /*virtual*/ bool leech_save_proportions_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -456,9 +594,9 @@ bool leech_at_left_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             }
             break;
         }
-    
+
     }
-    
+
     return false;
 }
 
@@ -493,10 +631,10 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
 {
     if (!datahandler) return;
     int memba = junct.start(tag);
-    if (memba != 0) 
+    if (memba != 0)
         return;
 
-    if (!ts::master().start_app(PLGHOSTNAME, ts::to_wstr(tag), &plughost, false))
+    if (!ts::master().start_app(ts::wstr_c(PLGHOSTNAME), ts::to_wstr(tag), &plughost, false))
     {
         junct.stop();
         return;
@@ -551,7 +689,7 @@ ipc::ipc_result_e isotoxin_ipc_s::handshake_func(void *par, void *data, int data
 
 ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int datasize )
 {
-    if (data == nullptr) 
+    if (data == nullptr)
         return ipc::IPCR_BREAK;
     isotoxin_ipc_s *me = (isotoxin_ipc_s *)par;
     ipcr r(data,datasize);
@@ -570,14 +708,16 @@ template <typename TCH> int fmail( const ts::sptr<TCH> &m, int from, int &e )
     int j = i - 1;
     for ( ; j >= from; j-- )
     {
-        TCH c = message.get_char( j );
-        if ( ts::CHAR_is_digit( c ) ) continue;
-        if ( ts::CHAR_is_letter( c ) ) continue;
-        if ( ts::CHARz_find<ts::wchar>( L".!#$%&'*+-/=?^_`{|}~", c ) >= 0 ) continue;
-        if ( c == ' ' )
         {
-            ++j;
-            break;
+            TCH c = message.get_char( j );
+            if ( ts::CHAR_is_digit( c ) ) continue;
+            if ( ts::CHAR_is_letter( c ) ) continue;
+            if ( ts::CHARz_find<ts::wchar>( WIDE2(".!#$%&'*+-/=?^_`{|}~"), c ) >= 0 ) continue;
+            if ( c == ' ' )
+            {
+                ++j;
+                break;
+            }
         }
     try_next:
         i = message.find_pos( i + 1, '@' );
@@ -599,7 +739,7 @@ template <typename TCH> int fmail( const ts::sptr<TCH> &m, int from, int &e )
         if ( ts::CHAR_is_digit( c ) ) continue;
         if ( ts::CHAR_is_letter( c ) ) continue;
         if ( c == '-' || c == '.' ) continue;
-        if ( ts::CHARz_find<ts::wchar>( L" \\<>\r\n\t", c ) >= 0 ) break;
+        if ( ts::CHARz_find<ts::wchar>( WIDE2(" \\<>\r\n\t"), c ) >= 0 ) break;
         goto try_next;
     }
     if ( message.get_char( i+1 ) == '-' || message.get_char( k - 1 ) == '-' || message.substr( i+1, k ).find_pos( CONSTSTR( TCH, ".." ) ) >= 0 )
@@ -668,7 +808,7 @@ template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts
         for (; j < cnt; ++j)
         {
             ts::wchar c = message.get_char(j);
-            if (ts::CHARz_find(L" \\<>\r\n\t!", c) >= 0 || in_quote == c) break;
+            if (ts::CHARz_find(WIDE2(" \\<>\r\n\t!"), c) >= 0 || in_quote == c) break;
         }
 
         rslt.r0 = i;
@@ -813,7 +953,7 @@ void text_adapt_user_input(ts::str_c &text)
     }
 
     // markdown
-    
+
     ts::tmp_tbuf_t< ts::ivec2 > nochange;
     ts::ivec2 linkinds;
     for (int i = 0; text_find_link(text.as_sptr(), i, linkinds);)
@@ -1068,7 +1208,7 @@ extern "C"
         for(const ts::wstr_c &s : cc.fsplit)
             if (p.find_pos( s ) < 0)
                 return 0;
-        
+
         return 1;
     }
 }
@@ -1172,7 +1312,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
 
             if (range.r1 > range_test.r1)
                 range_test.r1 = range.r1;
-            
+
             marks.remove_fast(i);
             break;
         }
@@ -1183,7 +1323,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
     return marks.count() > 0;
 }
 
-ts::wstr_c loc_text(loctext_e lt)
+ts::wsptr loc_text(loctext_e lt)
 {
     switch (lt)
     {
@@ -1248,6 +1388,8 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_movedn:
             return TTT( "Move down", 78 );
 
+        case loc_language:
+            return TTT("Language", 107);
 
         case loc_connection_name:
             return TTT("Connection name", 102);
@@ -1257,7 +1399,7 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("State", 104);
 
     }
-    return ts::wstr_c();
+    return ts::wsptr();
 }
 
 ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only )
@@ -1504,7 +1646,6 @@ namespace
 {
     struct lang_s
     {
-        MOVABLE( true );
         SLANGID langtag;
         ts::wstr_c name;
         int operator()( const lang_s &ol ) const
@@ -1514,9 +1655,13 @@ namespace
     };
 }
 
-menu_c list_langs( SLANGID curlang, MENUHANDLER h )
+DECLARE_MOVABLE(lang_s, true);
+
+menu_c list_langs( SLANGID curlang, MENUHANDLER h, menu_c *mp)
 {
-    menu_c m;
+    menu_c mtmp;
+    if (mp == nullptr)
+        mp = &mtmp;
 
     ts::wstrings_c fns;
     ts::wstr_c path(CONSTWSTR("loc/"));
@@ -1574,13 +1719,13 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
     for (const lang_s &l : langs)
     {
         bool cur = curlang == l.langtag;
-        m.add(l.name, cur ? (MIF_MARKED) : 0, h, l.langtag);
+        mp->add(l.name, cur ? (MIF_MARKED) : 0, h, l.langtag);
     }
 
-    return m;
+    return *mp;
 }
 
-ts::wstr_c make_proto_desc( const ts::wstr_c&idname, int mask )
+ts::wstr_c make_proto_desc( const ts::wsptr&idname, int mask )
 {
     ts::wstr_c r(1024,true);
     if (0 != (mask & MPD_UNAME))    r.append(TTT("Your name",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
@@ -1661,7 +1806,7 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
         svg.replace_all(CONSTASTR("[sz2]"), ts::amake(imgsize/2));
         svg.replace_all(CONSTASTR("[col]"), make_color(c));
         svg.replace_all(CONSTASTR("[svg]"), icond);
-        
+
         bmp.create_ARGB(ts::ivec2(imgsize));
         bmp.fill( fillc );
 
@@ -1711,7 +1856,7 @@ bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
     if (masks.l == 0) return false;
     ts::wstr_c fn(filename);
     ts::fix_path(fn, FNO_LOWERCASEAUTO|FNO_NORMALIZE);
-    
+
 
     for(ts::token<ts::wchar> t(masks, ';');t;++t)
     {
@@ -1849,7 +1994,7 @@ namespace
         }
 
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(spinlock::pthread_self()), DELEGATE(this, ipchandler));
             ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
@@ -1865,7 +2010,7 @@ namespace
                 prots2load->done(false);
             }
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
     };
 }
@@ -2035,6 +2180,7 @@ template void blake2b<BLAKE2B_HASH_SIZE>( ts::uint8 *hash, const void *inbytes1,
 TS_STATIC_CHECK( crypto_generichash_BYTES_MIN == BLAKE2B_HASH_SIZE_SMALL, "16" );
 TS_STATIC_CHECK( crypto_generichash_BYTES == BLAKE2B_HASH_SIZE, "32" );
 
+#ifdef _WIN32
 // dlmalloc -----------------
 
 #ifdef _MSC_VER
@@ -2057,3 +2203,4 @@ static spinlock::long3264 dlmalloc_spinlock = 0;
 #undef ERROR
 
 #include "dlmalloc/dlmalloc.c"
+#endif

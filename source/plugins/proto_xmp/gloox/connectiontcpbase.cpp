@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2004-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2004-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -11,7 +11,7 @@
 */
 
 
-#include "config.h"
+
 #include "gloox.h"
 
 #include "connectiontcpbase.h"
@@ -22,7 +22,8 @@
 #include "util.h"
 
 #ifdef __MINGW32__
-# include <winsock.h>
+# include <winsock2.h>
+# include <ws2tcpip.h>
 #endif
 
 #if ( !defined( _WIN32 ) && !defined( _WIN32_WCE ) ) || defined( __SYMBIAN32__ )
@@ -36,7 +37,8 @@
 # include <errno.h>
 # include <netdb.h>
 #elif ( defined( _WIN32 ) || defined( _WIN32_WCE ) ) && !defined( __SYMBIAN32__ )
-# include <winsock.h>
+# include <winsock2.h>
+# include <ws2tcpip.h>
 typedef int socklen_t;
 #endif
 
@@ -200,7 +202,7 @@ namespace gloox
 
   const std::string ConnectionTCPBase::localInterface() const
   {
-    struct sockaddr local;
+    struct sockaddr_storage local;
     socklen_t len = (socklen_t)sizeof( local );
     if( getsockname ( m_socket, (reinterpret_cast<struct sockaddr*>( &local )), &len ) < 0 )
       return EmptyString;

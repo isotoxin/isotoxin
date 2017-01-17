@@ -51,6 +51,7 @@ struct wnd_show_params_s
     wnd_c *parent = nullptr;
     wstr_c name;
     irect rect = irect(0);
+    irect maxrect = irect(0); // valid for d == D_MAX
     float opacity = 1.0f;
     disposition_e d = D_NORMAL;
 

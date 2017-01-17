@@ -158,7 +158,7 @@ void rsvg_animation_c::activate(uint st, bool f)
 /*virtual*/ void rsvg_animation_transform_c::activate(uint st, bool f)
 {
     patient->set_transform_animation( f ? this : nullptr );
-    __super::activate(st, f);
+    super::activate(st, f);
 }
 
 /*virtual*/ void rsvg_animation_transform_rotate_c::set_from_to(const ts::asptr&from, const ts::asptr&to)

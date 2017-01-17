@@ -10,14 +10,17 @@
 #include <WinSock2.h>
 #include <windows.h>
 #include <Iphlpapi.h>
-#endif // _WIN32
-
-#include "../shared/shared.h"
-
 #pragma warning (push)
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 #pragma warning (pop)
+#endif // _WIN32
+#ifdef _NIX
+#include <sodium.h>
+#include <curl/curl.h>
+#endif // _NIX
+
+#include "../shared/shared.h"
 
 #ifdef MODE64
 #define UPDATE64 true
@@ -59,13 +62,13 @@ int ver_ok( ts::asptr verss )
     if ((ss.get_length() - signi - 7) != crypto_sign_BYTES * 2)
         return 0;
 
-    byte sig[crypto_sign_BYTES];
-    byte pk[crypto_sign_PUBLICKEYBYTES] = {
+    ts::uint8 sig[crypto_sign_BYTES];
+    ts::uint8 pk[crypto_sign_PUBLICKEYBYTES] = {
 #include "signpk.inl"
     };
     ss.hex2buf<crypto_sign_BYTES>(sig, signi + 7);
 
-    if  (0 == crypto_sign_verify_detached(sig, (const byte *)verss.s, signi, pk))
+    if  (0 == crypto_sign_verify_detached(sig, (const ts::uint8 *)verss.s, signi, pk))
         return signi;
 
     return 0;
@@ -87,7 +90,7 @@ auto getss = [](const ts::asptr &latest, const ts::asptr&t) ->ts::asptr
 
 bool blake2b_ok(ts::buf_c &b, const ts::asptr &latest, bool update64 )
 {
-    ts::str_c blake2bs = getss(latest, PROP("blake2b"));
+    ts::str_c blake2bs( getss(latest, PROP("blake2b")) );
     if (blake2bs.get_length() != BLAKE2B_HASH_SIZE * 2) return false;
     if (ts::pstr_c(getss(latest, PROP("size"))).as_int() != b.size()) return false;
     ts::uint8 hash[BLAKE2B_HASH_SIZE];
@@ -124,7 +127,8 @@ void get_downloaded_ver( dnver_s &dnver )
         ts::wstr_c cfgpath = cfg().get_path();
         if (cfgpath.is_empty()) find_config(cfgpath);
         if ( cfgpath.is_empty() ) return;
-        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update\\"))); WINDOWS_ONLY
+        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update")));
+        ts::fix_path(w().path, FNO_NORMALIZE|FNO_APPENDSLASH);
     }
 
     ts::buf_c bbb;
@@ -160,6 +164,10 @@ void get_downloaded_ver( dnver_s &dnver )
     }
 }
 
+#ifdef _NIX
+#include "win32emu/win32emu.h"
+#endif // _NIX
+
 namespace
 {
     struct myprogress_s
@@ -174,7 +182,7 @@ namespace
         myprogress_s *myp = (myprogress_s *)p;
 
         int curtime = GetTickCount();
- 
+
         if((curtime - myp->lastruntime) >= 500)
         {
             // every 1000 ms
@@ -199,7 +207,7 @@ void set_proxy_curl( CURL *curl, int proxy_type, const ts::asptr &proxy_addr )
 {
     if (proxy_type > 0)
     {
-        ts::str_c proxya = proxy_addr;
+        ts::str_c proxya(proxy_addr);
 
         int pt = 0;
         if (proxy_type == 1) pt = CURLPROXY_HTTP;
@@ -294,7 +302,7 @@ next_address:
             curl.error_num = gmsg<ISOGM_NEWVERSION>::E_NETWORK;
         return;
     }
-    
+
     d.clear();
 
     int rslt = 0;
@@ -348,7 +356,7 @@ next_address:
     }
 
     int signi = ver_ok( d.cstr() );
-    if (!signi) 
+    if (!signi)
     {
         ++addri;
         goto next_address;
@@ -358,7 +366,7 @@ next_address:
 
     ts::str_c latests( d.cstr().s, signi );
 
-    ts::str_c alt = getss(latests, CONSTASTR("alt"));
+    ts::str_c alt(getss(latests, CONSTASTR("alt")));
     if (!alt.is_empty())
     {
         for( ts::token<char> t(alt.as_sptr(),'@'); t; ++t )
@@ -382,7 +390,7 @@ next_address:
     bool downloaded = false;
     dnver_s dnver;
     get_downloaded_ver( dnver );
-    ts::str_c aver = getss(latests, CONSTASTR("ver"));
+    ts::str_c aver(getss(latests, CONSTASTR("ver")));
     if (dnver.ver == aver && dnver.check( update64 ))
         downloaded = true;
 
@@ -453,7 +461,7 @@ struct updater
 {
     updater(const ts::wstr_c &exe_path):exe_path(exe_path) {}
     ts::wstr_c exe_path;
-    time_t amfn = now();
+    time_t amfn = ts::now();
     bool updfail = false;
     ts::wstrings_c moved;
 
@@ -464,7 +472,7 @@ struct updater
         ff.append_char(NATIVE_SLASH).append_as_num<time_t>(amfn).append_char(NATIVE_SLASH);
         ts::make_path(ff, 0);
 
-        if (MoveFileW(wfn, ts::fn_join(ff, ts::fn_get_name_with_ext(wfn))))
+        if (ts::ren_or_move_file(wfn, ts::fn_join(ff, ts::fn_get_name_with_ext(wfn))))
         {
             moved.add(wfn);
 
@@ -479,7 +487,7 @@ struct updater
             for (const ts::wstr_c &mf : moved)
             {
                 ts::kill_file(mf); // delete new file
-                MoveFileW(ts::fn_join(ff, mf), mf); // return moved one
+                ts::ren_or_move_file(ts::fn_join(ff, mf), mf); // return moved one
             }
             return false;
         }
@@ -523,7 +531,7 @@ bool check_autoupdate()
         }
 
         if ( ( is_64 && dnver.check( true ) ) ||
-             (!is_64 && dnver.check( false )) 
+             (!is_64 && dnver.check( false ))
             )
         {
             // just cleanup
@@ -558,8 +566,8 @@ bool check_autoupdate()
 
         if (u.updfail)
             return true; // continue run
-    
-        ts::master().start_app(CONSTWSTR("isotoxin"), ts::wstr_c(), nullptr, false);
+
+        ts::master().start_app(ts::wstr_c(CONSTWSTR("isotoxin")), ts::wstr_c(), nullptr, false);
 
         return false;
     }

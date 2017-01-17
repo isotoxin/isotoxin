@@ -15,11 +15,11 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "../appver.inl"
         exception_operator_c::set_unhandled_exception_filter();
-        exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("proto.lan.")).appendcvt(SS(PLUGINVER)).as_sptr(), 
+        exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), std::wstr_c(STD_WSTR("proto.lan.")).appendcvt(SS(PLUGINVER)).as_sptr(),
 #ifdef MODE64
-            CONSTWSTR( "x64.dmp" ) );
+            STD_WSTR( "x64.dmp" ) );
 #else
-            CONSTWSTR( "dmp" ) );
+            STD_WSTR( "dmp" ) );
 #endif // MODE64                   
 #endif
 

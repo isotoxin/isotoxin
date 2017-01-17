@@ -2430,5 +2430,9 @@ void repdraw::draw_c( ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool t
 #include "_win32/win32_bitmap.inl"
 #endif
 
+#ifdef _NIX
+#include "_nix/nix_bitmap.inl"
+#endif
+
 } // namespace ts
 

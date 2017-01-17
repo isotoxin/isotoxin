@@ -1,11 +1,14 @@
-#include "memspy.h"
+#ifdef _WIN32
 #include <windows.h>
+#include <intrin.h>
+#endif
 #include <stdio.h>
 #include <malloc.h>
-#include <intrin.h>
+
+#include "memspy.h"
 
 // CONFIG!
-//if you get a memory problem, change values of config here and recompile - it is ok 
+//if you get a memory problem, change values of config here and recompile - it is ok
 
 #define MEMSPY_DISABLE 0
 #define MEMSPY_CALL_STACK 1                 // store callstack for every allocation
@@ -45,10 +48,15 @@
 
 #pragma init_seg(lib)
 
+#ifdef __linux__
+#undef MEMSPY_DISABLE
+#define MEMSPY_DISABLE 1
+#endif // __linux__
+
+#if !MEMSPY_DISABLE
 
 namespace
 {
-
 
 #pragma intrinsic (_InterlockedCompareExchange)
 
@@ -94,7 +102,7 @@ struct block_header_s
     block_header_s *prev;
     block_header_s *next;
 #if MEMSPY_CALL_STACK
-    
+
     static HANDLE process;
 
     DWORD callstack[MEMSPY_CALL_STACK_DEEP];
@@ -332,6 +340,8 @@ void reset_allocnum()
     numpool = 0;
 }
 
+#endif
+
 
 void *mspy_malloc(const char *fn, int line, int typ, size_t sz)
 {
@@ -371,6 +381,7 @@ size_t mspy_size(void *p)
 
 bool mspy_getallocated_info( memcb *cb, void *prm )
 {
+#if !MEMSPY_DISABLE
     spylock();
     if ( first == nullptr )
     {
@@ -404,6 +415,7 @@ bool mspy_getallocated_info( memcb *cb, void *prm )
     }
 
     spyunlock();
+#endif
 
     return true;
 
@@ -411,6 +423,7 @@ bool mspy_getallocated_info( memcb *cb, void *prm )
 
 bool mspy_getallocated_info( char *buf, int bufsz )
 {
+#if !MEMSPY_DISABLE
     int curl = 0;
     spylock();
     if (first == nullptr)
@@ -443,10 +456,12 @@ bool mspy_getallocated_info( char *buf, int bufsz )
     }
 
     spyunlock();
+#endif
 
     return true;
 }
 
+#if !MEMSPY_DISABLE
 struct memleak_fin_s
 {
     ~memleak_fin_s()
@@ -492,5 +507,5 @@ struct memleak_fin_s
     }
 
 } mlmb;
-
+#endif
 

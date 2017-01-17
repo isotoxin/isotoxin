@@ -34,7 +34,6 @@ namespace ts
 
 struct glyph_image_s
 {
-    MOVABLE( true );
     DUMMY(glyph_image_s);
 
     union
@@ -66,6 +65,8 @@ struct glyph_image_s
         };
     };
 };
+
+namespace internals { template <> struct movable<glyph_image_s> : public movable_customized_yes {}; }
 
 TS_STATIC_CHECK( sizeof(glyph_image_s) == ARCHBITS, "oops" );
 

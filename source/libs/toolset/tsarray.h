@@ -10,7 +10,6 @@ namespace ts
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR : public ALLOCATOR
 {
-    MOVABLE( is_movable<ALLOCATOR>::value );
 protected:
     typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
 
@@ -19,12 +18,10 @@ protected:
     template<typename KEY> static  int  compare( UNIT_PTR u1, KEY key ) { auto &unit = *u1; return unit(key); }
 
     template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(UNIT_PTR &to, TFROM from) { to = from; } };
-
 };
 
 template <typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_CLEAR_ONLY : public ALLOCATOR
 {
-    MOVABLE( is_movable<ALLOCATOR>::value );
 protected:
 
     typedef decltype(clean_type<T>::type) CLEAN_OBJTYPE;
@@ -291,18 +288,56 @@ protected:
 
 };
 
+namespace internals
+{
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_CLEAR_ONLY< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_DEL< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_FREE< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_REL< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T1, class T2, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_SMARTPTR< T1, T2, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+    template <class T, class ALLOCATOR> struct movable< DEFAULT_BEHAVIOUR_INPLACE< T, ALLOCATOR > >
+    {
+        static const bool value = movable<ALLOCATOR>::value;
+        static const bool explicitly = movable<ALLOCATOR>::explicitly;
+    };
+}
+
+
 /**
 *  universal array
 */
-template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIOUR<T, TS_DEFAULT_ALLOCATOR> > class array_c : public BEHAVIOUR
+template <typename T, aint SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIOUR<T, TS_DEFAULT_ALLOCATOR> > class array_c : public BEHAVIOUR
 {
 #ifdef _FINAL
     void fill_dbg(auint, auint) {}
 #else
     void fill_dbg(auint i, auint n) { blk_fill<uint8>(m_list + i, n * sizeof(T), 0xcd); }
 #endif
-
-    MOVABLE( is_movable<BEHAVIOUR>::value );
 
 public:
     typedef typename BEHAVIOUR::CLEAN_OBJTYPE CLEAN_OBJTYPE;
@@ -1155,6 +1190,15 @@ public:
     const T *end() const { return m_list + m_count; }
 
 };
+
+namespace internals
+{
+    template <typename T, aint SMALLGRANULA, typename BEHAVIOUR> struct movable< array_c< T, SMALLGRANULA, BEHAVIOUR > >
+    {
+        static const bool value = movable<BEHAVIOUR>::value;
+        static const bool explicitly = movable<BEHAVIOUR>::explicitly;
+    };
+}
 
 template<typename obj, int granula> using pointers_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR<obj *, TS_DEFAULT_ALLOCATOR> >;
 template<typename obj, int granula> using array_del_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_DEL<obj *, TS_DEFAULT_ALLOCATOR> >;

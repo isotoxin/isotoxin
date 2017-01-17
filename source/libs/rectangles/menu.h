@@ -93,9 +93,17 @@ public:
     bool operator >= (const menu_c &om) const {return core == om.core && level <= om.level;} // проверяет, является ли *this родителем om
     int lv() const {return level;}
     menu_c& add( const ts::wstr_c & text, ts::uint32 flags = 0, MENUHANDLER h = MENUHANDLER(), const ts::asptr& param = CONSTASTR(""), ts::bitmap_c *icon = nullptr );
+    menu_c& add(const ts::wsptr & text, ts::uint32 flags = 0, MENUHANDLER h = MENUHANDLER(), const ts::asptr& param = CONSTASTR(""), ts::bitmap_c *icon = nullptr)
+    {
+        return add( ts::wstr_c(text), flags, h, param, icon );
+    }
     menu_c& add_separator();
     menu_c add_path( const ts::wstr_c & path ); // path1/path2/path3
     menu_c add_sub( const ts::wstr_c & text );
+    menu_c add_sub(const ts::wsptr & text)
+    {
+        return add_sub(ts::wstr_c(text));
+    }
     menu_c get_sub( const ts::wbp_c &bp ) const;
 
     bool is_empty() const

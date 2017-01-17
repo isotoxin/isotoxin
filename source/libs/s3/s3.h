@@ -248,11 +248,15 @@ public:
 
 void Update(); // call it at least once per 5 second - it will cleanup autodeleted sources
 
-#ifndef _WINDEF_
-typedef int BOOL;
+#ifdef _MSC_VER
+typedef wchar_t wchar;
+#define S3CALL __stdcall
+#elif defined __GNUC__
+typedef char16_t wchar;
+#define S3CALL
 #endif
 
-typedef BOOL __stdcall device_enum_callback(DEVICE *lpGuid, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
+typedef bool S3CALL device_enum_callback(DEVICE *lpGuid, const wchar *lpcstrDescription, const wchar *lpcstrModule, void *lpContext);
 
 void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, void * lpContext);
 

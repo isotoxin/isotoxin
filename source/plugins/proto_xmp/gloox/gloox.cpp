@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2005-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2005-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -115,7 +115,7 @@ namespace gloox
 
   const std::string XMPP_STREAM_VERSION_MAJOR = "1";
   const std::string XMPP_STREAM_VERSION_MINOR = "0";
-  const std::string GLOOX_VERSION           = "1.0.15";
+  const std::string GLOOX_VERSION           = "1.0.18";
   const std::string GLOOX_CAPS_NODE         = "http://camaya.net/gloox";
 
   const std::string XMLNS = "xmlns";

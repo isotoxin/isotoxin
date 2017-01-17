@@ -21,26 +21,8 @@
 
 #define DEFAULT_PROXY "localhost:9050"
 
-class config_base_c
+namespace cvt
 {
-    GM_RECEIVER( config_base_c, ISOGM_ON_EXIT );
-
-protected:
-    ts::wstr_c path;
-    ts::iweak_ptr<ts::sqlitedb_c> db;
-    ts::hashmap_t<ts::str_c, ts::str_c> values;
-    ts::astrings_c dirty;
-
-    bool closed = false;
-
-    bool cfg_reader( int row, ts::SQLITE_DATAGETTER );
-    bool save_dirty( RID, GUIPARAM );
-    virtual bool save();
-    virtual void onclose() {};
-
-    ts::SQLITE_TABLEREADER get_cfg_reader() { return DELEGATE( this, cfg_reader ); }
-
-public:
 
     template< typename T > struct cvts;
     template<> struct cvts<int>
@@ -111,6 +93,29 @@ public:
         }
     };
 
+}
+
+class config_base_c
+{
+    GM_RECEIVER( config_base_c, ISOGM_ON_EXIT );
+
+protected:
+    ts::wstr_c path;
+    ts::iweak_ptr<ts::sqlitedb_c> db;
+    ts::hashmap_t<ts::str_c, ts::str_c> values;
+    ts::astrings_c dirty;
+
+    bool closed = false;
+
+    bool cfg_reader( int row, ts::SQLITE_DATAGETTER );
+    bool save_dirty( RID, GUIPARAM );
+    virtual bool save();
+    virtual void onclose() {};
+
+    ts::SQLITE_TABLEREADER get_cfg_reader() { return DELEGATE( this, cfg_reader ); }
+
+public:
+
     config_base_c() {}
     ~config_base_c();
 
@@ -136,7 +141,7 @@ public:
     {
         bool added = false;
         ts::str_c &v = values.add( pn, added );
-        return cvts<T>::cvt(added,v,def);
+        return cvt::cvts<T>::cvt(added,v,def);
     }
 
 };
@@ -148,7 +153,10 @@ enum cfg_misc_flags_e
     MISCF_DISABLE64 = 1,
     MISCF_DISABLEBORDER = 2,
     MISCF_SPLIT_UI = 4,
-    MISCF_DONT_BACKUP_PROFILE = 8,
+    MISCF_DONT_BACKUP_PROFILE = 8, /* used 'negative' semantics due default value is 0*/
+    MISCF_DONT_LIM_BACKUP_DAYS = 16,
+    MISCF_DONT_LIM_BACKUP_SIZE = 32,
+    MISCF_DONT_LIM_BACKUP_COUNT = 64,
 };
 
 enum collapse_beh_e
@@ -225,8 +233,11 @@ public:
 
     TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
     TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )
-    
+
     TEXTWPAR( folder_backup, "%TEMP%\\$$$isotoxin\\backup\\" )
+    INTPAR(lim_backup_days, 30)
+    INTPAR(lim_backup_size, 100)
+    INTPAR(lim_backup_count, 30)
 
     TEXTAPAR( convs, "" )
 

@@ -96,7 +96,7 @@ bool tickx()
 
 void test_ipc()
 {
-    isotoxin_ipc_s ipcs(CONSTASTR("testtest"), cmdhandlerx);
+    isotoxin_ipc_s ipcs(ts::str_c(CONSTASTR("testtest")), cmdhandlerx);
     if (ipcs.ipc_ok)
     {
         ts::Time stime = ts::Time::current();
@@ -122,7 +122,7 @@ void test_cairo()
     //
     //cairo_destroy(c);
 
-    ts::buf0_c b; b.load_from_text_file(L"process.svg");
+    ts::buf0_c b; b.load_from_text_file(CONSTWSTR("process.svg"));
     char *testsvg = (char *)b.data();
 
     rsvg_svg_c *n = rsvg_svg_c::build_from_xml(testsvg);
@@ -133,7 +133,7 @@ void test_cairo()
 
         bmp.fill( ts::ARGB(45,66,78) );
         n->render( bmp.extbody() );
-        bmp.save_as_png( L"svg_c.png" );
+        bmp.save_as_png( CONSTWSTR("svg_c.png") );
 
         bmp.fill(0);
         n->render(bmp.extbody());
@@ -143,7 +143,7 @@ void test_cairo()
         bsave.fill(0xffffffff);
         //bsave.alpha_blend(ts::ivec2(0), bmp);
         ts::img_helper_alpha_blend_pm(bsave.body(), bsave.info().pitch, bmp.body(), bmp.info(), 255);
-        bsave.save_as_png(L"svg_w.png");
+        bsave.save_as_png(CONSTWSTR("svg_w.png"));
 
         n->release();
     }
@@ -298,7 +298,7 @@ void dotests()
 	z += s;
 	ts::swstr_t<16> s2(s1);
 	ts::sstr_t<32> s3(s2);
-	wchar_t *yyy=(wchar_t *)&s2;
+	ZSTRINGS_WIDECHAR *yyy=(ZSTRINGS_WIDECHAR *)&s2;
 
     ts::str_t<char, ts::str_core_static_c<char, 32> > hhh("nnff");
 
@@ -312,7 +312,7 @@ void dotests()
 	//s1 = z;
 	s2 = x;
 
-    ts::strings_c<wchar_t> sa1;
+    ts::strings_c<ZSTRINGS_WIDECHAR> sa1;
     sa1.add(L"s1");
     sa1.add(L"s2");
     sa1.add(L"s3");
@@ -332,123 +332,16 @@ void dotests()
 
 }
 
-
-
-
-class test_window : public gui_isodialog_c
-{
-    //gui_message_item_c *ll;
-    ts::shared_ptr<contact_c> c;
-    ts::shared_ptr<contact_root_c> h;
-protected:
-    // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
-    /*virtual*/ void created() override
-    {
-        set_theme_rect(CONSTASTR("main"), false);
-        __super::created();
-
-        gui_conversation_c &chat = MAKE_CHILD<gui_conversation_c>( getrid() );
-        chat.always_show_editor();
-        RID msglist = chat.get_msglist().getrid();
-
-        c = TSNEW( contact_c );
-        c->set_name("Bla");
-
-        h = TSNEW(contact_root_c);
-        h->set_name("Hi");
-
-        post_s p;
-        {
-            found_stuff_s fst;
-            fst.fsplit.add(CONSTWSTR("23"));
-            //g_app->found_items = &fst;
-
-            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            l.setup_found_item(0,0);
-            //l.mark_found();
-
-            p.recv_time = now() - 2500;
-            p.set_message_text( ts::asptr("234234") );
-            p.utag = prf().getuid();
-            l.setup_text(p);
-        }
-
-        {
-            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.recv_time = now() - 2100;
-            //p.type = MTA_UNDELIVERED_MESSAGE;
-            p.set_message_text( ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*") );
-            p.utag = prf().getuid();
-            l.setup_text(p);
-        }
-
-        {
-            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.recv_time = now() - 4;
-            p.set_message_text( ts::to_utf8(L"http://www.microsoft.com/sdfsdf") );
-            p.utag = prf().getuid();
-            l.setup_text(p);
-        }
-
-        {
-            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.recv_time = now() - 3;
-            p.set_message_text( ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf") );
-            p.utag = prf().getuid();
-            l.setup_text(p);
-        }
-
-        {
-            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.recv_time = now() - 2;
-            p.set_message_text( ts::to_utf8(L"http://www.microsoft.com/sdfsdf") );
-            p.utag = prf().getuid();
-            l.setup_text(p);
-        }
-    }
-
-public:
-    test_window(initial_rect_data_s &data):gui_isodialog_c(data) {}
-    ~test_window() {}
-
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(150, 150); }
-
-    //sqhandler_i
-    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
-    {
-        if (qp == SQ_PARENT_RECT_CHANGED)
-        {
-            //ts::irect cr = get_client_area();
-
-            //int h = ll->get_height_by_width(cr.width());
-            //if (h > cr.height() - 40) h = cr.height() -40;
-
-            //MODIFY(*ll).pos(cr.lt).size(cr.width(), h);
-            return false;
-        }
-    
-        return __super::sq_evt(qp,rid,data);
-    }
-
-    /*virtual*/ void on_confirm() override
-    {
-        //ll->dirty_height_cache();
-        //ts::irect cr = get_client_area();
-        //int h = ll->get_height_by_width(cr.width());
-        //DMSG("h:" << h << getprops().size());
-
-        //ll->getengine().redraw();
-    }
-};
-
 class test_window_2 : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
+
 protected:
     // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
     /*virtual*/ void created() override
     {
         set_theme_rect(CONSTASTR("main"), false);
-        __super::created();
+        super::created();
     }
 
 public:
@@ -465,14 +358,14 @@ public:
             return false;
         }
 
-        return __super::sq_evt(qp, rid, data);
+        return super::sq_evt(qp, rid, data);
     }
 
     void getbutton(bcreate_s &bcr)
     {
         if (bcr.tag == 0)
         {
-            __super::getbutton(bcr);
+            super::getbutton(bcr);
         }
     }
 
@@ -497,7 +390,6 @@ void summon_test_window()
 
 
     drawcollector dch;
-    //RID r = MAKE_ROOT<test_window>();
     //RID r = MAKE_ROOT<test_window_2>();
     //MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
 
@@ -526,7 +418,7 @@ void summon_test_window()
     //MAKE_ROOT<incoming_msg_panel_c>( &contacts().get_self(), contacts().get_self().subget(0), p );
 
 
-    prf().test();
+    //prf().test();
 
 }
 

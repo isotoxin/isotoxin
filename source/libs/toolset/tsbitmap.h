@@ -268,10 +268,8 @@ struct bmpcore_normal_s;
 template<typename CORE> class bitmap_t;
 typedef bitmap_t<bmpcore_normal_s> bitmap_c;
 
-struct bmpcore_normal_s
+struct bmpcore_normal_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
-
     struct core_s
     {
 #ifdef _DEBUG
@@ -407,9 +405,8 @@ struct bmpcore_normal_s
 };
 
 
-struct bmpcore_exbody_s
+struct bmpcore_exbody_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
     DUMMY(bmpcore_exbody_s);
     const uint8 *m_body;
     imgdesc_s m_info;
@@ -471,7 +468,6 @@ struct bmpcore_exbody_s
 
 template<typename CORE> class bitmap_t
 {
-    MOVABLE( is_movable<CORE>::value );
     DUMMY( bitmap_t );
 
 public:
@@ -893,6 +889,15 @@ public:
     }
 
 };
+
+namespace internals
+{
+    template<typename CORE> struct movable< bitmap_t<CORE> >
+    {
+        static const bool value = movable<CORE>::value;
+        static const bool explicitly = movable<CORE>::explicitly;
+    };
+}
 
 class image_extbody_c : public bitmap_t < bmpcore_exbody_s >
 {

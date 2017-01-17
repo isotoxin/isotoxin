@@ -13,13 +13,14 @@ class dialog_contact_props_c;
 template<> struct MAKE_ROOT<dialog_contact_props_c> : public _PROOT(dialog_contact_props_c)
 {
     dialog_contactprops_params_s prms;
-    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
-    MAKE_ROOT(bool, const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init(RS_NORMAL_MAINPARENT); }
+    MAKE_ROOT(bool, const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init(RS_NORMAL_MAINPARENT); }
     ~MAKE_ROOT() {}
 };
 
 class dialog_contact_props_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     GM_RECEIVER(dialog_contact_props_c, ISOGM_V_UPDATE_CONTACT);
 
     ts::shared_ptr<contact_root_c> contactue;
@@ -70,13 +71,17 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     void add_det(RID lst, int index, contact_c *c);
 
-    struct cinfo_s
+    struct cinfo_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::shared_ptr<contact_c> c;
         UNIQUE_PTR(ts::bitmap_c) btmp;
         const ts::bitmap_c *bmp = nullptr;
         ts::json_c cldets;
+
+        cinfo_s() {}
+    private:
+        cinfo_s(const cinfo_s&) UNUSED;
+        cinfo_s &operator=(const cinfo_s&) UNUSED;
     };
 
     ts::array_inplace_t<cinfo_s, 0> infs;

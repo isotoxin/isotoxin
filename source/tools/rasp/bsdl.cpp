@@ -1,9 +1,16 @@
 #include "stdafx.h"
 
+#ifdef _WIN32
 #pragma warning (push)
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 #pragma warning (pop)
+#endif
+
+#ifdef _NIX
+#include <sodium.h>
+#endif
+
 
 using namespace ts;
 
@@ -59,7 +66,7 @@ int proc_bsdl(const wstrings_c & pars)
                 fn.set( CONSTWSTR("Latin") );
 
             if ( !fn.equals( fnold ) )
-                rename_file( fnold + CONSTWSTR(".zip"), fn + CONSTWSTR( ".zip" ) );
+                ren_or_move_file( fnold + CONSTWSTR(".zip"), fn + CONSTWSTR( ".zip" ) );
 
             lst.add( fn.append(CONSTWSTR("=")).append_as_hex( hash, sizeof( hash ) ) );
         }

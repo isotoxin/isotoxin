@@ -4,9 +4,12 @@
 #define _NTOS_
 #pragma push_macro("ERROR")
 #undef ERROR
-#include <winsock2.h> // ntol
+#include <winsock2.h> // htonl
 #pragma pop_macro("ERROR")
 #endif // _WIN32
+#ifdef _NIX
+#include <arpa/inet.h> // htonl
+#endif // _NIX
 
 void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
@@ -21,7 +24,7 @@ void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 
 void picture_animated_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
-    __super::draw(e, pos);
+    super::draw(e, pos);
 
     if (numframes > 1)
     {
@@ -44,7 +47,7 @@ bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &
 {
     ts::bitmap_c bmp;
     if (!load_only_gif(bmp, body)) return false;
-   
+
     ts::irect frect;
     ts::bitmap_c &frame = prepare_frame( bmp.info().sz, frect );
     frame.copy( frect.lt, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
@@ -113,7 +116,7 @@ namespace
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
-            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            if (!prf_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
             {
                 int maxthumbh = prf().max_thumb_height();
                 if (maxthumbh < 10) maxthumbh = 10;
@@ -141,7 +144,7 @@ namespace
         /*virtual*/ void fit_to_width(int w) override
         {
             ts::ivec2 newsize;
-            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            if (!prf_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
             {
                 int maxthumbh = prf().max_thumb_height();
                 if (maxthumbh < 10) maxthumbh = 10;
@@ -182,9 +185,11 @@ namespace
             } else
             {
             fit2width:
-                newsize.x = w;
-                float k = (float)w / (float)origsz.x;
-                newsize.y = ts::lround(k * origsz.y);
+                {
+                    newsize.x = w;
+                    float k = (float)w / (float)origsz.x;
+                    newsize.y = ts::lround(k * origsz.y);
+                }
             do_resize:
                 if (bmp.info().sz != origsz)
                 {
@@ -237,7 +242,7 @@ namespace
                 int r = gif.nextframe(bmp.extbody());
                 bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
                 return r;
-            } 
+            }
             return gif.nextframe(frame.extbody());
         }
 
@@ -272,7 +277,7 @@ namespace
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
-            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            if (!prf_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
             {
                 int maxthumbh = prf().max_thumb_height();
                 if (maxthumbh < 10) maxthumbh = 10;
@@ -301,7 +306,7 @@ namespace
 
         /*virtual*/ void fit_to_width(int w) override
         {
-            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            if (!prf_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
             {
                 int maxthumbh = prf().max_thumb_height();
                 if (maxthumbh < 10) maxthumbh = 10;
@@ -425,6 +430,7 @@ namespace
             UNIQUE_PTR(picture_c) pic;
             pictures_cache_c *cache;
             ts::aint progress = 0;
+            ts::task_executor_c *papa;
             bool no_need = false;
 
             loading_s( const ts::wsptr &fn, pictures_cache_c *cache ):filename(fn), cache(cache) {}
@@ -433,11 +439,12 @@ namespace
             {
                 if (rows)
                     progress = row * 100 / rows;
-                return no_need;
+                return no_need || should_stop(papa);
             }
 
-            /*virtual*/ int iterate() override
+            /*virtual*/ int iterate(ts::task_executor_c *e) override
             {
+                papa = e;
                 ts::blob_c b;
                 b.load_from_disk_file(filename,false,10*1024*1024);
                 if (b.size() > 8)
@@ -463,7 +470,7 @@ namespace
                     {
                         pic_cached_s &pc = x->value;
                         pc.pic = std::move(pic);
-                        
+
                         if (pc.size > 0)
                             cache->size -= pc.size;
 
@@ -494,7 +501,7 @@ namespace
                         }
                     }
 
-                __super::done(canceled);
+                ts::task_c::done(canceled);
             }
         };
 
@@ -543,7 +550,7 @@ namespace
                 }
             }
         }
-        
+
         picture_c *try_get( image_loader_c *by, const ts::wstr_c &filename )
         {
             if (auto *f = stuff.find( filename ))
@@ -660,6 +667,8 @@ void image_loader_c::on_draw()
 
 void image_loader_c::not_loaded()
 {
+    if (gui->is_dip()) return;
+
     if ( gui_message_item_c *itm = item )
     {
         itm->image_not_loaded();
@@ -675,7 +684,7 @@ void image_loader_c::unloaded()
     if ( gui_message_item_c *itm = item )
     {
         itm->image_unloaded();
-        
+
         itm->disable_image_loading(true);
             itm->update_text(); // it will try to run image loader. That is why disable_image_loading used
         itm->disable_image_loading(false);

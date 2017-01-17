@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2005-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2005-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -36,7 +36,8 @@
 #endif
 
 #if defined( _WIN32 ) && !defined( __SYMBIAN32__ )
-# include <winsock.h>
+# include <winsock2.h>
+# include <ws2tcpip.h>
 #elif defined( _WIN32_WCE )
 # include <winsock2.h>
 #endif
@@ -338,7 +339,6 @@ namespace gloox
             return fd;
     }
 
-
     return -ConnConnectionRefused;
   }
 #endif
@@ -415,6 +415,7 @@ namespace gloox
     return (int)fd;
   }
 
+#ifdef HAVE_GETADDRINFO
   int DNS::connect( const std::string& host, int port, const LogSink& logInstance )
   {
     struct addrinfo hints, *servinfo, *p;
@@ -464,7 +465,7 @@ namespace gloox
     return fd;
   }
 
-/*
+#else // HAVE_GETADDRINFO
   int DNS::connect( const std::string& host, int port, const LogSink& logInstance )
   {
     int fd = getSocket( logInstance );
@@ -519,7 +520,7 @@ namespace gloox
     closeSocket( fd, logInstance );
     return -ConnConnectionRefused;
   }
-*/
+#endif // HAVE_GETADDRINFO
 
   void DNS::closeSocket( int fd, const LogSink& logInstance )
   {

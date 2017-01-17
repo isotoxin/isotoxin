@@ -205,7 +205,8 @@ tmpalloc_c tmpb;
 	{
 		fileop_init()
 		{
-			g_fileop = TSNEW_T( MEMT_FILEOP, tsfileop_def_c );
+            MEMT( MEMT_FILEOP );
+			g_fileop = TSNEW( tsfileop_def_c );
 		}
 		~fileop_init()
 		{

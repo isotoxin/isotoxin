@@ -51,6 +51,7 @@ template<> struct MAKE_ROOT<dialog_msgbox_c> : public _PROOT(dialog_msgbox_c)
 
 class dialog_msgbox_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     dialog_msgbox_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
     int height = 190;
@@ -81,8 +82,11 @@ public:
     ~dialog_msgbox_c();
 
     static dialog_msgbox_params_s mb_info(const ts::wstr_c &text);
+    static dialog_msgbox_params_s mb_info(const ts::wsptr &text);
     static dialog_msgbox_params_s mb_warning(const ts::wstr_c &text);
+    static dialog_msgbox_params_s mb_warning(const ts::wsptr &text);
     static dialog_msgbox_params_s mb_error(const ts::wstr_c &text);
+    static dialog_msgbox_params_s mb_error(const ts::wsptr &text);
     static dialog_msgbox_params_s mb_qrcode(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_avatar( const ts::wstr_c &text, const ts::bitmap_c &bmp );
 
@@ -133,13 +137,14 @@ struct dialog_pb_params_s
 template<> struct MAKE_ROOT<dialog_pb_c> : public _PROOT(dialog_pb_c)
 {
     dialog_pb_params_s prms;
-    MAKE_ROOT(bool, const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init(RS_NORMAL_MAINPARENT); }
     ~MAKE_ROOT() {}
 };
 
 
 class dialog_pb_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     dialog_pb_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
 
@@ -212,6 +217,7 @@ template<> struct MAKE_ROOT<dialog_entertext_c> : public _PROOT(dialog_entertext
 
 class dialog_entertext_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     GM_RECEIVER( dialog_entertext_c, ISOGM_APPRISE );
 
     guirect_watch_c watch;
@@ -260,6 +266,7 @@ public:
 
 class dialog_about_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     process_animation_s pa;
     bool checking_new_version = false;
     bool check_update_now(RID, GUIPARAM);
@@ -297,6 +304,7 @@ template<> struct MAKE_ROOT<incoming_call_panel_c> : public _PROOT(incoming_call
 
 class incoming_call_panel_c : public gui_control_c
 {
+    typedef gui_control_c super;
     GM_RECEIVER(incoming_call_panel_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(incoming_call_panel_c, GM_UI_EVENT);
 
@@ -342,6 +350,8 @@ template<> struct MAKE_ROOT<incoming_msg_panel_c> : public _PROOT( incoming_msg_
 
 class incoming_msg_panel_c : public gui_control_c
 {
+    typedef gui_control_c super;
+
     GM_RECEIVER( incoming_msg_panel_c, GM_UI_EVENT );
     GM_RECEIVER( incoming_msg_panel_c, ISOGM_UPDATE_MESSAGE_NOTIFICATION );
 

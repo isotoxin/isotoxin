@@ -275,6 +275,9 @@ void contacts_s::set(int column, ts::data_value_s &v)
         case C_AVATAR_TAG:
             avatar_tag = static_cast<int>( v.i );
             return;
+        case C_PROTO_DATA:
+            protodata = v.blob;
+            return;
     }
 }
 
@@ -328,6 +331,9 @@ void contacts_s::get(int column, ts::data_pair_s& v)
         case C_AVATAR_TAG:
             v.i = avatar_tag;
             return;
+        case C_PROTO_DATA:
+            v.blob = protodata;
+            return;
     }
 }
 
@@ -352,6 +358,7 @@ ts::data_type_e contacts_s::get_column_type(int index)
         case C_READTIME:
             return ts::data_type_e::t_int64;
         case C_AVATAR:
+        case C_PROTO_DATA:
             return ts::data_type_e::t_blob;
     }
     FORBIDDEN();
@@ -404,6 +411,9 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case C_AVATAR_TAG:
             cd.name_ = CONSTASTR("avatar_tag");
+            break;
+        case C_PROTO_DATA:
+            cd.name_ = CONSTASTR("protodata");
             break;
         default:
             FORBIDDEN();
@@ -687,7 +697,7 @@ void conference_s::set( int column, ts::data_value_s &v )
         id = static_cast<int>(v.i);
         return;
     case C_APID:
-        proto_key.protoid = static_cast<ts::uint16>( v.i );
+        proto_id = static_cast<ts::uint16>( v.i );
         return;
     case C_READTIME:
         readtime = v.i;
@@ -727,8 +737,8 @@ void conference_s::get( int column, ts::data_pair_s& v )
         ASSERT( !confa || ( confa->getkey().contactid == (unsigned)id && confa->getkey().temp_type == TCT_CONFERENCE ) );
         return;
     case C_APID:
-        v.i = proto_key.protoid;
-        ASSERT( (!confa && proto_key.contactid == 0) || ( confa && confa->getkey().protoid == proto_key.protoid && confa->getkey().temp_type == TCT_CONFERENCE ) );
+        v.i = proto_id;
+        ASSERT( (!confa && proto_key.is_empty()) || ( confa && confa->getkey().protoid == proto_id && confa->getkey().temp_type == TCT_CONFERENCE ) );
         return;
     case C_READTIME:
         v.i = readtime;
@@ -930,7 +940,7 @@ void conference_member_s::set( int column, ts::data_value_s &v )
         id = static_cast<int>( v.i );
         return;
     case C_APID:
-        proto_key.protoid = static_cast<ts::uint16>( v.i );;
+        proto_id = static_cast<ts::uint16>( v.i );;
         return;
     }
 }
@@ -954,8 +964,8 @@ void conference_member_s::get( int column, ts::data_pair_s& v )
         ASSERT( !memba || ( memba->getkey().contactid == (unsigned)id && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
         return;
     case C_APID:
-        v.i = proto_key.protoid;
-        ASSERT( ( !memba && proto_key.contactid == 0 ) || ( memba && memba->getkey().protoid == proto_key.protoid && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
+        v.i = proto_id;
+        ASSERT( ( !memba && proto_key.is_empty() ) || ( memba && memba->getkey().protoid == proto_id && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
         return;
     }
 }
@@ -1037,7 +1047,6 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
     return true;
 }
 
-
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts::sqlitedb_c *db, bool all, bool notify_saved )
 {
     if ( !db ) return false;
@@ -1078,18 +1087,15 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                 int newid = db->insert(T::get_table_name(), vals.array());
                 if (r.id < 0)
                 {
-                    __if_exists(T::maxid)
+                    if (limit_id<T>::value > 0 && newid > limit_id<T>::value)
                     {
-                        if (T::maxid > 0 && newid > T::maxid)
-                        {
-                            int other_newid = db->find_free(T::get_table_name(), CONSTASTR("id"));
-                            ts::data_pair_s idp;
-                            idp.name = CONSTASTR("id");
-                            idp.type_ = ts::data_type_e::t_int;
-                            idp.i = other_newid;
-                            db->update(T::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), ts::amake<uint>(CONSTASTR("id="), newid));
-                            newid = other_newid;
-                        }
+                        int other_newid = db->find_free(T::get_table_name(), CONSTASTR("id"));
+                        ts::data_pair_s idp;
+                        idp.name = CONSTASTR("id");
+                        idp.type_ = ts::data_type_e::t_int;
+                        idp.i = other_newid;
+                        db->update(T::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), ts::amake<uint>(CONSTASTR("id="), newid));
+                        newid = other_newid;
                     }
 
                     new2ins[r.id] = newid;
@@ -1115,7 +1121,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
     }
 
     __transaction.end();
-    if (notify_saved && some_action) gmsg<ISOGM_PROFILE_TABLE_SAVED>( tabi ).send();
+    if (notify_saved && some_action) gmsg<ISOGM_PROFILE_TABLE_SL>( tabi, true ).send();
     return false;
 }
 
@@ -1177,7 +1183,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::reader(int
 template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::read( ts::sqlitedb_c *db )
 {
     db->read_table( T::get_table_name(), DELEGATE(this, reader) );
-    gmsg<ISOGM_PROFILE_TABLE_LOADED>( tabi ).send();
+    gmsg<ISOGM_PROFILE_TABLE_SL>( tabi, false ).send();
 }
 
 template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::read( ts::sqlitedb_c *db, const ts::asptr &where_items )
@@ -1282,9 +1288,40 @@ uint64 profile_c::uniq_history_item_tag()
 
         utag = prf().getuid();
     }
-    
+
     return utag;
 }
+
+ts::flags32_s INLINE profile_c::get_options()
+{
+    if (!profile_flags.is(F_OPTIONS_VALID))
+    {
+        ts::flags32_s::BITS opts = msgopts();
+        ts::flags32_s::BITS optse = msgopts_edited();
+        current_options.setup((opts & optse) | (~optse & DEFAULT_MSG_OPTIONS));
+        profile_flags.set(F_OPTIONS_VALID);
+    }
+    return current_options;
+}
+
+ts::flags32_s prf_options()
+{
+    return prf().get_options();
+}
+
+bool profile_c::set_options(ts::flags32_s::BITS mo, ts::flags32_s::BITS mask)
+{
+    ts::flags32_s::BITS cur = get_options().__bits;
+    ts::flags32_s::BITS curmod = cur & mask;
+    ts::flags32_s::BITS newbits = mo & mask;
+    ts::flags32_s::BITS edited = msgopts_edited();
+    edited |= (curmod ^ newbits);
+    msgopts_edited(edited);
+    cur = (cur & ~mask) | newbits;
+    current_options.setup(cur);
+    return msgopts(cur);
+}
+
 
 void profile_c::record_history( const contact_key_s&historian, const post_s &history_item )
 {
@@ -1300,6 +1337,10 @@ void profile_c::record_history( const contact_key_s&historian, const post_s &his
     changed();
 }
 
+int profile_c::min_history_load(bool for_button) 
+{
+    return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? -1 : (for_button ? add_history() : min_history());
+}
 
 void profile_c::kill_history_item(uint64 utag)
 {
@@ -1525,7 +1566,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
 
     if (time == 0)
     {
-        time = now();
+        time = ts::now();
         time_t ct = time;
         ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
         whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>( time );
@@ -1594,7 +1635,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
     whr.append( CONSTASTR(" order by mtime desc limit ") ).append_as_num( nload );
-    
+
     table_history.read( db, whr );
 
     for( int idl : loaded_ids)
@@ -1790,34 +1831,115 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
     path = pfn;
 
-    if ( g_app->F_BACKUP_PROFILE )
+    if (g_app->F_BACKUP_PROFILE())
     {
-        g_app->F_BACKUP_PROFILE = false;
+        g_app->F_BACKUP_PROFILE(false);
         ts::buf_c p; p.load_from_disk_file( path );
         ts::zip_c zip;
-
         zip.addfile( ts::to_utf8( ts::fn_get_name_with_ext( path ) ), p.data(), p.size() );
 
-        tm tt;
-        time_t time = now();
-        _localtime64_s( &tt, &time );
+        ts::localtime_s tt;
 
         ts::wstr_c tstr( cfg().folder_backup() );
         path_expand_env( tstr, ts::wstr_c(CONSTWSTR("0")) );
         ts::fix_path( tstr, FNO_APPENDSLASH| FNO_SIMPLIFY );
         ts::make_path( tstr, 0 );
-        
+
         tstr.append( ts::fn_get_name( path ) ).append_char(' ');
+        ts::wstr_c filesmask(tstr);
         tstr.append_as_uint( tt.tm_year + 1900 ).append_char('-').append_as_uint( tt.tm_mon + 1, 2 ).append_char( '-' ).append_as_uint( tt.tm_mday, 2 );
         tstr.append_char( ' ' ).append_as_uint( tt.tm_hour, 2 ).append_char( '-' ).append_as_uint( tt.tm_min, 2 ).append_char( '-' ).append_as_uint( tt.tm_sec, 2 );
         tstr.append( CONSTWSTR(".zip") );
         zip.getblob().save_to_file( tstr );
+
+        int miscf = ~cfg().misc_flags();
+        if (0 != ((MISCF_DONT_LIM_BACKUP_DAYS | MISCF_DONT_LIM_BACKUP_SIZE | MISCF_DONT_LIM_BACKUP_COUNT) & miscf))
+        {
+            filesmask.append(CONSTWSTR("*.zip"));
+            ts::wstrings_c files;
+            ts::find_files(filesmask, files, ATTR_ANY, ATTR_DIR, true);
+
+            struct ff : public ts::movable_flag<true>
+            {
+                DUMMY(ff);
+                ff() {}
+                ts::wstr_c fn;
+                uint64 filetime = 0;
+                uint64 size = 0;
+
+                int operator()(const ff& f) const
+                {
+                    if (filetime < f.filetime) return 1;
+                    if (filetime > f.filetime) return -1;
+                    return 0;
+                }
+            };
+            ts::tmp_array_inplace_t<ff, 0> fls;
+
+            for (const ts::wstr_c &fn : files)
+            {
+                if (void * fh = ts::f_open(fn))
+                {
+                    ff & f = fls.add();
+                    f.fn = fn;
+                    f.filetime = ts::f_time_last_write(fh);
+                    f.size = ts::f_size(fh);
+                    ts::f_close(fh);
+                }
+            }
+
+            fls.sort();
+
+            ts::aint clampn = fls.size();
+            if (0 != (MISCF_DONT_LIM_BACKUP_COUNT & miscf))
+            {
+                int cntlim = cfg().lim_backup_count();
+                if (cntlim > 0 && cntlim < clampn)
+                    clampn = cntlim;
+            }
+            if (0 != (MISCF_DONT_LIM_BACKUP_SIZE & miscf))
+            {
+                uint64 mb = cfg().lim_backup_size();
+                mb *= 1024 * 1024;
+                uint64 sz = fls.get(0).size;
+                for (int i=1;i<clampn;++i)
+                {
+                    sz += fls.get(i).size;
+                    if (sz > mb)
+                    {
+                        clampn = i;
+                        break;
+                    }
+                }
+            }
+            if (0 != (MISCF_DONT_LIM_BACKUP_DAYS & miscf))
+            {
+                uint64 days = cfg().lim_backup_days();
+                days *= 86400; // 86400 is number of seconds per day
+                days *= 10000000; // 10000000 is number of 100 nanosecond intervals per second
+                uint64 deltime = fls.get(0).filetime - days; // time of current backup - days
+                for (; clampn > 0; --clampn)
+                {
+                    if (fls.get(clampn-1).filetime >= deltime)
+                        break;
+                }
+            }
+
+            if (clampn > 0)
+            {
+                while (clampn < fls.size())
+                {
+                    ts::kill_file(fls.last().fn);
+                    fls.remove_fast(fls.size() - 1);
+                }
+            }
+        }
     }
 
     profile_flags.clear();
     values.clear();
     dirty.clear();
-    db = ts::sqlitedb_c::connect(path, k, g_app->F_READONLY_MODE);
+    db = ts::sqlitedb_c::connect(path, k, g_app->F_READONLY_MODE());
     if (!db)
         return PLR_CONNECT_FAILED;
 
@@ -1858,7 +1980,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         unique_profile_tag( utag );
 
     cleanup_tables();
-    
+
     #define TAB(tab) if (load_on_start<tab##_s>::value) { MEMT( MEMT_PROFILE_##tab ); table_##tab.read( db ); }
     PROFILE_TABLES
     #undef TAB
@@ -1873,7 +1995,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
         ++uuid;
         decltype( table_history ) tmphist;
-        
+
         ts::tmp_str_c whr;
         tmphist.read( db, whr );
         for ( auto &row : tmphist )
@@ -1891,7 +2013,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     self.set_name(username());
     self.set_statusmsg(userstatus());
 
-    gmsg<ISOGM_PROFILE_TABLE_SAVED>( pt_active_protocol ).send(); // initiate active protocol reconfiguration/creation
+    gmsg<ISOGM_PROFILE_TABLE_SL>( pt_active_protocol, true ).send(); // initiate active protocol reconfiguration/creation
 
     emoti().reload();
 
@@ -1991,7 +2113,7 @@ namespace
             encrypt_process_n = n;
         }
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             if (remove_enc)
             {
@@ -2010,7 +2132,7 @@ namespace
             else
                 prf().encrypt_failed();
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
     };
 
@@ -2151,7 +2273,7 @@ void profile_c::encrypt_failed()
 
 void profile_c::encrypt( const ts::uint8 *passwdhash /* 256 bit (CC_HASH_SIZE bytes) hash */, float delay_before_start )
 {
-    if (g_app->F_READONLY_MODE)
+    if (g_app->F_READONLY_MODE())
         return;
 
     gui->add_event_t<encrypt_c, const ts::uint8 *>(delay_before_start, passwdhash);
@@ -2160,14 +2282,14 @@ void profile_c::encrypt( const ts::uint8 *passwdhash /* 256 bit (CC_HASH_SIZE by
 void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_result_e plr, bool modal )
 {
     ts::wstr_c text;
-    
+
     switch (plr)
     {
         case PLR_CORRUPT_OR_ENCRYPTED:
             text = TTT("Profile [b]$[/b] is corrupted or incorrect password!",47) / prfn;
             break;
         case PLR_UPGRADE_FAILED:
-            if (g_app->F_READONLY_MODE)
+            if (g_app->F_READONLY_MODE())
                 text = TTT("Profile [b]$[/b] has old format and can not be upgraded due it write protected!", 333) / prfn;
             break;
         case PLR_CONNECT_FAILED:
@@ -2177,7 +2299,7 @@ void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_resu
             text = TTT("Profile [b]$[/b] is busy!", 270) / prfn;
             break;
     }
-    
+
     struct s
     {
         static void exit_now(const ts::str_c&)
@@ -2190,8 +2312,8 @@ void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_resu
 
     redraw_collector_s dch;
     dialog_msgbox_c::mb_error( text )
-        .bok( modal ? loc_text(loc_exit) : ts::wsptr() )
-        .on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr())
+        .bok( modal ? loc_text(loc_exit) : ts::wstr_c() )
+        .on_ok(modal ? s::exit_now : MENUHANDLER(), ts::str_c())
         .summon( true );
 }
 
@@ -2303,7 +2425,7 @@ void profile_c::flush_contacts()
     for ( const contact_key_s &ck : dirtycontacts )
     {
         const contact_c * c = contacts().find( ck );
-        
+
         if (c->getkey().is_conference())
             continue; // never save conferences here
 
@@ -2344,7 +2466,7 @@ bool profile_c::flush_tables()
 
     if ( db )
     {
-        time_t oldbackuptime = now() - backup_keeptime() * 86400;
+        time_t oldbackuptime = ts::now() - backup_keeptime() * 86400;
         db->delrows( backup_protocol_s::get_table_name(), ts::tmp_str_c( CONSTASTR( "time<" ) ).append_as_num<int64>( oldbackuptime ) );
     }
     return false;
@@ -2360,7 +2482,7 @@ bool profile_c::flush_tables()
 
     MEMT( MEMT_PROFILE_COMMON );
 
-    if (__super::save()) return true;
+    if (super::save()) return true;
 
     flush_contacts();
     if ( flush_tables() ) return true;
@@ -2397,8 +2519,11 @@ void profile_c::create_aps()
 
 }
 
-ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
+ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SL>&p )
 {
+    if (!p.saved)
+        return 0;
+
     if (p.tabi == pt_active_protocol && !profile_flags.is(F_LOADING) && !profile_flags.is(F_CLOSING))
     {
         if (p.pass == 0)
@@ -2429,11 +2554,11 @@ bool profile_c::delete_conference( int id )
     {
         if ( c.other.id == id )
         {
-            if (active_protocol_c *ap = prf().ap( c.other.proto_key.protoid ))
+            if (active_protocol_c *ap = prf().ap( c.other.proto_id ))
             {
                 if (c.is_temp())
                 {
-                    ap->del_contact( c.other.proto_key );
+                    ap->del_contact( contact_key_s( c.other.proto_key, c.other.proto_id ) );
                 } else
                 {
                     ap->del_conference( c.other.pubid );
@@ -2449,9 +2574,52 @@ bool profile_c::delete_conference( int id )
     return false;
 }
 
-conference_s * profile_c::add_conference( const ts::str_c &pubid, const contact_key_s &protocol_key )
+conference_s * profile_c::find_conference(const ts::asptr &pubid, ts::uint16 apid)
 {
-    ASSERT( find_conference(pubid, protocol_key.protoid) == nullptr && find_conference(protocol_key) == nullptr );
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+
+    if (pubid.l == 0)
+        return nullptr;
+
+    get_table_conference().cleanup();
+
+    for (auto &c : get_table_conference())
+        if (c.other.proto_id == apid && c.other.pubid == pubid)
+            return &c.other;
+    return nullptr;
+}
+
+
+conference_s * profile_c::find_conference(contact_id_s ck, ts::uint16 protoid)
+{
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+    ASSERT(ck.is_conference());
+
+    get_table_conference().cleanup();
+
+    for (auto &c : get_table_conference())
+        if (c.other.proto_key == ck && c.other.proto_id == protoid)
+            return &c.other;
+    return nullptr;
+}
+
+conference_s * profile_c::find_conference_by_id(int id)
+{
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+
+    get_table_conference().cleanup();
+
+    for (auto &c : get_table_conference())
+        if (c.other.id == id)
+            return &c.other;
+    return nullptr;
+}
+
+
+conference_s * profile_c::add_conference( const ts::str_c &pubid, contact_id_s protocol_key, ts::uint16 protoid )
+{
+    ASSERT( protocol_key.is_conference() );
+    ASSERT( find_conference(pubid, protoid) == nullptr && find_conference(protocol_key, protoid) == nullptr );
 
     get_table_conference().cleanup();
 
@@ -2470,10 +2638,11 @@ conference_s * profile_c::add_conference( const ts::str_c &pubid, const contact_
     auto &nc = get_table_conference().getcreate(0);
     nc.other.pubid = pubid;
     nc.other.proto_key = protocol_key;
+    nc.other.proto_id = protoid;
     nc.other.id = newid;
 
-    nc.other.flags.init( conference_s::F_MIC_ENABLED, !prf().get_options().is( COPT_MUTE_MIC_ON_INVITE ) );
-    nc.other.flags.init( conference_s::F_SPEAKER_ENABLED, !prf().get_options().is( COPT_MUTE_SPEAKER_ON_INVITE ) );
+    nc.other.flags.init( conference_s::F_MIC_ENABLED, !get_options().is( COPT_MUTE_MIC_ON_INVITE ) );
+    nc.other.flags.init( conference_s::F_SPEAKER_ENABLED, !get_options().is( COPT_MUTE_SPEAKER_ON_INVITE ) );
 
     if (nc.other.pubid.is_empty())
     {
@@ -2486,9 +2655,50 @@ conference_s * profile_c::add_conference( const ts::str_c &pubid, const contact_
     return &nc.other;
 }
 
-conference_member_s * profile_c::add_conference_member( const ts::str_c &pubid, const contact_key_s &protocol_key )
+conference_member_s * profile_c::find_conference_member(contact_id_s member_protokey, ts::uint16 protoid)
 {
-    ASSERT( find_conference_member( pubid, protocol_key.protoid ) == nullptr && (protocol_key.contactid == 0 || find_conference_member( protocol_key ) == nullptr) );
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+    ASSERT(member_protokey.is_contact() && member_protokey.unknown && member_protokey.confmember); // abstract conference member has no conference id (gid)
+
+    get_table_conference_member().cleanup();
+
+    for (auto &cm : get_table_conference_member())
+        if (cm.other.proto_key == member_protokey && cm.other.proto_id == protoid)
+            return &cm.other;
+
+    return nullptr;
+}
+
+conference_member_s * profile_c::find_conference_member(const ts::asptr &pubid, ts::uint16 apid)
+{
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+
+    get_table_conference_member().cleanup();
+
+    for (auto &cm : get_table_conference_member())
+        if (cm.other.proto_id == apid && cm.other.pubid == pubid)
+            return &cm.other;
+
+    return nullptr;
+}
+
+conference_member_s * profile_c::find_conference_member_by_id(int id)
+{
+    ASSERT(profile_flags.is(F_LOADED_TABLES));
+
+    get_table_conference_member().cleanup();
+
+    for (auto &cm : get_table_conference_member())
+        if (cm.other.id == id)
+            return &cm.other;
+
+    return nullptr;
+}
+
+conference_member_s * profile_c::add_conference_member( const ts::str_c &pubid, contact_id_s protocol_key, ts::uint16 protoid )
+{
+    ASSERT(protocol_key.unknown && protocol_key.confmember);
+    ASSERT(find_conference_member(pubid, protoid) == nullptr && (protocol_key.is_empty() || find_conference_member(protocol_key, protoid) == nullptr));
 
     get_table_conference_member().cleanup();
 
@@ -2507,6 +2717,7 @@ conference_member_s * profile_c::add_conference_member( const ts::str_c &pubid, 
     auto &ncm = get_table_conference_member().getcreate( 0 );
     ncm.other.pubid = pubid;
     ncm.other.proto_key = protocol_key;
+    ncm.other.proto_id = protoid;
     ncm.other.id = newid;
 
     ASSERT( !ncm.other.pubid.is_empty() );
@@ -2555,7 +2766,7 @@ void profile_c::make_contact_unknown_member( contact_c * c )
 
     contact_key_s oldkey = c->getkey();
     killcontact( oldkey ); // remove from db
-    conference_member_s * cm = add_conference_member( c->get_pubid(), contact_key_s(0, 0, oldkey.protoid) );
+    conference_member_s * cm = add_conference_member( c->get_pubid(), contact_id_s(), oldkey.protoid );
     cm->memba = c;
     cm->update_name();
     c->make_unknown_conference_member( cm->id );
@@ -2575,12 +2786,12 @@ void profile_c::make_contact_unknown_member( contact_c * c )
     }
 }
 
-void profile_c::make_contact_known( contact_c * c, const contact_key_s& proto_key )
+void profile_c::make_contact_known( contact_c * c, const contact_key_s &key )
 {
     ts::db_transaction_c __transaction( db );
     contact_key_s oldkey = c->getkey();
 
-    contacts().change_key( oldkey, proto_key );
+    contacts().change_key( oldkey, key);
 
     get_table_conference().cleanup();
 
@@ -2805,6 +3016,5 @@ void profile_c::cleanup_tables()
 #ifdef _DEBUG
 void profile_c::test()
 {
-    DMSG( "test1" << calc_history( contact_key_s(4) ) );
 }
 #endif // _DEBUG

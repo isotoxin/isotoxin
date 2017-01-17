@@ -64,13 +64,14 @@ struct hover_data_s
 
 struct bcreate_s
 {
-    MOVABLE( true );
     GET_BUTTON_FACE face;
     GUIPARAMHANDLER handler;
     ts::smart_int tag;
     GET_TOOLTIP tooltip;
     ts::wsptr btext;
 };
+
+DECLARE_MOVABLE(bcreate_s, true)
 
 struct selectable_core_s
 {
@@ -227,19 +228,26 @@ class gui_c
     ts::uint32 basetid = 0;
 #endif
 
-    ts::flags32_s m_flags;
+    static const ts::flags32_s::BITS F_DIRTY_HOVER_DATA = SETBIT(0);
+    static const ts::flags32_s::BITS F_DO_MOUSEMOUVE = SETBIT(1);
+    static const ts::flags32_s::BITS F_PROCESSING_REPOS = SETBIT(2);
+    static const ts::flags32_s::BITS F_DISABLESPECIALBORDER = SETBIT(3);
+    static const ts::flags32_s::BITS F_DIP = SETBIT(4);
 
-	static const ts::flags32_s::BITS F_INITIALIZATION   = SETBIT(0);
-    static const ts::flags32_s::BITS F_DIRTY_HOVER_DATA = SETBIT(1);
-    static const ts::flags32_s::BITS F_DO_MOUSEMOUVE = SETBIT(2);
-    static const ts::flags32_s::BITS F_PROCESSING_REPOS = SETBIT(3);
-    static const ts::flags32_s::BITS F_DISABLESPECIALBORDER = SETBIT(4);
+protected:
+
+    static const ts::flags32_s::BITS F_FREEBITSTART = SETBIT(5);
+
+    ts::flags32_s m_flags;
+private:
+
+
 
     int m_tagpool = 1;
     text_rect_dynamic_c m_textrect; // temp usage
 	theme_c m_theme;
     hover_data_s m_hoverdata;
-	
+
     ts::hashmap_t< RID, UNIQUE_PTR( selectable_core_s ) > m_selcores;
 
     ts::tbuf_t<RID> m_exclusive_input;
@@ -254,6 +262,8 @@ class gui_c
     gui_group_c *m_repos_inprogress = nullptr;
     ts::array_safe_t<gui_group_c, 4> m_children_repos;
 
+    ts::safe_ptr<guirect_c> m_curshade;
+
     ts::array_inplace_t<drawcollector, 4> m_dcolls;
     int m_dcolls_ref = 0;
 
@@ -263,9 +273,8 @@ protected:
     static const ts::flags32_s::BITS PEF_FREEBITSTART = SETBIT(1);
 private:
 
-    struct kbd_press_callback_s
+    struct kbd_press_callback_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         DUMMY(kbd_press_callback_s);
         kbd_press_callback_s() {}
         GUIPARAMHANDLER handler;
@@ -341,10 +350,13 @@ protected:
     void sys_loop(); // application must call this
 
     bool handle_keyboard( int scan, bool dn, int casw );
-    bool handle_char( wchar_t c );
+    bool handle_char( ts::wchar c );
     void handle_mouse( ts::mouse_event_e me, const ts::ivec2 &scrpos );
 
 public:
+
+    bool is_dip() const { return m_flags.is(F_DIP); }
+    void set_dip() { m_flags.set(F_DIP); };
 
     ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
     ts::TSCOLOR errtextcolor = ts::ARGB(255, 0, 0);
@@ -358,7 +370,7 @@ public:
         static_cast<texture_s *>( const_cast<ts::bitmap_c *>( b ) )->lastusetime = ct;
     }
 
-    virtual ts::wstr_c app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
+    virtual ts::wstr_c app_loclabel(loc_label_e ll) { return ts::wstr_c(CONSTWSTR("???")); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
     virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
     virtual void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) {}
@@ -372,6 +384,8 @@ public:
 
     virtual void app_path_expand_env(ts::wstr_c &path) {}
 
+    virtual guirect_c * app_create_shade(const ts::irect &r) { return nullptr; }
+
     gui_c();
 	~gui_c();
 
@@ -384,7 +398,7 @@ public:
 
     void reload_fonts();
     bool load_theme( const ts::wsptr&thn, bool summon_ch_signal = true );
-    
+
     const ts::font_desc_c & get_font( const ts::asptr &fontname );
     const ts::str_c &default_font_name() const { return m_deffont_name; }
 
@@ -408,7 +422,7 @@ public:
     {
         TS_STATIC_CHECK( ts::is_movable<T>::value, "not movable!" );
         int b = get_temp_buf(ttl, sizeof(T));
-        T *st = (T *)gui->lock_temp_buf(b);
+        T *st = (T *)lock_temp_buf(b);
         memcpy(st, &t, sizeof(T));
         return b;
     }
@@ -474,6 +488,8 @@ public:
     void nomorerect(RID rootrid);
     void restore_focus( RID rid ); // rid must be just removed root rid (called from root destructor)
 
+    void do_addition_rect_control(rectengine_root_c *re, mousetrack_type_e);
+
     ts::ivec2 textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit = -1, int flags = 0 );
 
     void make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons = 0xFFFFFFFF, bcreate_s *closeb = nullptr, bcreate_s *minb = nullptr);
@@ -485,7 +501,7 @@ public:
     void mouse_lock( RID rid );
     void mouse_inside( RID rid );
     void mouse_outside( RID rid = RID() );
-    
+
     const mousetrack_data_s *mtrack(ts::uint32 o) const
     {
         if ((mtrack_.mtt & o) != 0)
@@ -583,7 +599,7 @@ public:
             data.me = TSNEW(R, data);
             sptr = data.me;
         }
-        
+
         if (data.parent)
         {
             ASSERT(data.me->getprops().screenpos() == ts::ivec2(0));
@@ -597,7 +613,7 @@ public:
             m_roots.add(data.id);
         }
         ((guirect_c *)data.me)->created();
-        ASSERT( ((guirect_c *)data.me)->m_test_01, "Please call __super::created()" );
+        ASSERT( ((guirect_c *)data.me)->m_test_01, "Please call super::created()" );
     }
 
 };
@@ -650,7 +666,7 @@ template<typename R> MAKE_ROOT<R>::MAKE_ROOT()
 {
     engine = TSNEW( rectengine_root_c, RS_NORMAL );
     gui->allocate_dcoll() = (rectengine_root_c *)engine;
-    gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
+    gui->newrect<typename newrectkitchen::rectwrapper<R>::type>( *this );
 }
 
 template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( rect_sys_e sys )
@@ -665,14 +681,14 @@ template<typename R> MAKE_CHILD<R>::MAKE_CHILD( RID parent_ )
 {
     parent = parent_;
     engine = TSNEW(rectengine_child_c, gui->get_rect(parent), after);
-    gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
+    gui->newrect<typename newrectkitchen::rectwrapper<R>::type>( *this );
 }
 
 template<typename R> MAKE_VISIBLE_CHILD<R>::MAKE_VISIBLE_CHILD(RID parent_, bool visible):visible(visible)
 {
     parent = parent_;
     engine = TSNEW(rectengine_child_c, gui->get_rect(parent), after);
-    gui->newrect<newrectkitchen::rectwrapper<R>::type>(*this);
+    gui->newrect<typename newrectkitchen::rectwrapper<R>::type>(*this);
 }
 
 template<typename R> void MAKE_CHILD< newrectkitchen::rectwrapper<R> >::init()

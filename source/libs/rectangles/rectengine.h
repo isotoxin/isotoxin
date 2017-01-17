@@ -18,6 +18,10 @@ enum mousetrack_type_e
     MTT_APPDEFINED2 = SETBIT(9),
 
 	MTT_ANY = 0xFFFF,
+    
+    // special values
+    MTT_MOVE_OFF,
+    MTT_RESIZE_OFF,
 };
 
 struct mousetrack_data_s
@@ -25,13 +29,13 @@ struct mousetrack_data_s
 	ts::irect rect;
 	ts::uint32 area;
 	ts::ivec2 mpos;
+    ts::ivec3 relclick;
     RID rid;
 	mousetrack_type_e mtt = MTT_none;
 };
 
-struct draw_data_s
+struct draw_data_s : public ts::movable_flag<true>
 {
-    MOVABLE( true );
     DUMMY(draw_data_s);
 
     ts::safe_ptr<rectengine_c> engine;
@@ -300,6 +304,7 @@ Only root engine knows system-specific gui machinery
 class rectengine_root_c : public rectengine_c
 {
     DUMMY(rectengine_root_c);
+    typedef rectengine_c super;
 
     friend struct drawcollector;
 
@@ -397,6 +402,8 @@ public:
 
     bool is_dip() const {return flags.is(F_DIP) || nullptr == rect();}
 
+    bool is_taskbar() const { return flags.is(F_TASKBAR); }
+
     int current_drawtag() const {return drawtag;}
 
     /*virtual*/ bool detect_hover(const ts::ivec2 & screenmousepos) const override { return getrect().getprops().is_visible() && syswnd.wnd && syswnd.wnd->is_hover( screenmousepos ); };
@@ -478,9 +485,8 @@ INLINE ts::ivec2 guirect_c::root_to_local(const ts::ivec2 &rootpt) const
     return to_local(m_root->getrect().to_screen(rootpt));
 }
 
-struct drawcollector
+struct drawcollector : public ts::movable_flag<true>
 {
-    MOVABLE(true);
     drawcollector() : engine(nullptr) {}
     explicit drawcollector(rectengine_root_c *root) :engine(rectengine_root_c::redraw_collector(root)) {}
     ~drawcollector()
@@ -517,6 +523,7 @@ private:
 
 class rectengine_child_c : public rectengine_c
 {
+    typedef rectengine_c super;
 	guirect_c::sptr_t parent;
 
     //sqhandler_i

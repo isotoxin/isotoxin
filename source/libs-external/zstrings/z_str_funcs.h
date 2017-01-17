@@ -1,7 +1,6 @@
 /*
     (C) 2010-2016 ROTKAERMOTA
 */
-#pragma once
 
 namespace zstrings_internal
 {
@@ -59,22 +58,6 @@ namespace zstrings_internal
 	template<typename CHARTYPETO, typename CHARTYPEFROM> CHARTYPETO cvtchar( CHARTYPEFROM c )
 	{
 		return (CHARTYPETO)c;
-	}
-
-	template<typename TCHARACTER, typename NUMTYPE> bool CHARz_to_num(NUMTYPE &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
-	{
-		return CHARz_to_int( out, s, slen );
-	}
-	template<typename TCHARACTER> bool CHARz_to_num(float &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
-	{
-		double d;
-		bool r = CHARz_to_double( d, s, slen );
-		out = (float)d;
-		return r;
-	}
-	template<typename TCHARACTER> bool CHARz_to_num(double &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
-	{
-		return CHARz_to_double( out, s, slen );
 	}
 
     ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED zmin( ZSTRINGS_SIGNED a, ZSTRINGS_SIGNED b )
@@ -464,7 +447,7 @@ template <class TCHARACTER, typename I> __inline TCHARACTER * CHARz_make_str_uns
 }
 
 
-#if defined _MSC_VER
+#ifdef _MSC_VER
 #pragma warning ( push )
 #pragma warning (disable: 4146) // unary minus operator applied to unsigned type, result still unsigned
 #pragma warning (disable: 4127) // conditional expression is constant
@@ -476,7 +459,7 @@ template <class TCHARACTER, class NUMTYPE_IN> inline bool CHARz_to_int( NUMTYPE_
     bool negative;
     zstrings_internal::zint i;
 
-    typedef zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
+    typedef typename zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
 
     NUMTYPE n2 = 0;
     NUMTYPE n8 = 0;
@@ -627,7 +610,7 @@ parse_hex:
 
 template <typename TCHARACTER, typename NUMTYPE_IN> inline NUMTYPE_IN CHARz_to_int_10(const TCHARACTER * const s, NUMTYPE_IN def, ZSTRINGS_SIGNED slen = -1)
 {
-    typedef zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
+    typedef typename zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
 
 	NUMTYPE n10 = 0;
 	TCHARACTER    c;
@@ -663,7 +646,41 @@ template <typename TCHARACTER, typename NUMTYPE_IN> inline NUMTYPE_IN CHARz_to_i
 #pragma warning ( pop )
 #endif
 
-inline unsigned char_as_hex(ZSTRINGS_SIGNED c)
+namespace zstrings_internal
+{
+    template<typename TCHARACTER, typename NUMTYPE> struct to_num
+    {
+        static bool exec(NUMTYPE &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
+        {
+            return CHARz_to_int(out, s, slen);
+        }
+    };
+
+    template<typename TCHARACTER> struct to_num<TCHARACTER, float>
+    {
+        static bool exec(float &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
+        {
+            double d;
+            bool r = CHARz_to_double(d, s, slen);
+            out = (float)d;
+            return r;
+        }
+    };
+    template<typename TCHARACTER> struct to_num<TCHARACTER, double>
+    {
+        static bool exec(double &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
+        {
+            return CHARz_to_double(out, s, slen);
+        }
+    };
+
+    template<typename TCHARACTER, typename NUMTYPE> bool CHARz_to_num(NUMTYPE &out, const TCHARACTER *s, ZSTRINGS_SIGNED slen)
+    {
+        return to_num<TCHARACTER, NUMTYPE>::exec(out, s, slen);
+    }
+}
+
+ZSTRINGS_FORCEINLINE unsigned char_as_hex(ZSTRINGS_SIGNED c)
 {
 	if (unsigned(c - '0') <= 9) return (unsigned)(c - '0'); //-V110
 	if (unsigned(c - 'A') < 6) return (unsigned)(c + (10 - 'A')); //-V104 //-V110

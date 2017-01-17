@@ -4,8 +4,6 @@ template <class T, aint N> struct vec_t;
 template <class T, aint N> struct vecbase_t;
 template <class T> struct vecbase_t < T, 2 >
 {
-    MOVABLE( true );
-
 	union { T x, r, s, r0; };
 	union { T y, g, t, r1; };
 	typedef T TYPE;//for external use only
@@ -33,7 +31,6 @@ template <class T> struct vecbase_t < T, 2 >
     INLINE T delta() const { return r1-r0; }
 
     INLINE vec_t<T, 2> operator&(const vec_t<T, 2> &b) const;
-
 };
 template <class T> struct vecbase_t<T, 3> : vecbase_t < T, 2 >
 {
@@ -315,9 +312,18 @@ typedef vec_t<int,3> ivec3;
 typedef vec_t<float, 4> vec4;
 typedef vec_t<int, 4> ivec4;
 
+namespace internals
+{
+    template <> struct movable<vec2> : public movable_customized_yes {};
+    template <> struct movable<ivec2> : public movable_customized_yes {};
+    template <> struct movable<svec2> : public movable_customized_yes {};
+    template <> struct movable<vec3> : public movable_customized_yes {};
+    template <> struct movable<ivec3> : public movable_customized_yes {};
+    template <> struct movable<vec4> : public movable_customized_yes {};
+    template <> struct movable<ivec4> : public movable_customized_yes {};
+}
 
 template<> INLINE ivec2 &make_dummy<ivec2>(bool quiet) { static ivec2 t(0); DUMMY_USED_WARNING(quiet); return t; }
-
 
 INLINE vec2 make_direction(float angle)   { float s, c; sincos(angle, s, c); return vec2(c, s); }
 

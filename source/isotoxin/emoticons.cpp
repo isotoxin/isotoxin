@@ -75,12 +75,12 @@ namespace
 
         /*virtual*/ ts::wstr_c to_wstr() const override
         {
-            if ( !e ) return CONSTWSTR("(???)");
+            if ( !e ) return ts::wstr_c(CONSTWSTR("(???)"));
             return from_utf8(e->def);
         }
         /*virtual*/ ts::str_c to_utf8() const override
         {
-            if ( !e ) return CONSTASTR( "(???)" );
+            if (!e) return ts::str_c(CONSTASTR("(???)"));
             return e->unicode ? ts::str_c().append_unicode_as_utf8( e->unicode ) : e->def;
         }
         /*virtual*/ void update_advance(ts::font_c *font) override
@@ -435,13 +435,11 @@ ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &bo
 
 namespace
 {
-    struct backup_s
+    struct backup_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::shared_ptr<smile_element_s> se;
         int unicode;
     };
-
 }
 
 void emoticons_c::reload()
@@ -539,7 +537,7 @@ void emoticons_c::reload()
         {
             ts::wstr_c setname = prf().emoticons_set();
             if ( !setname.is_empty() && ldr.setlist.find(setname) < 0 )
-                prf().emoticons_set(CONSTWSTR(""));
+                prf().emoticons_set(ts::wstr_c());
             ldr.curset = setname;
         }
         if (ldr.curset.is_empty())
@@ -555,7 +553,7 @@ void emoticons_c::reload()
         if (ldr.curset.is_empty())
             continue;
 
-        ldr.animperiod = ldr.emojisettings.get( CONSTASTR( "animated" ), CONSTASTR( "0" ) ).as_int();
+        ldr.animperiod = ldr.emojisettings.get(CONSTASTR("animated"), ts::str_c(CONSTASTR("0"))).as_int();
 
         ts::zip_open(pak.data(), pak.size(), DELEGATE(&ldr,process_pak_file));
 
@@ -563,9 +561,9 @@ void emoticons_c::reload()
         {
             if ( defpack )
             {
-                emoji_maxheight = ldr.emojisettings.get( CONSTASTR( "emoji-max-height" ), CONSTASTR( "30" ) ).as_int();
+                emoji_maxheight = ldr.emojisettings.get(CONSTASTR("emoji-max-height"), ts::str_c(CONSTASTR("30"))).as_int();
                 if ( emoji_maxheight < 16 ) emoji_maxheight = 16;
-                selector_min_width = ldr.emojisettings.get( CONSTASTR( "min-width" ), CONSTASTR( "200" ) ).as_int();
+                selector_min_width = ldr.emojisettings.get(CONSTASTR("min-width"), ts::str_c(CONSTASTR("200"))).as_int();
                 if ( selector_min_width < 200 ) selector_min_width = 200;
             }
 
@@ -699,7 +697,7 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
         }
     }
 
-    bool skip_short = !prf().get_options().is(MSGOP_REPLACE_SHORT_SMILEYS);
+    bool skip_short = !prf_options().is(MSGOP_REPLACE_SHORT_SMILEYS);
 
     for( const match_point_s&mp : matchs )
     {

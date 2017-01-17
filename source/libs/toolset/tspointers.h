@@ -49,7 +49,6 @@ public:
 
 template <typename T> class safe_ptr // T must be public child of safe_object
 {
-    MOVABLE(true);
 	friend class safe_object;
 
 	safe_object::pointer_container_s *pc = nullptr;
@@ -119,6 +118,8 @@ public:
 	}
 };
 
+namespace internals { template <typename T> struct movable< safe_ptr<T> > : public movable_customized_yes {}; }
+
 /*
 	intrusive shared pointer
 	
@@ -172,13 +173,7 @@ public:
     const T *get() const {return object;}
 };
 
-namespace internals
-{
-    template <typename T> struct movable_predefined< shared_ptr< T > >
-    {
-        static const bool value = true;
-    };
-}
+namespace internals { template <typename T> struct movable< shared_ptr<T> > : public movable_customized_yes {}; }
 
 class shared_object
 {
@@ -236,7 +231,6 @@ template<class OO, class OO1 = OO> struct iweak_ptr
 {
 	friend struct eyelet_s<OO>;
 private:
-    MOVABLE(false);
 	iweak_ptr *prev = nullptr;
 	iweak_ptr *next = nullptr;
 	OO *oobject = nullptr;
@@ -246,7 +240,7 @@ public:
     iweak_ptr() {}
 	iweak_ptr(const iweak_ptr &hook)
 	{
-		if (hook.get()) const_cast<OO *>( hook.get() )->hook_connect( this );
+		if (hook.get()) const_cast<OO *>( static_cast<const OO *>(hook.get()) )->hook_connect( this );
 	}
 
 	iweak_ptr(OO1 *ob)
@@ -298,6 +292,8 @@ public:
 
     bool expired() const {return get() == nullptr;}
 };
+
+namespace internals { template <typename T> struct movable< iweak_ptr<T> > : public movable_customized_no {}; }
 
 template<class OO> struct eyelet_s
 {

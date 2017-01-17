@@ -14,16 +14,14 @@ HINSTANCE g_module = nullptr;
 void LogMessage(const char *fn, const char *caption, const char *msg)
 {
 #if defined _DEBUG || defined _DEBUG_OPTIMIZED
-    FILE *f = nullptr;
-    fopen_s(&f, fn ? fn : "plghost.log", "ab");
+    FILE *f = fopen(fn ? fn : "plghost.log", "ab");
     if (f)
     {
         char module[MAX_PATH];
         GetModuleFileNameA(g_module, module, LENGTH(module));
-        tm t;
         time_t curtime;
         time(&curtime);
-        localtime_s(&t, &curtime);
+        const tm &t = *localtime(&curtime);
         if (caption)
             fprintf(f, "-------------------------\r\nMODULE: %s\r\nDATETIME: %i-%02i-%02i %02i:%02i\r\nCAPTION: %s\r\nMESSAGE: %s\r\n\r\n", strrchr(module, '\\') + 1, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, caption, msg);
         else
@@ -35,37 +33,35 @@ void LogMessage(const char *fn, const char *caption, const char *msg)
 
 int MessageBoxDef(const char *text, const char *notLoggedText, const char *caption, UINT type)
 {
-    return MessageBoxA(nullptr, notLoggedText[0] ? tmp_str_c(text).append(notLoggedText).cstr() : text, caption, type | MB_TASKMODAL | MB_TOPMOST);
+    return MessageBoxA(nullptr, notLoggedText[0] ? std::str_c(text).append(notLoggedText).cstr() : text, caption, type | MB_TASKMODAL | MB_TOPMOST);
 }
 
-inline int LoggedMessageBox(const str_c &text, const char *notLoggedText, const char *caption, UINT type)
+inline int LoggedMessageBox(const std::str_c &text, const char *notLoggedText, const char *caption, UINT type)
 {
     LogMessage(nullptr, caption, text);
     return MessageBoxDef(text, notLoggedText, caption, type);
 }
 
-
 bool Warning(const char *s, ...)
 {
-    char str[4000];
+    std::string str( 4000, false );
 
-    static std::map<str_c, bool> messages;
+    static std::unordered_map<std::string, bool> messages;
 
     va_list args;
     va_start(args, s);
-    vsprintf_s(str, LENGTH(str), s, args);
+    str.set_length( vsprintf_s(str.data(), str.get_capacity()-1, s, args) );
     va_end(args);
 
-    str_c msg = str;
     bool result = false;
-    if (messages.find(msg) == messages.end())
-        switch (LoggedMessageBox(msg, "\n\nShow the same messages?", "Warning", MB_YESNOCANCEL))
+    if (messages.find(str) == messages.end())
+        switch (LoggedMessageBox(str, "\n\nShow the same messages?", "Warning", MB_YESNOCANCEL))
     {
         case IDCANCEL:
             result = true;
             break;
         case IDNO:
-            messages[msg] = true;
+            messages[str] = true;
             break;
     }
     return result;
@@ -106,26 +102,26 @@ void MaskLog(unsigned mask, const char *s, ...)
     fopen_s(&f, "plghost.log", "ab");
     if (f)
     {
-        sstr_t<4050> str;
+        std::sstr_t<4050> str;
 
         str.set_length( GetModuleFileNameA(g_module, str.str(), MAX_PATH) );
-        str.cut( 0, 1 + str.find_last_pos_of(CONSTASTR("\\/")) );
+        str.cut( 0, 1 + str.find_last_pos_of(STD_ASTR("\\/")) );
         str.append_char(' ');
         str.append_as_uint( timeGetTime() );
         str.append_char(' ');
 
         if (0 != (effmask & LFLS_CLOSE))
-            str.append( CONSTASTR("CLOSE: ") );
+            str.append( STD_ASTR("CLOSE: ") );
 
         if (0 != (effmask & LFLS_ESTBLSH))
-            str.append(CONSTASTR("ESTBLSH: "));
+            str.append(STD_ASTR("ESTBLSH: "));
 
         va_list args;
         va_start(args, s);
         int l = vsprintf_s(str.str() + str.get_length(), str.get_capacity() - str.get_length(), s, args);
         va_end(args);
         str.set_length( str.get_length() + l );
-        str.append( CONSTASTR("\r\n") );
+        str.append( STD_ASTR("\r\n") );
 
         fwrite(str.cstr(), str.get_length(), 1, f);
         fclose(f);
@@ -158,7 +154,7 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
     return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
-asptr utf8clamp( const asptr &utf8, int maxbytesize )
+std::asptr utf8clamp( const std::asptr &utf8, int maxbytesize )
 {
     if( utf8.l > maxbytesize )
     {
@@ -221,9 +217,9 @@ aint fifo_stream_c::read_data(byte *dest, aint size)
     }
 }
 
-wstr_c get_exe_full_name()
+std::wstr_c get_exe_full_name()
 {
-    wstr_c wd;
+    std::wstr_c wd;
     wd.set_length(2048 - 8);
     int len = GetModuleFileNameW(nullptr, wd.str(), 2048 - 8);
     wd.set_length(len);
@@ -301,8 +297,6 @@ namespace cpu_detect
 #else
 #define xgetbv() 0U  // no AVX for older x64 or unrecognized toolchains.
 #endif
-
-#define SETBIT(x) ((1U)<<(x))
 
 u32 detect_cpu_caps()
 {

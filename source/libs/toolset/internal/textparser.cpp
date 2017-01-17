@@ -1,7 +1,7 @@
 #include "toolset.h"
 #include "textparser.h"
-#include "fourcc.h"
 #include "platform.h"
+#include "fourcc.h"
 
 //-V:glyphs:807
 
@@ -30,7 +30,7 @@ namespace
 		      underline_offset;
 	    int advance; // horizontal metaglyph size
 	    short shadow;
-	    wchar_t ch;
+        ts::wchar ch;
         int charindex;
 	    TSCOLOR shadow_color, outline_color, bg_color;
 	    int image_offset_Y;
@@ -75,23 +75,27 @@ namespace
 			    if (c == 0) // zero value is special
 				     gi.color = ARGB(255,255,255,0); // we should provide equivalent value, but not zero
 			    else gi.color = c;
-			    gi.width  = (uint16)glyph->width;
-			    gi.height = (uint16)glyph->height;
-                gi.pitch = (uint16)glyph->width; // 1 byte per pixel for glyphs
+			    gi.width  = static_cast<uint16>(glyph->width);
+			    gi.height = static_cast<uint16>(glyph->height);
+#if LCD_RENDER_MODE
+                gi.pitch = static_cast<uint16>(glyph->width) * 4; // 4 byte per pixel for glyphs in LCD mode
+#else
+                gi.pitch = static_cast<uint16>(glyph->width); // 1 byte per pixel for glyphs
+#endif
 			    gi.pixels = (uint8*)(glyph+1);
 			    gi.pos = svec2(glyph->left, -glyph->top);
 			    break;
 		    case IMAGE:
 			    gi.color = 0; // zero color for images - it will be ignored
-			    gi.width  = (uint16)image->width;
-			    gi.height = (uint16)image->height;
-                gi.pitch = (uint16)image->pitch;
+			    gi.width  = static_cast<uint16>(image->width);
+			    gi.height = static_cast<uint16>(image->height);
+                gi.pitch = static_cast<uint16>(image->pitch);
 			    gi.pixels = image->pixels;
 			    gi.pos = svec2(0, -image->height+image_offset_Y);
 			    break;
             case RECTANGLE:
                 gi.pixels = GTYPE_RECTANGLE;
-                gi.width = (uint16)advance;
+                gi.width = static_cast<uint16>(advance);
                 gi.height = shadow;
                 gi.pitch = ch;
                 gi.pos = svec2(0, -shadow+image_offset_Y);
@@ -100,12 +104,12 @@ namespace
 
             gi.charindex = charindex;
 		    //underline
-            gi.length = (uint16)(advance + add_underline_len);
+            gi.length = static_cast<uint16>(advance + add_underline_len);
             gi.start_pos = svec2(0, underline_offset) - gi.pos;
             gi.thickness = font->uline_thickness * underlined;
 
-            gi.pos().x += (int16)pos.x;
-            gi.pos().y += (int16)pos.y;
+            gi.pos().x += static_cast<int16>(pos.x);
+            gi.pos().y += static_cast<int16>(pos.y);
 	    }
 
 	    void add_glyph_image(GLYPHS &outlined_glyphs, GLYPHS *glyphs, const ivec2 &pos, int add_underline_len) const
@@ -118,8 +122,8 @@ namespace
                     gi.pixels = GTYPE_BGCOLOR_MIDDLE;
                     gi.color = bg_color;
 
-                    gi.width = (uint16)glyph->advance+1;
-                    gi.height = (uint16)tabs(font->ascender - font->descender);
+                    gi.width = static_cast<uint16>(glyph->advance+1);
+                    gi.height = static_cast<uint16>(tabs(font->ascender - font->descender));
                     gi.pitch = 0;
                     gi.pos = svec2(glyph->left + pos.x-1, pos.y-font->ascender);
                     gi.charindex = charindex;
@@ -151,12 +155,12 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 	int ir = (int)invr;
     gi.charindex = -1;
 	gi.color = outline_color;
-	gi.width  = (uint16)(width  + 2*ir);
-	gi.height = (uint16)(height + 2*ir);
-    gi.pitch = (uint16)gi.width;
+	gi.width  = static_cast<uint16>(width  + 2*ir);
+	gi.height = static_cast<uint16>(height + 2*ir);
+    gi.pitch = static_cast<uint16>(gi.width);
 	gi.pos = svec2(left, -top);
-    gi.pos().x += (int16)(pos.x - ir);
-    gi.pos().y += (int16)(pos.y - ir);
+    gi.pos().x += static_cast<int16>(pos.x - ir);
+    gi.pos().y += static_cast<int16>(pos.y - ir);
 	gi.thickness = 0; // do not generate outline for underline
 
 	if (outlined == nullptr)
@@ -196,9 +200,8 @@ struct text_parser_s
     int max_line_length;
 	int flags, boundy;
 
-	struct paragraph_s
+	struct paragraph_s : public movable_flag<true>
 	{
-        MOVABLE( true );
         enum a{ALEFT, ARIGHT, AJUSTIFY, ACENTER};
 
 		DUMMY(paragraph_s);
@@ -242,9 +245,8 @@ struct text_parser_s
 	tbuf_t<TSCOLOR> colors_stack;
 	tbuf_t<font_c*> fonts_stack;
 	tbuf_t<paragraph_s> paragraphs_stack;
-	struct shadow_pars_s
+	struct shadow_pars_s : public movable_flag<true>
 	{
-        MOVABLE( true );
 		DUMMY(shadow_pars_s);
 		shadow_pars_s() {}
 		int len; TSCOLOR color;
@@ -448,7 +450,6 @@ struct text_parser_s
         }
 		next_line(nextLn && H != 0 ? H : INT_MAX);
 		last_line.clear();
-		//addIndent();
 		first_char_in_paragraph = true;
 	}
 
@@ -619,7 +620,6 @@ struct text_parser_s
 
 			}
 			paragraphs_stack.add(pargph);
-			//addIndent();
 		}
 		else if (tag == CONSTWSTR("pr"))
 		{
@@ -1032,21 +1032,17 @@ struct text_parser_s
 
                 } else
                 {
-					
-                    
-					//—разу формировать новую строку нельз€ - если окажетс€, что это единственное слово в строке, то его надо не переносить, а разбивать
-					//ѕоиск последнего разделител€ (только пробел)
-					//≈сли пробел стоит в начале строки, а сама строка состоит из одного слова, то слово всЄ равно переноситс€ на другую строку - это нормально
+                    // do not make new line immediately: may be long word will be one word in line and it should be splitted, not word wrap
+					// search for last split character (space only)
+                    // if space character is at begin of line and line contain only one word, so it normal to wrap this word to next line
 					while (j >= rite_rite && last_line.get(j).type != meta_glyph_s::SPACE) j--;
 
-					char charclass[30];
-					aint start = j+1, n = last_line.count() - start;
-                    
-                    
                     // TODO : make hyphenation compatible with gcc
 
 #ifdef _MSC_VER
-                    if ( hyphenation_tag_nesting_level && n < ARRAY_SIZE( charclass ) - 3 )//нужно смотреть на 3 буквы вперЄд, чтобы работали правила gss-ssg и gs-ssg
+                    char charclass[30];
+                    aint start = j + 1, n = last_line.count() - start;
+                    if ( hyphenation_tag_nesting_level && n < ARRAY_SIZE( charclass ) - 3 ) // need to lookup forward by 3 characters to make rules gss-ssg and gs-ssg working
 					{
 						//ѕеренос слов по слогам реализован на основе упрощЄнного алгоритма ѕ.’ристова http://sites.google.com/site/foliantapp/project-updates/hyphenation
 						aint nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
@@ -1125,15 +1121,17 @@ skipHyphenate:;
 
 					if (j >= rite_rite) // space found - word is not single => generate new line
 					{
-						last_line.remove_slow(j); // удал€ем пробел (чтобы он не участвовал в подсчете пробелов ниже, а также чтобы не добавл€лс€ соответствующий глиф - его может быть видно при подчеркивании)
+						last_line.remove_slow(j); // remove space (no need to be counted, and no need space glyph - it can be visible with underline)
 						line_size = j; // break line on character after space
 					}
-					else // “акже формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегос€ в строку
+					else // also make new line, not by last space, but by part of word fit line
 					{
 						line_size = last_line.count()-1; // limit len of string by current symbol (not including)
 						was_inword_break = true;
 					}
+#ifdef _MSC_VER
 end:;
+#endif
                 }
 
 				int H, spaces, W, WR;
@@ -1253,7 +1251,7 @@ ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp,
 
 irect glyphs_bound_rect(const GLYPHS &glyphs)
 {
-	irect res(0);
+	irect res(maximum<int>::value, maximum<int>::value, minimum<int>::value, minimum<int>::value);
 
     for (const glyph_image_s &gi : glyphs)
 	{
@@ -1303,12 +1301,8 @@ int glyphs_first_glyph( const GLYPHS &glyphs )
 int glyphs_last_glyph( const GLYPHS &glyphs )
 {
     aint cnt = glyphs.count();
-    int glyphs_start = 0;
     if ( cnt && glyphs.get( 0 ).pixels == nullptr && glyphs.get( 0 ).outline_index > 0 )
-    {
-        glyphs_start = 1;
         cnt = glyphs.get( 0 ).outline_index;
-    }
     return static_cast<int>(cnt);
 }
 

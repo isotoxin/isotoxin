@@ -15,3 +15,4 @@ pixman_implementation_t * _pixman_ppc_get_implementations (pixman_implementation
 {
     return imp;
 }
+

@@ -209,14 +209,14 @@ bool find_c99(const astrings_c & lines, int &sl, int &el)
 
         str_c type_of_elements = l.substr(0, vars); type_of_elements.trim();
         char lch = type_of_elements.get_last_char();
-        if (lch == '=' || lch == '&' || lch == '>' || lch == '+' || lch == '-' || lch == '|' || lch == ')' || 
+        if (lch == '=' || lch == '&' || lch == '>' || lch == '+' || lch == '-' || lch == '|' || lch == ')' ||
             type_of_elements.equals(CONSTASTR("return")) ||
             type_of_elements.count_chars('(') != type_of_elements.count_chars(')'))
             continue;
 
         str_c name_of_array = l.substr(vars, brs); name_of_array.trim();
         str_c num_of_elements = l.substr(brs + 1, bre); num_of_elements.trim();
-        
+
         if (is_const(num_of_elements))
             continue;
 
@@ -319,11 +319,11 @@ bool __find_c99( const astrings_c & lines, int &sl, int &el  )
                     return true;
                 }
             }
-        
+
             el = cnt - 1;
             return true;
         }
-        
+
     }
 
 
@@ -439,7 +439,7 @@ bool fix_c99(astrings_c & lines, int sl, int el)
 #if 0
     for(int i=sl;i<=sll;++i)
         lines.get(i).insert(ins,"//");
-    
+
     str_c sizeofarr( CONSTASTR("sizeof_") ); sizeofarr.append(name_of_array);
     str_c s1; s1.fill(ins,' ').append( CONSTASTR("size_t ") ).append(sizeofarr).append( CONSTASTR(" = sizeof(") ).append(type_of_elements).append( CONSTASTR(") * (") ).append(num_of_elements).append(CONSTASTR("); // -C99\r"));
     str_c s2; s2.fill(ins,' ').append( type_of_elements ).append( CONSTASTR("* ") ).append(name_of_array).append( CONSTASTR(" = _alloca( ") ).append(sizeofarr).append( CONSTASTR(" ); // -C99\r") );
@@ -476,7 +476,8 @@ static void savelines(const asptr&fn, const astrings_c & lines)
 int proc_antic99(const wstrings_c & pars)
 {
     if (pars.size() < 2) return 0;
-    wstr_c c99 = pars.get(1); fix_path( c99, FNO_SIMPLIFY );
+    wstr_c c99 = pars.get(1);
+    fix_path( c99, FNO_SIMPLIFY );
 
     if (!is_file_exists(c99.as_sptr()))
     {
@@ -501,7 +502,7 @@ int proc_antic99(const wstrings_c & pars)
             return 0;
         }
         ++fixes;
-        
+
         //break;
 //#endif
     }

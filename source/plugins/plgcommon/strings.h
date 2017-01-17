@@ -1,4 +1,7 @@
 #pragma once
+
+#if 0
+
 #include <crtdefs.h>
 
 #define ZSTRINGS_SYSCALL(func) str_wrap_##func
@@ -26,7 +29,12 @@ ZSTRINGS_FORCEINLINE inline
 #define ZSTRINGS_ALLOCATOR STR_ALLOCATOR
 
 typedef char ZSTRINGS_ANSICHAR;
+#ifdef _MSC_VER
 typedef wchar_t ZSTRINGS_WIDECHAR;
+#endif
+#ifdef __GNUC__
+typedef char16_t ZSTRINGS_WIDECHAR;
+#endif // __GNUC__
 
 typedef unsigned char ZSTRINGS_BYTE;
 typedef size_t ZSTRINGS_UNSIGNED; // 32 or 64 bit
@@ -42,14 +50,14 @@ struct STR_ALLOCATOR
 };
 
 int     str_wrap_text_ucs2_to_ansi(char *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
-void    str_wrap_text_ansi_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
-ZSTRINGS_SIGNED str_wrap_text_utf8_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
+void    str_wrap_text_ansi_to_ucs2( ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
+ZSTRINGS_SIGNED str_wrap_text_utf8_to_ucs2( ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 ZSTRINGS_SIGNED str_wrap_text_ucs2_to_utf8(char *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
-bool    str_wrap_text_iequalsw(const wchar_t *s1, const wchar_t *s2, ZSTRINGS_SIGNED len);
+bool    str_wrap_text_iequalsw(const ZSTRINGS_WIDECHAR *s1, const ZSTRINGS_WIDECHAR *s2, ZSTRINGS_SIGNED len);
 bool    str_wrap_text_iequalsa(const char *s1, const char *s2, ZSTRINGS_SIGNED len);
-void    str_wrap_text_lowercase(wchar_t *out, ZSTRINGS_SIGNED maxlen);
+void    str_wrap_text_lowercase( ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen);
 void    str_wrap_text_lowercase(char *out, ZSTRINGS_SIGNED maxlen);
-void    str_wrap_text_uppercase(wchar_t *out, ZSTRINGS_SIGNED maxlen);
+void    str_wrap_text_uppercase( ZSTRINGS_WIDECHAR *out, ZSTRINGS_SIGNED maxlen);
 void    str_wrap_text_uppercase(char *out, ZSTRINGS_SIGNED maxlen);
 
 
@@ -58,3 +66,4 @@ void    str_wrap_text_uppercase(char *out, ZSTRINGS_SIGNED maxlen);
 typedef str_c tmp_str_c;
 typedef wstr_c tmp_wstr_c;
 
+#endif

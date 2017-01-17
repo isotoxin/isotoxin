@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2006-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2006-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -60,7 +60,7 @@ namespace gloox
 
     char buf[41];
     for( int i = 0; i < 20; ++i )
-      sprintf( buf + i * 2, "%02x", (0xff) & ( H[i >> 2] >> ( ( 3 - ( i & 3 ) ) << 3 ) ) );
+      sprintf( buf + i * 2, "%02x", (unsigned char)( H[i >> 2] >> ( ( 3 - ( i & 3 ) ) << 3 ) ) );
 
     return std::string( buf, 40 );
   }

@@ -4,6 +4,9 @@
 */
 
 #include "stdafx.h"
+#include <algorithm>
+
+#ifdef _WIN32
 #pragma warning(push)
 #pragma warning(disable : 4324) // 'crypto_generichash_blake2b_state' : structure was padded due to __declspec(align())
 #include "sodium.h"
@@ -18,6 +21,39 @@
 #include <vpx/vp8cx.h>
 #include <vpx/vpx_image.h>
 #pragma warning(pop)
+
+#pragma USELIB("plgcommon")
+
+#pragma comment(lib, "shared.lib")
+
+#if defined _DEBUG_OPTIMIZED || defined _FINAL
+#pragma comment(lib, "toxcore.lib")
+#else
+#pragma comment(lib, "toxcored.lib")
+#endif
+
+#pragma comment(lib, "Dnsapi.lib")
+#pragma comment(lib, "Winmm.lib")
+#pragma comment(lib, "Msacm32.lib")
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "Iphlpapi.lib")
+
+#if defined _FINAL || defined _DEBUG_OPTIMIZED
+#include "crt_nomem/crtfunc.h"
+#endif
+
+#endif
+#ifdef _NIX
+#include <sodium.h>
+#include <curl/curl.h>
+#include <vpx/vpx_decoder.h>
+#include <vpx/vpx_encoder.h>
+#include <vpx/vp8dx.h>
+#include <vpx/vp8cx.h>
+#include <vpx/vpx_image.h>
+#endif
+
+#include "../appver.inl"
 
 #define VIDEO_CODEC_DECODER_INTERFACE_VP8 (vpx_codec_vp8_dx())
 #define VIDEO_CODEC_DECODER_INTERFACE_VP9 (vpx_codec_vp9_dx())
@@ -46,40 +82,117 @@
 #define PACKET_ID_MESSAGE_GROUPCHAT 99
 #define PACKET_ID_LOSSY_GROUPCHAT 199
 
-
-#define CHECKIT() __pragma(message(__LOC__ "check it: " __FUNCTION__))
-
-#pragma USELIB("plgcommon")
-
-#pragma comment(lib, "shared.lib")
-
-#if defined _DEBUG_OPTIMIZED || defined _FINAL
-#pragma comment(lib, "toxcore.lib")
-#else
-#pragma comment(lib, "toxcored.lib")
-#endif
-
-
-#pragma comment(lib, "Dnsapi.lib")
-#pragma comment(lib, "Winmm.lib")
-#pragma comment(lib, "Msacm32.lib")
-#pragma comment(lib, "Ws2_32.lib")
-#pragma comment(lib, "Iphlpapi.lib")
-
-#if defined _FINAL || defined _DEBUG_OPTIMIZED
-#include "crt_nomem/crtfunc.h"
-#endif
-
-#include "../appver.inl"
-
 #define PACKETID_EXTENSION 174
 #define PACKETID_VIDEO_EX 175
-#define SAVE_VERSION 1
-
-#define CONFERENCE_ID_OFFSET 10000000 // 10M contacts should be enough for everything
+#define SAVE_VERSION 2
 
 #define DEFAULT_AUDIO_BITRATE 32
 #define DEFAULT_VIDEO_BITRATE 5000
+
+struct fid_s
+{
+    enum type_e
+    {
+        INVALID,
+        NORMAL,
+        CONFA,
+        UNKNOWN,
+
+    };
+
+    unsigned n : 24;
+    unsigned type : 8;
+
+    fid_s()
+    {
+        n = 0;
+        type = INVALID;
+    }
+
+    static fid_s make_normal(int tox_fid)
+    {
+        fid_s r;
+        r.n = tox_fid;
+        r.type = NORMAL;
+        return r;
+    }
+    static fid_s make_confa(int gnum)
+    {
+        fid_s r;
+        r.n = gnum;
+        r.type = CONFA;
+        return r;
+    }
+
+    bool is_normal() const
+    {
+        return NORMAL == type;
+    }
+
+    bool is_valid() const
+    {
+        return INVALID != type;
+    }
+    
+    bool is_confa() const
+    {
+        return CONFA == type;
+    }
+    bool is_unknown() const
+    {
+        return UNKNOWN == type;
+    }
+
+
+    bool operator==(const fid_s&of) const
+    {
+        return type == of.type && (n == of.n || type == INVALID);
+    }
+    bool operator!=(const fid_s&of) const
+    {
+        return type != of.type || (n != of.n && type != INVALID);
+    }
+
+    int normal() const
+    {
+        return CHECK(type == NORMAL) ? n : -1;
+    }
+    int confa() const
+    {
+        return CHECK(type == CONFA) ? n : -1;
+    }
+    void setup_new_unknown()
+    {
+        static int pool = 1;
+        ASSERT(type == INVALID);
+        type = UNKNOWN;
+        n = pool++;
+    }
+};
+
+static_assert(sizeof(fid_s) == 4, "fid size error");
+
+namespace std
+{
+    template<> struct hash<contact_id_s>
+    {
+        size_t operator()(contact_id_s id) const
+        {
+            size_t x = static_cast<size_t>(id.id) | (static_cast<size_t>(id.type) << 24);
+            hash<size_t> h;
+            return h(x);
+        }
+    };
+    template<> struct hash<fid_s>
+    {
+        size_t operator()(fid_s id) const
+        {
+            size_t x = static_cast<size_t>(id.n) | (static_cast<size_t>(id.type) << 24);
+            hash<size_t> h;
+            return h(x);
+        }
+    };
+}
 
 template< size_t A, size_t B, size_t C = B > struct max_t
 {
@@ -89,10 +202,20 @@ template< size_t A, size_t B, size_t C = B > struct max_t
 struct public_key_s
 {
     byte key[TOX_PUBLIC_KEY_SIZE] = {};
-    bool operator==( const public_key_s & k )
+    bool operator==( const public_key_s & k ) const
     {
         return !memcmp( key, k.key, TOX_PUBLIC_KEY_SIZE );
     }
+    bool operator<(const public_key_s & k) const
+    {
+        return memcmp(key, k.key, TOX_PUBLIC_KEY_SIZE) < 0;
+    }
+
+    bytes as_bytes() const
+    {
+        return bytes(key, TOX_PUBLIC_KEY_SIZE);
+    }
+
 };
 
 struct conference_id_s
@@ -189,23 +312,23 @@ public:
     }
 
     void setup_self_address();
-    void setup_public_key( int fid );
+    void setup_public_key(fid_s fid);
     void setup( const void *id_, type_e t )
     {
         type = static_cast<uint16_t>(t);
         memcpy( id, id_, len(t) );
     }
-    void setup( const asptr&s )
+    void setup( const std::asptr&s )
     {
         if (s.l == 64)
         {
             type = static_cast<uint16_t>(TAT_PUBLIC_KEY);
-            pstr_c( s ).hex2buf<TOX_PUBLIC_KEY_SIZE>( id );
+            std::pstr_c( s ).hex2buf<TOX_PUBLIC_KEY_SIZE>( id );
         }
         if (s.l == 76)
         {
             type = static_cast<uint16_t>(TAT_FULL_ADDRESS);
-            pstr_c( s ).hex2buf<TOX_ADDRESS_SIZE>( id );
+            std::pstr_c( s ).hex2buf<TOX_ADDRESS_SIZE>( id );
         }
     }
 
@@ -222,7 +345,7 @@ public:
 
     bool operator==(const tox_address_c&a) const
     {
-        return type_compatible((type_e)type, (type_e)a.type) && !memcmp( id, a.id, compare_len( (type_e)type ) );
+        return type_compatible(static_cast<type_e>(type), static_cast<type_e>(a.type)) && !memcmp(id, a.id, compare_len(static_cast<type_e>(type)));
     }
     bool operator!=( const tox_address_c&a ) const
     {
@@ -255,12 +378,12 @@ public:
 
     bytes as_bytes() const
     {
-        return bytes(id, len((type_e)type));
+        return bytes(id, len(static_cast<type_e>(type)));
     }
 
-    str_c raw_str() const
+    std::string raw_str() const
     {
-        str_c s;
+        std::string s;
         s.append_as_hex( id, static_cast<int>(len( (type_e)type )) );
         return s;
     }
@@ -297,18 +420,18 @@ public:
     }
 };
 
-static std::vector<byte> buf_tox_config; // saved on offline; PURE TOX-SAVE DATA, aka native data
+static byte_buffer buf_tox_config; // saved on offline; PURE TOX-SAVE DATA, aka native data
 static bool conf_encrypted = false;
 
 static host_functions_s *hf;
 static Tox *tox = nullptr;
 static ToxAV *toxav = nullptr;
 static Tox_Options options;
-static sstr_t<256> tox_proxy_host;
+static std::sstr_t<256> tox_proxy_host;
 static uint16_t tox_proxy_port;
 static i32 tox_proxy_type = 0;
 static byte avahash[TOX_HASH_LENGTH] = {};
-static std::vector<byte> gavatar;
+static byte_buffer gavatar;
 static int gavatag = 0;
 static bool reconnect = false;
 static bool restart_module = false;
@@ -317,7 +440,7 @@ static bool proxy_settings_ok = false;
 static int video_bitrate = 0;
 static int video_quality = 0;
 
-int self_typing_contact = 0;
+contact_id_s self_typing_contact;
 int self_typing_time = 0;
 
 void tox_address_c::setup_self_address()
@@ -326,19 +449,19 @@ void tox_address_c::setup_self_address()
     type = TAT_FULL_ADDRESS;
 }
 
-void tox_address_c::setup_public_key( int fid )
+void tox_address_c::setup_public_key(fid_s fid)
 {
     type = TAT_EMPTY;
-    if (tox_friend_get_public_key( tox, fid, id, nullptr ))
+    if (fid.is_normal() && tox_friend_get_public_key( tox, fid.normal(), id, nullptr ))
         type = TAT_PUBLIC_KEY;
 }
 
 struct other_typing_s
 {
-    int fid = 0;
+    fid_s fid;
     int time = 0;
     int totaltime = 0;
-    other_typing_s(int fid, int time):fid(fid), time(time), totaltime(time){}
+    other_typing_s(fid_s fid, int time):fid(fid), time(time), totaltime(time){}
 };
 static std::vector<other_typing_s> other_typing;
 
@@ -346,10 +469,10 @@ void set_proxy_curl( CURL *curl )
 {
     if ( tox_proxy_type > 0 )
     {
-        str_c proxya = tox_proxy_host;
+        std::string proxya( tox_proxy_host.as_sptr() );
 
         int pt = 0;
-        if ( tox_proxy_type & (CF_PROXY_SUPPORT_HTTPS|CF_PROXY_SUPPORT_HTTPS) ) pt = CURLPROXY_HTTP;
+        if ( tox_proxy_type & (CF_PROXY_SUPPORT_HTTP|CF_PROXY_SUPPORT_HTTPS) ) pt = CURLPROXY_HTTP;
         else if ( tox_proxy_type & CF_PROXY_SUPPORT_SOCKS4 ) pt = CURLPROXY_SOCKS4;
         else if ( tox_proxy_type & CF_PROXY_SUPPORT_SOCKS5 ) pt = CURLPROXY_SOCKS5_HOSTNAME;
 
@@ -370,9 +493,9 @@ template<typename checker> u64 random64( const checker &ch )
 }
 
 
-static void set_proxy_addr(const asptr& addr)
+static void set_proxy_addr(const std::asptr& addr)
 {
-    token<char> p(addr, ':');
+    std::token<char> p(addr, ':');
     tox_proxy_host.clear();
     tox_proxy_port = 0;
     if (p) tox_proxy_host = *p;
@@ -433,24 +556,20 @@ static spinlock::syncvar<av_sender_state_s> callstate;
 enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
 {
     chunk_tox_data,
+
     chunk_descriptors,
-    
     chunk_descriptor,
     chunk_descriptor_id,
+
     chunk_magic,
+
     chunk_descriptor_pubid, // DEPRICATED, remove 05.2017
     chunk_descriptor_state,
     chunk_descriptor_avatartag,
     chunk_descriptor_avatarhash,
     chunk_descriptor_dnsname,
     chunk_descriptor_address,
-
-    chunk_msgs_receiving = 20,
-    chunk_msg_receiving,
-    chunk_msg_receiving_cid,
-    __unused__chunk_msg_receiving_type,
-    chunk_msg_receiving_body,
-    chunk_msg_receiving_createtime,
+    chunk_descriptor_invmsg,
 
     chunk_other = 30,
     chunk_proxy_type,
@@ -459,26 +578,46 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_use_udp,
     chunk_toxid,
     chunk_use_ipv6,
+    chunk_use_hole_punching,
+    chunk_use_local_discovery,
+
+    chunk_nodes = 101,
+    chunk_node,
+    chunk_node_key,
+    chunk_node_push_count,
+    chunk_node_accept_count,
 };
 
 struct dht_node_s
 {
-    str_c addr4;
-    str_c addr6;
-    byte pubid[32];
-    int port;
-    int used = 0;
-    int random = 0;
+    public_key_s pubid;
+    std::string addr4;
+    std::string addr6;
 
-    dht_node_s( const asptr& addr4, const asptr& addr6, int port, const asptr& pubid_ ):addr4(addr4), addr6(addr6), port(port)
+    int push_count = 0;
+    int accept_count = 0;
+
+    uint16_t port = 0;
+    bool accepted = false;
+
+    dht_node_s( const std::asptr& addr4, const std::asptr& addr6, uint16_t port, const std::asptr& pubid_ ):addr4(addr4), addr6(addr6), port(port)
     {
-        pstr_c(pubid_).hex2buf<32>(pubid);
+        std::pstr_c(pubid_).hex2buf<32>(pubid.key);
+    }
+
+    bool operator<(const dht_node_s&n) const
+    {
+        return memcmp(pubid.key, n.pubid.key, TOX_PUBLIC_KEY_SIZE) < 0;
+    }
+    bool operator<(const public_key_s&k) const
+    {
+        return pubid < k;
     }
 };
 
 static std::vector<dht_node_s> nodes;
 
-static str_c dnsquery( const str_c & query, const asptr& ver )
+static std::string dnsquery( const std::string & query, const std::asptr& ver )
 {
     bool ok_version = false;
     DNS_RECORDW *record = nullptr;
@@ -490,33 +629,33 @@ static str_c dnsquery( const str_c & query, const asptr& ver )
         {
             if (txt->pStringArray[0])
             {
-                str_c retid;
+                std::string retid;
 
                 const char *r = (const char *)txt->pStringArray[0];
-                asptr rr(r);
+                std::asptr rr(r);
                 if (ver.l == 0 && rr.l == 64)
-                    return str_c(rr);
-                token<char> t(rr, ';');
+                    return std::string(rr);
+                std::token<char> t(rr, ';');
                 for (; t; ++t)
                 {
-                    token<char> tt(*t, '=');
+                    std::token<char> tt(*t, '=');
                     if (tt)
                     {
-                        if (tt->equals(CONSTASTR("v")))
+                        if (tt->equals(STD_ASTR("v")))
                         {
                             ++tt;
                             if (!tt || !tt->equals(ver))
-                                return str_c();
+                                return std::string();
                             ok_version = true;
                             continue;
                         }
-                        if (tt->equals(CONSTASTR("id")))
+                        if (tt->equals(STD_ASTR("id")))
                         {
                             ++tt;
                             if (!tt)
-                                return str_c();
+                                return std::string();
 
-                            retid = *tt;
+                            retid = tt->as_sptr();
                             break;
                         }
                     }
@@ -529,12 +668,12 @@ static str_c dnsquery( const str_c & query, const asptr& ver )
         record = record->pNext;
     }
 
-    return str_c();
+    return std::string();
 }
 
 struct tox3dns_s
 {
-    str_c addr;
+    std::string addr;
     byte key[32];
     void *dns3 = nullptr;
     bool key_ok = false;
@@ -560,17 +699,17 @@ struct tox3dns_s
     void operator=(const tox3dns_s&) = delete;
     tox3dns_s(const tox3dns_s&) = delete;
 
-    tox3dns_s( const asptr &sn, const asptr &k = asptr()):addr(sn)
+    tox3dns_s( const std::asptr &sn, const std::asptr &k = std::asptr()):addr(sn)
     {
         if (k.l)
         {
-            pstr_c(k).hex2buf<32>(key);
+            std::pstr_c(k).hex2buf<32>(key);
             key_ok = true;
 
         } else
         {
             // we have to query
-            str_c key_string = dnsquery(CONSTASTR("_tox.") + addr, asptr());
+            std::string key_string = dnsquery(std::string(STD_ASTR("_tox."),addr), std::asptr());
             if (!key_string.is_empty())
             {
                 key_string.hex2buf<32>(key);
@@ -584,19 +723,19 @@ struct tox3dns_s
         if (dns3) tox_dns3_kill(dns3);
     }
 
-    str_c query1( const str_c &pubid )
+    std::string query1( const std::string &pubid )
     {
         if (dns3)
         {
             tox_dns3_kill(dns3);
             dns3 = nullptr;
         }
-        str_c request(pubid);
-        request.replace_all( CONSTASTR("@"), CONSTASTR("._tox.") );
-        return dnsquery(request, CONSTASTR("tox1"));
+        std::string request(pubid);
+        request.replace_all( STD_ASTR("@"), STD_ASTR("._tox.") );
+        return dnsquery(request, STD_ASTR("tox1"));
     }
 
-    str_c query3( const str_c &pubid )
+    std::string query3( const std::string &pubid )
     {
         if (!key_ok)
             return query1(pubid);
@@ -605,7 +744,7 @@ struct tox3dns_s
             dns3 = tox_dns3_new(key);
 
         uint32_t request_id;
-        sstr_t<128> dns_string;
+        std::sstr_t<128> dns_string;
         int dns_string_len = tox_generate_dns3_string(dns3, (byte *)dns_string.str(), (uint16_t)dns_string.get_capacity(), &request_id, (byte*)pubid.cstr(), (byte)pubid.find_pos('@'));
 
         if (dns_string_len < 0)
@@ -613,9 +752,9 @@ struct tox3dns_s
 
         dns_string.set_length(dns_string_len);
 
-        str_c rec( 256, true );
-        rec.set_as_char('_').append(dns_string).append(CONSTASTR("._tox.")).append(addr);
-        rec = dnsquery(rec,CONSTASTR("tox3"));
+        std::string rec( 256, true );
+        rec.set_as_char('_').append(dns_string).append(STD_ASTR("._tox.")).append(addr);
+        rec = dnsquery(rec,STD_ASTR("tox3"));
         if (!rec.is_empty())
         {
             byte tox_id[TOX_ADDRESS_SIZE];
@@ -641,20 +780,22 @@ struct message2send_s
     message2send_s *next;
 
     u64 utag;
-    int fid;
+    fid_s fid;
     int mid;
     int next_try_time;
     int send_timeout = 0;
-    str_c msg, sentmsg;
+    std::string msg, sentmsg;
     time_t create_time = 0;
 
-    message2send_s( u64 utag, int fid, const asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
+    message2send_s( u64 utag, fid_s fid, const std::asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
     {
         LIST_ADD( this, first, last, prev, next );
 
+        ASSERT(fid.is_normal() || fid.is_confa());
+
         if (-10000 == imid)
         {
-            msg.set(CONSTASTR("\1")).append_as_num<u64>(create_time).append(CONSTASTR("\2"));
+            msg.set(STD_ASTR("\1")).append_as_num<u64>(create_time).append(STD_ASTR("\2"));
             mid = 0;
         }
 
@@ -674,13 +815,13 @@ struct message2send_s
                 // it is not good
                 // so, force clamp such long long word
 
-                asptr mclamp = utf8clamp( msg, TOX_MAX_MESSAGE_LENGTH-3 );
+                std::asptr mclamp = utf8clamp( msg, TOX_MAX_MESSAGE_LENGTH-3 );
                 e = mclamp.l;
             }
 
             {
                 if ((utf8.l - e - timepreffix) > 0) new message2send_s(utag, fid, utf8.skip(e - timepreffix), create_time, -1); // not memory leak
-                msg.set_length(e).append(CONSTASTR("\1\1")); // double tabs indicates that it is multi-part message
+                msg.set_length(e).append(STD_ASTR("\1\1")); // double tabs indicates that it is multi-part message
             }
         }
     }
@@ -713,7 +854,7 @@ struct message2send_s
     }
 
 
-    static void read( const asptr &m )
+    static void read( const std::asptr &m )
     {
         u64 dtag = 0;
         for (message2send_s *x = first; x; x = x->next)
@@ -728,7 +869,7 @@ struct message2send_s
         read( dtag );
     }
 
-    static void read(int fid, int receipt)
+    static void read(fid_s fid, int receipt)
     {
         u64 dtag = 0;
         for (message2send_s *x = first; x; x = x->next)
@@ -746,7 +887,7 @@ struct message2send_s
 
     static void tick(int ct)
     {
-        std::vector<int> disabled;
+        std::vector<fid_s> disabled;
 
         for(message2send_s *x = first; x; x = x->next)
         {
@@ -799,24 +940,24 @@ struct message_part_s
     message_part_s *prev;
     message_part_s *next;
     u64 create_time;
-    i32 cid;
-    str_c msgb;
+    contact_id_s cid;
+    std::string msgb;
     int send2host_time = 0;
 
-    message_part_s(int cid, u64 create_time_, const asptr &msgbody, bool asap): cid(cid), create_time(create_time_)
+    message_part_s(contact_id_s cid, u64 create_time_, const std::asptr &msgbody, bool asap): cid(cid), create_time(create_time_)
     {
         LIST_ADD(this, first, last, prev, next);
         send2host_time = time_ms() + (asap ? 0 : 5000);
-        msgb = extract_create_time(create_time, msgbody, cid);
+        msgb.set( extract_create_time(create_time, msgbody, cid) );
     }
     ~message_part_s()
     {
         LIST_DEL(this, first, last, prev, next);
     }
 
-    static asptr extract_create_time( u64 &t, const asptr &msgbody, int cid );
+    static std::asptr extract_create_time( u64 &t, const std::asptr &msgbody, contact_id_s cid );
 
-    static void msg(int cid, u64 create_time, const char *msgbody, int len)
+    static void msg(contact_id_s cid, u64 create_time, const char *msgbody, int len)
     {
         if ( len > TOX_MAX_MESSAGE_LENGTH/2 && msgbody[len-1] == '\1' && msgbody[len-2] == '\1' )
         {
@@ -826,14 +967,12 @@ struct message_part_s
             {
                 if (x->cid == cid)
                 {
-                    x->msgb.append_char(' ').append(asptr(msgbody, len-2));
+                    x->msgb.append_char(' ').append(std::asptr(msgbody, len-2));
                     x->send2host_time = time_ms() + 5000; // wait next part 5 second
-                    hf->save();
                     return;
                 }
             }
-            new message_part_s(cid, create_time, asptr(msgbody, len-2), false); // not memory leak
-            hf->save();
+            new message_part_s(cid, create_time, std::asptr(msgbody, len-2), false); // not memory leak
         
         } else
         {
@@ -843,15 +982,14 @@ struct message_part_s
                 {
                     // looks like last part of multi-part message
                     // concatenate and send it to host
-                    x->msgb.append_char(' ').append(asptr(msgbody, len));
-                    hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
+                    x->msgb.append_char(' ').append(std::asptr(msgbody, len));
+                    hf->message(MT_MESSAGE, contact_id_s(), x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
                     delete x;
-                    hf->save();
                     return;
                 }
             }
-            asptr m = extract_create_time(create_time, asptr(msgbody, len), cid);
-            hf->message(MT_MESSAGE, 0, cid, create_time, m.s, m.l);
+            std::asptr m = extract_create_time(create_time, std::asptr(msgbody, len), cid);
+            hf->message(MT_MESSAGE, contact_id_s(), cid, create_time, m.s, m.l);
         }
     }
 
@@ -861,9 +999,8 @@ struct message_part_s
         {
             if ( (ct - x->send2host_time) > 0 )
             {
-                hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
+                hf->message(MT_MESSAGE, contact_id_s(), x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
                 delete x;
-                hf->save();
                 break;
             }
         }
@@ -884,7 +1021,7 @@ struct file_transfer_s
     virtual void finished() {}
     virtual void resume() {}
 
-    u32 fid;
+    fid_s fid;
     byte fileid[TOX_FILE_ID_LENGTH];
 
     u64 fsz;
@@ -903,20 +1040,20 @@ struct incoming_file_s : public file_transfer_s
     
     u64 chunk_offset = 0;
     u64 next_recv_offset = 0;
-    std::vector<byte> chunk;
+    byte_buffer chunk;
 
     int last_time_portion_flush = time_ms();
 
-    str_c fn;
+    std::string fn;
     TOX_FILE_KIND kind;
 
-    incoming_file_s( u32 fid_, u32 fnn_, TOX_FILE_KIND kind, u64 fsz_, const asptr &fn ):fn(fn), kind(kind)
+    incoming_file_s(fid_s fid_, u32 fnn_, TOX_FILE_KIND kind, u64 fsz_, const std::string &fn ):fn(fn), kind(kind)
     {
         fsz = fsz_;
         fid = fid_;
         fnn = fnn_;
 
-        tox_file_get_file_id( tox, fid, fnn, fileid, nullptr );
+        tox_file_get_file_id( tox, fid.normal(), fnn, fileid, nullptr );
         utag = gen_file_utag();
 
         LIST_ADD(this, first, last, prev, next);
@@ -1004,7 +1141,7 @@ struct incoming_file_s : public file_transfer_s
 struct incoming_avatar_s : public incoming_file_s
 {
     int droptime;
-    incoming_avatar_s(u32 fid_, u32 fnn_, u64 fsz_, const asptr &fn) : incoming_file_s( fid_, fnn_, TOX_FILE_KIND_AVATAR, fsz_, fn )
+    incoming_avatar_s(fid_s fid_, u32 fnn_, u64 fsz_, const std::string &fn) : incoming_file_s( fid_, fnn_, TOX_FILE_KIND_AVATAR, fsz_, fn )
     {
         droptime = time_ms() + 30000;
         chunk.resize((size_t)fsz_);
@@ -1029,7 +1166,7 @@ void incoming_file_s::tick(int ct)
     {
         incoming_file_s *ff = f->next;
 
-        if (TOX_CONNECTION_NONE == tox_friend_get_connection_status(tox,f->fid,nullptr))
+        if (TOX_CONNECTION_NONE == tox_friend_get_connection_status(tox,f->fid.normal(),nullptr))
         {
             // peer disconnected - transfer break
             if (TOX_FILE_KIND_AVATAR != f->kind) hf->file_control(f->utag, FIC_DISCONNECT);
@@ -1052,7 +1189,7 @@ struct transmitting_data_s : public file_transfer_s
     static transmitting_data_s *last;
     transmitting_data_s *prev;
     transmitting_data_s *next;
-    str_c fn;
+    std::string fn;
 
     u64 next_offset_send = 0;
     u64 req_offset = 0;
@@ -1074,7 +1211,7 @@ struct transmitting_data_s : public file_transfer_s
     bool is_paused = false;
     bool is_finished = false;
 
-    transmitting_data_s(u32 fid_, u32 fnn_, u64 utag_, const byte * fileid_, u64 fsz_, const asptr &fn) :fn(fn)
+    transmitting_data_s(fid_s fid_, u32 fnn_, u64 utag_, const byte * fileid_, u64 fsz_, const std::string &fn) :fn(fn)
     {
         fsz = fsz_;
         fid = fid_;
@@ -1148,6 +1285,8 @@ struct transmitting_data_s : public file_transfer_s
 
 struct transmitting_file_s : public transmitting_data_s
 {
+    typedef transmitting_data_s super;
+
     struct app_req_s
     {
         const void * buf = nullptr;
@@ -1182,24 +1321,24 @@ struct transmitting_file_s : public transmitting_data_s
     app_req_s rch[2];
     bool request = false;
 
-    transmitting_file_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
+    transmitting_file_s(fid_s fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const std::string &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
     {
     }
 
     /*virtual*/ void finished() override
     {
         hf->file_control(utag, FIC_DONE);
-        __super::finished();
+        super::finished();
     }
     /*virtual*/ void kill() override
     {
         hf->file_control(utag, FIC_BREAK);
-        __super::kill();
+        super::kill();
     }
 
     /*virtual*/ void pause() override
     {
-        __super::pause();
+        super::pause();
         hf->file_control(utag, FIC_PAUSE);
     }
 
@@ -1291,7 +1430,7 @@ struct transmitting_file_s : public transmitting_data_s
                 // safely send
 
                 TOX_ERR_FILE_SEND_CHUNK er;
-                tox_file_send_chunk(tox, fid, fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), req_max_size, &er);
+                tox_file_send_chunk(tox, fid.normal(), fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), req_max_size, &er);
                 if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
                     return; // pipe overload. do nothing now
 
@@ -1339,7 +1478,7 @@ struct transmitting_file_s : public transmitting_data_s
                 ASSERT((next_offset_send + chunk0part) == fsz);
 
                 TOX_ERR_FILE_SEND_CHUNK er;
-                tox_file_send_chunk(tox, fid, fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), chunk0part, &er);
+                tox_file_send_chunk(tox, fid.normal(), fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), chunk0part, &er);
                 if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
                     return; // pipe overload. do nothing now
 
@@ -1370,7 +1509,7 @@ struct transmitting_file_s : public transmitting_data_s
             memcpy( temp + chunk0part, (const uint8_t *)rch[1].buf, chunk1part);
             
             TOX_ERR_FILE_SEND_CHUNK er;
-            tox_file_send_chunk(tox, fid, fnn, next_offset_send, temp, chunk0part + chunk1part, &er);
+            tox_file_send_chunk(tox, fid.normal(), fnn, next_offset_send, temp, chunk0part + chunk1part, &er);
             if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
                 return; // pipe overload. do nothing now
             
@@ -1386,7 +1525,7 @@ struct transmitting_file_s : public transmitting_data_s
 
     /*virtual*/ void ontick() override
     {
-        if (tox_friend_get_connection_status(tox,fid,nullptr) == TOX_CONNECTION_NONE)
+        if (tox_friend_get_connection_status(tox,fid.normal(),nullptr) == TOX_CONNECTION_NONE)
         {
             // peer disconnect - transfer broken
             hf->file_control(utag, FIC_DISCONNECT);
@@ -1404,10 +1543,12 @@ struct transmitting_file_s : public transmitting_data_s
 
 struct transmitting_avatar_s : public transmitting_data_s
 {
+    typedef transmitting_data_s super;
     int avatag = -1;
 
-    transmitting_avatar_s(u32 fid_, u32 fnn_, const asptr &fn) : transmitting_data_s(fid_, fnn_, gen_file_utag(), avahash, gavatar.size(), fn)
+    transmitting_avatar_s(fid_s fid_, u32 fnn_, const std::string &fn) : transmitting_data_s(fid_, fnn_, gen_file_utag(), avahash, gavatar.size(), fn)
     {
+        ASSERT(fid_.is_normal());
         avatag = gavatag;
     }
     virtual void ontick() override
@@ -1415,12 +1556,12 @@ struct transmitting_avatar_s : public transmitting_data_s
         if (avatag != gavatag)
         {
             // avatar changed while it sending
-            tox_file_control(tox, fid, fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
+            tox_file_control(tox, fid.normal(), fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
             delete this;
         } else
         {
             byte id[TOX_FILE_ID_LENGTH];
-            if (!tox_file_get_file_id(tox, fid, fnn, id, nullptr))
+            if (!tox_file_get_file_id(tox, fid.normal(), fnn, id, nullptr))
             {
                 // transfer broken
                 delete this;
@@ -1447,7 +1588,7 @@ struct transmitting_avatar_s : public transmitting_data_s
             if (sb > req_max_size) sb = req_max_size;
 
             TOX_ERR_FILE_SEND_CHUNK er;
-            tox_file_send_chunk(tox, fid, fnn, next_offset_send, gavatar.data() + next_offset_send, sb, &er);
+            tox_file_send_chunk(tox, fid.normal(), fnn, next_offset_send, gavatar.data() + next_offset_send, sb, &er);
             if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
                 return;
             next_offset_send += sb;
@@ -1469,11 +1610,11 @@ struct discoverer_s
     discoverer_s *next;
     
     int timeout_discover = 0;
-    str_c invmsg;
+    std::string invmsg;
 
     struct syncdata_s
     {
-        str_c ids;
+        std::string ids;
         tox_address_c pubid;
 
         bool waiting_thread_start = true;
@@ -1483,9 +1624,9 @@ struct discoverer_s
 
     spinlock::syncvar< syncdata_s > sync;
 
-    discoverer_s(const asptr &ids, const asptr &invmsg) :invmsg(invmsg)
+    discoverer_s(const std::asptr &ids, const std::asptr &invmsg) :invmsg(invmsg)
     {
-        sync.lock_write()().ids = ids;
+        sync.lock_write()().ids.set( ids );
         timeout_discover = time_ms() + 30000; // 30 seconds should be enough
         LIST_ADD(this, first, last, prev, next);
         CloseHandle(CreateThread(nullptr, 0, discover_thread, this, 0, nullptr));
@@ -1535,7 +1676,7 @@ struct discoverer_s
 
     static size_t write_callback( char *ptr, size_t size, size_t nmemb, void *userdata )
     {
-        std::vector<byte> *resultad = ( std::vector<byte> * )userdata;
+        byte_buffer *resultad = (byte_buffer * )userdata;
         size_t s = resultad->size();
 
         resultad->resize( size * nmemb + s );
@@ -1543,9 +1684,9 @@ struct discoverer_s
         return size * nmemb;
     }
 
-    str_c json_request( const str_c&url, const str_c&json )
+    std::string json_request( const std::string&url, const std::string&json )
     {
-        std::vector<byte> d;
+        byte_buffer d;
         CURL *curl = curl_easy_init();
         set_common_curl_options(curl);
         set_proxy_curl(curl);
@@ -1566,28 +1707,28 @@ struct discoverer_s
 
         curl_easy_cleanup( curl );
 
-        return str_c( asptr( (const char *)d.data(), static_cast<int>(d.size()) ) );
+        return std::string((const char *)d.data(), d.size());
     }
 
-    str_c try_resolve_via_https_api( const str_c&addr )
+    std::string try_resolve_via_https_api( const std::string&addr )
     {
-        str_c address = addr;
+        std::string address = addr;
         address.trim();
-        address.replace_all( CONSTASTR( "\\" ), CONSTASTR( "\\\\" ) );
-        address.replace_all( CONSTASTR( "\"" ), CONSTASTR( "\\\"" ) );
+        address.replace_all( STD_ASTR( "\\" ), STD_ASTR( "\\\\" ) );
+        address.replace_all( STD_ASTR( "\"" ), STD_ASTR( "\\\"" ) );
 
-        str_c json( CONSTASTR( "{\"action\":3,\"name\":\"" ), address );
-        json.append( CONSTASTR( "\"}" ) );
+        std::string json( STD_ASTR( "{\"action\":3,\"name\":\"" ), address );
+        json.append( STD_ASTR( "\"}" ) );
 
         int uho = address.find_pos( '@' );
 
-        str_c apiUrl( CONSTASTR( "https://" ), address.substr( uho+1 ) );
-        apiUrl.append( CONSTASTR("/api"));
+        std::string apiUrl( STD_ASTR( "https://" ), address.substr( uho+1 ) );
+        apiUrl.append( STD_ASTR("/api"));
 
-        str_c response = json_request( apiUrl, json );
+        std::string response = json_request( apiUrl, json );
         if (!response.is_empty())
         {
-            int idi = response.find_pos( CONSTASTR( "tox_id\"" ) );
+            int idi = response.find_pos( STD_ASTR( "tox_id\"" ) );
             if ( idi > 0 )
             {
                 idi = response.find_pos( idi + 7, '\"' );
@@ -1603,12 +1744,12 @@ struct discoverer_s
                 }
             }
         }
-        return str_c();
+        return std::string();
     }
 
     void discover_thread()
     {
-        str_c ids;
+        std::string ids;
         auto w = sync.lock_write();
         if (w().shutdown_discover) return;
         w().waiting_thread_start = false;
@@ -1617,7 +1758,7 @@ struct discoverer_s
         ids.setcopy( w().ids );
         w.unlock();
 
-        str_c pubid = try_resolve_via_https_api( ids );
+        std::string pubid = try_resolve_via_https_api( ids );
         if (!pubid.is_empty())
         {
             sync.lock_write()( ).pubid.setup( pubid );
@@ -1625,7 +1766,7 @@ struct discoverer_s
         else
         {
 
-            str_c servname = ids.substr( ids.find_pos( '@' ) + 1 );
+            std::string servname = ids.substr( ids.find_pos( '@' ) + 1 );
 
             bool pinfound = false;
             for ( tox3dns_s& pin : pinnedservs )
@@ -1635,7 +1776,7 @@ struct discoverer_s
 
                 if ( servname.equals( pin.addr ) )
                 {
-                    str_c s = pin.query3( ids );
+                    std::string s = pin.query3( ids );
                     sync.lock_write()( ).pubid.setup( s );
                     pinfound = true;
                     break;
@@ -1645,7 +1786,7 @@ struct discoverer_s
             if ( !pinfound )
             {
                 pinnedservs.emplace_back( servname );
-                str_c s = pinnedservs.back().query3( ids );
+                std::string s = pinnedservs.back().query3( ids );
                 if ( !pinnedservs.back().key_ok )
                     pinnedservs.erase( --pinnedservs.end() ); // kick non tox3 servers from list
 
@@ -1700,6 +1841,7 @@ enum idgen_e
 };
 
 static void run_senders();
+static fid_s find_tox_fid(const public_key_s &id);
 
 enum contact_caps_e
 {
@@ -1726,8 +1868,8 @@ struct contact_descriptor_s
     contact_descriptor_s *prev_call = nullptr;
 
 private:
-    i32 id = 0;
-    i32 fid; 
+    contact_id_s id;
+    fid_s fid;
 public:
 
     struct call_in_progress_s
@@ -1815,7 +1957,7 @@ public:
                 if (decoder) vpx_codec_destroy(&v_decoder);
                 enc_cfg.g_w = 0;
                 decoder = false;
-                sstr_t<-128> pstr("-initvdecoder/0/0/vp8");
+                std::sstr_t<-128> pstr("-initvdecoder/0/0/vp8");
                 *(byte *)pstr.str() = PACKETID_EXTENSION;
                 tox_friend_send_lossless_packet(tox, fid, (const byte *)pstr.cstr(), pstr.get_length(), nullptr);
                 return;
@@ -1823,13 +1965,13 @@ public:
 
             if (enc_cfg.g_w != width || enc_cfg.g_h != height || encoder_vp8 == use_vp9_codec || vbitrate != video_bitrate)
             {
-                sstr_t<-128> pstr("-initvdecoder/");
+                std::sstr_t<-128> pstr("-initvdecoder/");
                 *(byte *)pstr.str() = PACKETID_EXTENSION;
                 pstr.append_as_uint( width ).append_char('/').append_as_uint( height ).append_char('/');
                 if (use_vp9_codec)
-                    pstr.append( CONSTASTR("vp9") );
+                    pstr.append( STD_ASTR("vp9") );
                 else
-                    pstr.append(CONSTASTR("vp8"));
+                    pstr.append(STD_ASTR("vp8"));
 
                 tox_friend_send_lossless_packet(tox, fid, (const byte *)pstr.cstr(), pstr.get_length(), nullptr);
 
@@ -2002,7 +2144,7 @@ public:
 
             byte hash[crypto_generichash_BYTES_MIN];
             crypto_generichash( hash, sizeof( hash ), (const byte *)framedata, framesize, nullptr, 0 );
-            str_c s(CONSTASTR("send frame: "));
+            std::string s(STD_ASTR("send frame: "));
             s.append_as_int( sf->frame );
             s.append_char( ' ' );
             s.append_as_num( framesize );
@@ -2022,7 +2164,7 @@ public:
         }
 
         int current_recv_frame = -1;
-        std::vector<byte> framebody;
+        byte_buffer framebody;
 
         void video_packet( const byte *d, aint dsz )
         {
@@ -2063,7 +2205,7 @@ public:
 
             byte hash[crypto_generichash_BYTES_MIN];
             crypto_generichash( hash, sizeof( hash ), framebody.data(), framebody.size(), nullptr, 0 );
-            str_c s( CONSTASTR( "recv frame: " ) );
+            std::string s( STD_ASTR( "recv frame: " ) );
             s.append_as_int( current_recv_frame );
             s.append_char( ' ' );
             s.append_as_num( framebody.size() );
@@ -2081,7 +2223,7 @@ public:
                 decoder = true;
             }
 
-            if (VPX_CODEC_OK == vpx_codec_decode(&v_decoder, framebody.data(), (int)framebody.size(), nullptr, 0))
+            if (VPX_CODEC_OK == vpx_codec_decode(&v_decoder, framebody.data(), static_cast<unsigned int>(framebody.size()), nullptr, 0))
             {
                 vpx_codec_iter_t iter = nullptr;
                 vpx_image_t *dest = vpx_codec_get_frame(&v_decoder, &iter);
@@ -2090,16 +2232,16 @@ public:
                 for (; dest; dest = vpx_codec_get_frame(&v_decoder, &iter))
                 {
                     media_data_s mdt;
-                    mdt.vfmt.width = (unsigned short)dest->d_w;
-                    mdt.vfmt.height = (unsigned short)dest->d_h;
-                    mdt.vfmt.pitch[0] = (unsigned short)dest->stride[0];
-                    mdt.vfmt.pitch[1] = (unsigned short)dest->stride[1];
-                    mdt.vfmt.pitch[2] = (unsigned short)dest->stride[2];
+                    mdt.vfmt.width = static_cast<unsigned short>(dest->d_w);
+                    mdt.vfmt.height = static_cast<unsigned short>(dest->d_h);
+                    mdt.vfmt.pitch[0] = static_cast<unsigned short>(dest->stride[0]);
+                    mdt.vfmt.pitch[1] = static_cast<unsigned short>(dest->stride[1]);
+                    mdt.vfmt.pitch[2] = static_cast<unsigned short>(dest->stride[2]);
                     mdt.vfmt.fmt = VFMT_I420;
                     mdt.video_frame[0] = dest->planes[0];
                     mdt.video_frame[1] = dest->planes[1];
                     mdt.video_frame[2] = dest->planes[2];
-                    hf->av_data(0, desc->get_id(), &mdt);
+                    hf->av_data(contact_id_s(), desc->get_id(true), &mdt);
 
                     vpx_img_free(dest);
                 }
@@ -2148,7 +2290,7 @@ public:
             w.unlock();
 
             if (!is_conference())
-                hf->message(MT_CALL_STOP, 0, get_id(), now(), nullptr, 0);
+                hf->message(MT_CALL_STOP, contact_id_s(), get_id(true), now(), nullptr, 0);
         }
     }
 
@@ -2156,8 +2298,8 @@ public:
     i32 avatar_tag = 0; // tag of contact's avatar
     int avatar_recv_fnn = -1; // receiving file number
     int avatag_self = -1; // tag of self avatar, if not equal to gavatag, then should be transfered (gavatag increased every time self avatar changed)
-    std::vector<byte> avatar; // contact's avatar itself
-    byte avatar_hash[ TOX_HASH_LENGTH ] = {};
+    byte_buffer avatar; // contact's avatar itself
+    byte avatar_hash[TOX_HASH_LENGTH] = {};
 
     contact_state_e state = CS_ROTTEN;
     tox_address_c address;
@@ -2165,23 +2307,22 @@ public:
     static const int F_IS_ONLINE = 1;
     static const int F_AVASEND = 2;
     static const int F_AVARECIVED = 4;
-    static const int F_FIDVALID = 8;
-    static const int F_DETAILS_SENT = 16;
+    static const int F_DETAILS_SENT = 8;
 
     int flags = 0;
     int ccc_caps = 0;
 
-    str_c dnsname;
-    str_c clientname;
-    str_c bbcodes_supported;
+    std::string dnsname;
+    std::string clientname;
+    std::string bbcodes_supported;
+    std::string invitemsg;
 
-    contact_descriptor_s(idgen_e init_new_id, int fid = -1);
+    contact_descriptor_s(idgen_e init_new_id, fid_s fid = fid_s());
     ~contact_descriptor_s()
     {
         LIST_DEL(this, first_desc, last_desc, prev, next);
         ASSERT(cip == nullptr);
     }
-    static int find_free_id(bool conference);
     static contact_descriptor_s *find( const tox_address_c &addr )
     {
         for(contact_descriptor_s *f = first_desc; f; f = f->next)
@@ -2220,8 +2361,8 @@ public:
         avatag_self = gavatag - 1;
         avatar_recv_fnn = -1;
 
-        if (self_typing_contact && self_typing_contact == get_id())
-            self_typing_contact = 0;
+        if (!self_typing_contact.is_empty() && self_typing_contact == get_id(false))
+            self_typing_contact.clear();
 
         for (auto it = other_typing.begin(); it != other_typing.end(); ++it)
         {
@@ -2239,43 +2380,84 @@ public:
         }
     }
 
-    void prepare_details( str_c &tmps, contact_data_s &cd ) const
+    fid_s restore_tox_friend()
+    {
+        if (!tox)
+            return fid_s();
+
+        const public_key_s &pk = address.as_public_key();
+        fid_s rfid = find_tox_fid(pk);
+
+        if (rfid.is_normal())
+            return rfid;
+
+        if (state != CS_INVITE_RECEIVE)
+        {
+            TOX_ERR_FRIEND_ADD er;
+            if (state != CS_INVITE_SEND)
+            {
+                rfid.n = tox_friend_add_norequest(tox, address.as_public_key().key, &er);
+                if (TOX_ERR_FRIEND_ADD_OK == er)
+                {
+                    rfid.type = fid_s::NORMAL;
+                    state = CS_OFFLINE;
+                    return rfid;
+                }
+            }
+            else
+            {
+                ASSERT(address.get(tox_address_c::TAT_FULL_ADDRESS) != nullptr);
+                if (invitemsg.is_empty())
+                    invitemsg.set(STD_ASTR("Please add"));
+                rfid.n = tox_friend_add(tox, address.get(tox_address_c::TAT_FULL_ADDRESS), (const uint8_t *)invitemsg.cstr(), invitemsg.get_length(), &er);
+                if (TOX_ERR_FRIEND_ADD_OK == er)
+                {
+                    rfid.type = fid_s::NORMAL;
+                    return rfid;
+                }
+            }
+        }
+
+        return fid_s();
+    }
+
+    void prepare_details(std::string &tmps, contact_data_s &cd ) const
     {
         if (!ISFLAG(flags, F_DETAILS_SENT))
         {
             if (is_conference())
             {
                 bool dummy;
-                str_c idstr = get_details_pubid( dummy );
-                tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_UNIQUE_ID "\":\"" ) );
+                std::string idstr = get_details_pubid( dummy );
+                tmps.set( STD_ASTR( "{\"" CDET_PUBLIC_UNIQUE_ID "\":\"" ) );
                 tmps.append( idstr ).append_char( '\"' );
 
             } else
             {
                 bool zero_nospam = false;
-                str_c idstr = get_details_pubid( zero_nospam );
+                std::string idstr = get_details_pubid( zero_nospam );
                 if (zero_nospam)
-                    tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID_BAD "\":\"" ) );
+                    tmps.set( STD_ASTR( "{\"" CDET_PUBLIC_ID_BAD "\":\"" ) );
                 else
-                    tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
+                    tmps.set( STD_ASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
                 tmps.append( idstr ).append_char( '\"' );
 
 
                 if (const char *cinfo = get_conn_info( tox, address.as_public_key().key ))
-                    tmps.append( CONSTASTR( ",\"" CDET_CONN_INFO "\":\"" ) ).append( cinfo ).append_char( '\"' );
+                    tmps.append( STD_ASTR( ",\"" CDET_CONN_INFO "\":\"" ) ).append( std::asptr(cinfo) ).append_char( '\"' );
 
             }
 
             if ( !dnsname.is_empty() )
-                tmps.append( CONSTASTR(",\"" CDET_DNSNAME "\":\"")).append(dnsname).append_char( '\"' );
+                tmps.append( STD_ASTR(",\"" CDET_DNSNAME "\":\"")).append(dnsname).append_char( '\"' );
 
-            tmps.append( CONSTASTR(",\"" CDET_CLIENT_CAPS "\":["));
-            for (token<char> bbsupported(bbcodes_supported, ','); bbsupported; ++bbsupported)
-                tmps.append(CONSTASTR("\"bb")).append(*bbsupported).append(CONSTASTR("\","));
-            tmps.append( CONSTASTR( "\"tox\"]" ) );
+            tmps.append( STD_ASTR(",\"" CDET_CLIENT_CAPS "\":["));
+            for (std::token<char> bbsupported(bbcodes_supported, ','); bbsupported; ++bbsupported)
+                tmps.append(STD_ASTR("\"bb")).append(bbsupported->as_sptr()).append(STD_ASTR("\","));
+            tmps.append( STD_ASTR( "\"tox\"]" ) );
 
             if (!is_conference())
-                tmps.append( CONSTASTR( ",\"" CDET_CLIENT "\":\"" ) ).append( clientname ).append_char( '\"' );
+                tmps.append( STD_ASTR( ",\"" CDET_CLIENT "\":\"" ) ).append( clientname ).append_char( '\"' );
 
             tmps.append_char( '}' );
 
@@ -2289,9 +2471,9 @@ public:
 
     }
 
-    str_c get_details_pubid( bool &zero_nospam ) const
+    std::string get_details_pubid( bool &zero_nospam ) const
     {
-        str_c s;
+        std::string s;
         if ( is_conference() )
         {
             if (const byte *bid = address.get( tox_address_c::TAT_CONFERENCE_ID ))
@@ -2330,27 +2512,36 @@ public:
         return s;
     }
 
-    bool is_fid_ok() const { return ISFLAG(flags, F_FIDVALID); }
-    int get_fidgnum() const { ASSERT(is_fid_ok()); return fid; }
-    int get_fid() const { ASSERT(is_fid_ok()); return fid < CONFERENCE_ID_OFFSET ? fid : -1;};
-    int get_gnum() const { ASSERT(is_fid_ok()); return fid >= CONFERENCE_ID_OFFSET ? (fid - CONFERENCE_ID_OFFSET) : -1;};
-    bool is_conference() const { ASSERT(is_fid_ok()); return fid >= CONFERENCE_ID_OFFSET; }
+    bool is_conference() const { return fid.is_confa(); }
+    fid_s get_fid() const { return fid; }
 
 
-    i32 get_id() const {return id;};
-    void set_fid(i32 fid_, bool fid_valid);
-    void set_id(i32 id_);
+    contact_id_s get_id( bool init_flags ) const
+    {
+        if (init_flags)
+        {
+            contact_id_s x = id;
+            if (is_conference())
+                x.audio = is_audio_conference();
+            if (CS_UNKNOWN == state)
+                x.confmember = true, x.unknown = true;
+            return x;
+        }
+        return id;
+    };
+    void set_fid(fid_s fid_);
+    void set_id(contact_id_s id_);
 
     void send_viewsize(int w, int h)
     {
-        if (ccc_caps & CCC_VIEW_SIZE)
+        if (0 != (ccc_caps & CCC_VIEW_SIZE))
         {
             ASSERT(w >= 0 && h >= 0);
 
-            sstr_t<-128> viewinfo("-viewsize/");
+            std::sstr_t<-128> viewinfo("-viewsize/");
             viewinfo.append_as_int(w).append_char('/').append_as_int(h);
             *(byte *)viewinfo.str() = PACKETID_EXTENSION;
-            tox_friend_send_lossless_packet(tox, fid, (const byte *)viewinfo.cstr(), viewinfo.get_length(), nullptr);
+            tox_friend_send_lossless_packet(tox, fid.normal(), (const byte *)viewinfo.cstr(), viewinfo.get_length(), nullptr);
         }
     }
 
@@ -2358,20 +2549,20 @@ public:
     void send_avatar()
     {
         if (!is_online()) return;
-        if ( state == CS_UNKNOWN ) return;
+        if (state == CS_UNKNOWN || !fid.is_normal()) return;
         if (ISFLAG(flags, F_AVASEND)) return;
         if (avatag_self == gavatag) return;
 
-        str_c fnc; fnc.append_as_hex( avahash, TOX_HASH_LENGTH ).append(CONSTASTR(".png"));
+        std::string fnc; fnc.append_as_hex( avahash, TOX_HASH_LENGTH ).append(STD_ASTR(".png"));
 
         TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
-        uint32_t tr = tox_file_send(tox, get_fid(), TOX_FILE_KIND_AVATAR, gavatar.size(), avahash, (const byte *)fnc.cstr(), (uint16_t)fnc.get_length(), &er);
+        uint32_t tr = tox_file_send(tox, fid.normal(), TOX_FILE_KIND_AVATAR, gavatar.size(), avahash, (const byte *)fnc.cstr(), (uint16_t)fnc.get_length(), &er);
         if (er != TOX_ERR_FILE_SEND_OK)
             return;
 
         SETFLAG(flags, F_AVASEND);
 
-        new transmitting_avatar_s(get_fid(), tr, fnc); // not memleak
+        new transmitting_avatar_s(fid, tr, fnc); // not memleak
 
     }
 
@@ -2380,22 +2571,23 @@ public:
         if (avatar_recv_fnn < 0)
         {
             if (ISFLAG(flags, F_AVARECIVED))
-                hf->avatar_data(get_id(),avatar_tag,avatar.data(), static_cast<int>(avatar.size()));
+                hf->avatar_data(get_id(true),avatar_tag,avatar.data(), static_cast<int>(avatar.size()));
             return;
         }
-        tox_file_control(tox,get_fid(),avatar_recv_fnn, TOX_FILE_CONTROL_RESUME, nullptr);
+        tox_file_control(tox,get_fid().normal(),avatar_recv_fnn, TOX_FILE_CONTROL_RESUME, nullptr);
     }
 
     void set_conference_id();
-    void setup_members_and_send( contact_data_s &cdata );
+    void setup_members_and_send( contact_data_s &cd );
     void update_members();
 
-    void update_contact();
+    void prepare_protodata(contact_data_s &cd, savebuffer &cdata);
+    void update_contact(bool data);
 
     bool is_audio_conference() const
     {
-        if (!is_conference() || !is_fid_ok()) return false;
-        bool av = TOX_CONFERENCE_TYPE_AV == tox_conference_get_type(tox, get_gnum(), nullptr);
+        if (!is_conference()) return false;
+        bool av = TOX_CONFERENCE_TYPE_AV == tox_conference_get_type(tox, fid.confa(), nullptr);
         if (nullptr == cip && av)
         {
             const_cast<contact_descriptor_s *>(this)->prepare_call();
@@ -2408,17 +2600,18 @@ public:
 contact_descriptor_s *contact_descriptor_s::first_desc = nullptr;
 contact_descriptor_s *contact_descriptor_s::last_desc = nullptr;
 
-static std::unordered_map<int, contact_descriptor_s*> id2desc;
-static std::unordered_map<int, contact_descriptor_s*> fid2desc;
+static std::unordered_map<contact_id_s, contact_descriptor_s* > id2desc;
+static std::unordered_map<fid_s, contact_descriptor_s*> fid2desc;
 
-static contact_descriptor_s * find_descriptor(int cid);
-static contact_descriptor_s * find_restore_descriptor(int fid);
+static contact_descriptor_s * find_descriptor(contact_id_s cid);
+static contact_descriptor_s * find_descriptor(fid_s fid);
 
 static void cb_conference_invite( Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, const uint8_t * data, size_t length, void * );
 
 void contact_descriptor_s::set_conference_id()
 {
-    id = find_free_id( true );
+    int idi = hf->find_free_id();
+    id = contact_id_s(contact_id_s::CONFERENCE, idi);
     id2desc[ id ] = this;
 }
 
@@ -2433,19 +2626,19 @@ void delete_all_descs()
 void incoming_avatar_s::check_avatar(int ct)
 {
     bool die = true;
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid))
         die = desc->avatar_recv_fnn != (int)fnn;
     if (!die && (ct - droptime) > 0) die = true;
     if (die)
     {
-        tox_file_control(tox,fid,fnn,TOX_FILE_CONTROL_CANCEL, nullptr);
+        tox_file_control(tox,fid.normal(),fnn,TOX_FILE_CONTROL_CANCEL, nullptr);
         delete this;
     }
 }
 
 /*virtual*/ void incoming_avatar_s::finished()
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid))
     {
         byte hash[TOX_HASH_LENGTH];
         tox_hash(hash,chunk.data(), chunk.size());
@@ -2459,7 +2652,7 @@ void incoming_avatar_s::check_avatar(int ct)
         desc->avatar = std::move(chunk);
         SETFLAG(desc->flags, contact_descriptor_s::F_AVARECIVED);
 
-        hf->avatar_data(desc->get_id(), desc->avatar_tag, desc->avatar.data(), (int)desc->avatar.size());
+        hf->avatar_data(desc->get_id(true), desc->avatar_tag, desc->avatar.data(), static_cast<int>(desc->avatar.size()));
     }
 
     delete this;
@@ -2469,32 +2662,22 @@ void incoming_avatar_s::check_avatar(int ct)
 
 /*virtual*/ void transmitting_avatar_s::kill()
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid))
     {
         UNSETFLAG(desc->flags, contact_descriptor_s::F_AVASEND);
     }
-    __super::kill();
+    super::kill();
 }
 
 /*virtual*/ void transmitting_avatar_s::finished()
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid))
     {
         UNSETFLAG(desc->flags, contact_descriptor_s::F_AVASEND);
         desc->avatag_self = avatag;
     }
-    __super::finished();
+    super::finished();
 }
-
-
-/*
-static bool is_isotoxin(int fid)
-{
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-        return ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN);
-    return false;
-}
-*/
 
 void message2send_s::try_send(int time)
 {
@@ -2502,8 +2685,8 @@ void message2send_s::try_send(int time)
     {
         bool send_create_time = false;
         bool support_msg_chain = false;
-        if (fid < CONFERENCE_ID_OFFSET)
-            if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        if (fid.is_normal())
+            if (contact_descriptor_s *desc = find_descriptor(fid))
             {
                 if (!desc->is_online())
                 {
@@ -2514,49 +2697,48 @@ void message2send_s::try_send(int time)
                 support_msg_chain = ISFLAG(desc->ccc_caps, CCC_MSG_CHAIN);
             }
 
-        asptr m = msg.as_sptr();
+        std::asptr m = msg.as_sptr();
         if (!send_create_time)
         {
-            int skipchars = pstr_c(m).find_pos('\2');
+            int skipchars = std::pstr_c(m).find_pos('\2');
             if (skipchars >= 0)
                 m = m.skip(skipchars + 1);
         }
-        if (!support_msg_chain && pstr_c(m).ends(CONSTASTR("\1\1")))
+        if (!support_msg_chain && std::pstr_c(m).ends(STD_ASTR("\1\1")))
             m = m.trim(2);
 
         mid = 0;
-        if (fid >= CONFERENCE_ID_OFFSET)
+        if (fid.is_confa())
         {
             // to conference
-            if (tox_conference_send_message( tox, fid - CONFERENCE_ID_OFFSET, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr ))
+            if (tox_conference_send_message( tox, fid.confa(), TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr ))
             {
-                sentmsg = m;
+                sentmsg.set(m);
                 mid = 777777777;
             }
 
         } else
         {
-            mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr);
+            mid = tox_friend_send_message(tox, fid.normal(), TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr);
         }
         if (mid) send_timeout = time + 60000;
         next_try_time = time + 20000;
     }
 }
 
-contact_descriptor_s::contact_descriptor_s(idgen_e init_new_id, int fid_) :fid( fid_ )
+contact_descriptor_s::contact_descriptor_s(idgen_e init_new_id, fid_s fid_) :fid( fid_ )
 {
     LIST_ADD(this, first_desc, last_desc, prev, next);
 
-    if (init_new_id)
+    if (init_new_id != SKIP_ID_GEN)
     {
-        id = contact_descriptor_s::find_free_id(init_new_id == ID_CONFERENCE);
+        int idi = hf->find_free_id();
+        id = contact_id_s(init_new_id == ID_CONFERENCE ? contact_id_s::CONFERENCE : contact_id_s::CONTACT, idi);
         id2desc[id] = this;
         if (ID_UNKNOWN == init_new_id)
-            fid = -id; // just make fid negative and unique
+            fid.setup_new_unknown();
 
-
-        SETUPFLAG( flags, F_FIDVALID, (init_new_id == ID_CONTACT && fid >= 0) || (init_new_id == ID_CONFERENCE && fid >= CONFERENCE_ID_OFFSET) || (init_new_id == ID_UNKNOWN && fid < 0) );
-        if (ISFLAG( flags, F_FIDVALID))
+        if (fid.is_valid())
             fid2desc[fid] = this;
     }
 }
@@ -2570,121 +2752,162 @@ void contact_descriptor_s::die()
         delete cip;
         cip = nullptr;
         if (tox && !is_conference())
-            toxav_call_control(toxav, get_fid(), TOXAV_CALL_CONTROL_CANCEL, nullptr);
+            toxav_call_control(toxav, get_fid().normal(), TOXAV_CALL_CONTROL_CANCEL, nullptr);
     }
 
-    if (id != 0)
+    if (!id.is_self())
         id2desc.erase(id);
-    if (ISFLAG(flags, F_FIDVALID))
+    if (fid.is_valid())
         fid2desc.erase(fid);
     delete this;
 }
 
-int contact_descriptor_s::find_free_id( bool conference )
+void contact_descriptor_s::set_fid(fid_s fid_)
 {
-    if ( conference )
+    if (fid_ != fid)
     {
-        int id = -1;
-        for (; id2desc.find(id) != id2desc.end(); --id);
-        return id;
-    } else
-    {
-        int id = 1;
-        for (; id2desc.find(id) != id2desc.end(); ++id);
-        return id;
-    }
-}
-
-void contact_descriptor_s::set_fid(i32 fid_, bool fid_valid)
-{
-    if (ISFLAG(flags, F_FIDVALID) != fid_valid || (fid != fid_ && fid_valid))
-    {
-        if (ISFLAG(flags, F_FIDVALID))
+        if (fid.is_valid())
             fid2desc.erase(fid);
 
-        if (fid_valid)
-        {
-            fid = fid_;
+        fid = fid_;
+        if (fid.is_valid())
             fid2desc[fid] = this;
-            SETFLAG(flags, F_FIDVALID);
-        } else
-        {
-            UNSETFLAG(flags, F_FIDVALID);
-        }
     }
 }
-void contact_descriptor_s::set_id(i32 id_)
+void contact_descriptor_s::set_id(contact_id_s id_)
 {
     if (id != id_)
     {
         id2desc.erase(id);
         id = id_;
-        if (id != 0) id2desc[id] = this;
+        if (!id.is_self()) id2desc[id] = this;
     }
 }
 
-
+static int next_check_accept_nodes_time = 0;
+static int accepted_nodes = 0;
+static int zero_online_connect_cnt = 0;
 static bool online_flag = false;
-contact_state_e self_state; // cleared in handshake
-tox_address_c lastmypubid; // cleared in handshake
+static contact_state_e self_state; // cleared in handshake
+static tox_address_c lastmypubid; // cleared in handshake
+
+static bool zero_online()
+{
+    if (!tox) return false;
+    for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+        if (f->is_online())
+            return false;
+    return true;
+}
+
+static void reset_accepted_nodes()
+{
+    zero_online_connect_cnt = 0;
+    accepted_nodes = 0;
+    for (dht_node_s &n : nodes)
+        n.accepted = false;
+
+    next_check_accept_nodes_time = time_ms() + 60000;
+}
 
 void update_self()
 {
+    hf->connection_bits(CB_ENCRYPTED | CB_TRUSTED);
+
     if (tox)
         lastmypubid.setup_self_address();
     
     int m = 0;
 
-    str_c name( tox ? static_cast<int>(tox_self_get_name_size(tox)) : 0, false );
+    std::string name( tox ? static_cast<int>(tox_self_get_name_size(tox)) : 0, false );
     if (tox)
     {
         tox_self_get_name(tox,(byte*)name.str());
         m |= CDM_NAME;
     }
 
-    str_c statusmsg(tox ? static_cast<int>(tox_self_get_status_message_size(tox)) : 0, false);
+    std::string statusmsg(tox ? static_cast<int>(tox_self_get_status_message_size(tox)) : 0, false);
     if (tox)
     {
         tox_self_get_status_message(tox, (byte*)statusmsg.str());
         m |= CDM_STATUSMSG;
     }
 
-    contact_data_s self( 0, CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG | m );
+    contact_data_s self(contact_id_s::make_self(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG | m );
 
     //ADDRESS
-    sstr_t<TOX_ADDRESS_SIZE * 2 + 16> pubid;
+    std::sstr_t<TOX_ADDRESS_SIZE * 2 + 16> pubid;
     self.public_id_len = lastmypubid.as_str( pubid, tox_address_c::TAT_FULL_ADDRESS );
     self.public_id = pubid.cstr();
 
     self.name = name.cstr();
     self.name_len = name.get_length();
     self.status_message = statusmsg.cstr();
-    self.status_message_len = (int)statusmsg.get_length();
+    self.status_message_len = statusmsg.get_length();
     self.state = online_flag ? self_state : CS_OFFLINE;
     self.avatar_tag = 0;
     hf->update_contact(&self);
 }
 
-void contact_descriptor_s::update_contact()
+void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
+{
+    if ((!desc.get_fid().is_valid() && desc.state != CS_INVITE_RECEIVE)
+        || desc.state == contact_state_check || desc.state == CS_UNKNOWN || desc.state == CS_ROTTEN
+        || desc.is_conference() || desc.get_fid().is_unknown())
+        return; // tox protocol does not support unknown contacts... and no persistent conferences supported too
+
+    chunk mm(chunkm.b, chunk_descriptor);
+
+    chunk(chunkm.b, chunk_descriptor_id) << desc.get_id(false);
+    chunk(chunkm.b, chunk_descriptor_address) << desc.address.as_bytes();
+    chunk(chunkm.b, chunk_descriptor_dnsname) << desc.dnsname;
+    chunk(chunkm.b, chunk_descriptor_state) << static_cast<i32>(desc.state);
+    chunk(chunkm.b, chunk_descriptor_avatartag) << desc.avatar_tag;
+    if (desc.avatar_tag != 0)
+    {
+        chunk(chunkm.b, chunk_descriptor_avatarhash) << bytes(desc.avatar_hash, TOX_HASH_LENGTH);
+    }
+    chunk(chunkm.b, chunk_descriptor_invmsg) << desc.invitemsg;
+    
+}
+
+void operator<<(chunk &chunkm, const dht_node_s &n)
+{
+    chunk mm(chunkm.b, chunk_node);
+
+    chunk(chunkm.b, chunk_node_key) << n.pubid.as_bytes();
+    chunk(chunkm.b, chunk_node_push_count) << static_cast<i32>(n.push_count);
+    chunk(chunkm.b, chunk_node_accept_count) << static_cast<i32>(n.accept_count);
+}
+
+void contact_descriptor_s::prepare_protodata(contact_data_s &cd, savebuffer &cdata)
+{
+    chunk s(cdata);
+    s << *this;
+    cd.data = cdata.data();
+    cd.data_size = static_cast<int>(cdata.size());
+    cd.mask |= CDM_DATA;
+}
+
+void contact_descriptor_s::update_contact(bool data)
 {
     if ( state == contact_state_check )
         return;
 
     if (tox)
     {
-        contact_data_s cd( get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
+        contact_data_s cd( get_id(true), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
 
         TOX_ERR_FRIEND_QUERY err = TOX_ERR_FRIEND_QUERY_NULL;
-        TOX_USER_STATUS st = is_fid_ok() ? tox_friend_get_status(tox, get_fid(), &err) : (TOX_USER_STATUS)(-1);
-        if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
+        TOX_USER_STATUS st = fid.is_normal() ? tox_friend_get_status(tox, get_fid().normal(), &err) : static_cast<TOX_USER_STATUS>(-1);
+        if (err != TOX_ERR_FRIEND_QUERY_OK) st = static_cast<TOX_USER_STATUS>(-1);
 
-        sstr_t<max_t<TOX_PUBLIC_KEY_SIZE, TOX_CONFERENCE_UID_SIZE>::value * 2 + 16> pubid;
+        std::sstr_t<max_t<TOX_PUBLIC_KEY_SIZE, TOX_CONFERENCE_UID_SIZE>::value * 2 + 16> pubid;
 
         if (is_conference())
         {
             cd.public_id_len = address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-            cd.mask |= CDM_SPECIAL_BITS;
-            SETUPFLAG( cd.mask, CDF_AUDIO_CONFERENCE, is_audio_conference() );
+            cd.id.audio = is_audio_conference();
         }
         else
             cd.public_id_len = address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
@@ -2693,32 +2916,35 @@ void contact_descriptor_s::update_contact()
 
         cd.avatar_tag = avatar_tag;
 
-        str_c name, statusmsg;
+        std::string name, statusmsg;
 
-        if (st >= (TOX_USER_STATUS)0)
+        if (st >= static_cast<TOX_USER_STATUS>(0))
         {
             TOX_ERR_FRIEND_QUERY er;
-            name.set_length(static_cast<int>(tox_friend_get_name_size(tox, get_fid(), &er)));
-            tox_friend_get_name(tox, get_fid(), (byte*)name.str(), &er);
+            name.set_length(static_cast<int>(tox_friend_get_name_size(tox, fid.normal(), &er)));
+            tox_friend_get_name(tox, fid.normal(), (byte*)name.str(), &er);
             cd.name = name.cstr();
             cd.name_len = name.get_length();
 
-            statusmsg.set_length((int)tox_friend_get_status_message_size(tox, get_fid(), &er));
-            tox_friend_get_status_message(tox, get_fid(), (byte*)statusmsg.str(), &er);
+            statusmsg.set_length(static_cast<int>(tox_friend_get_status_message_size(tox, fid.normal(), &er)));
+            tox_friend_get_status_message(tox, fid.normal(), (byte*)statusmsg.str(), &er);
             cd.status_message = statusmsg.cstr();
             cd.status_message_len = statusmsg.get_length();
 
             cd.mask |= CDM_NAME | CDM_STATUSMSG;
         }
 
-        if (st < (TOX_USER_STATUS)0 || state != CS_OFFLINE)
+        if (st < static_cast<TOX_USER_STATUS>(0) || state != CS_OFFLINE)
         {
             cd.state = state;
             st = TOX_USER_STATUS_NONE;
 
         } else
         {
-            cd.state = tox_friend_get_connection_status(tox, get_fid(), nullptr) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
+            if (fid.is_normal())
+                cd.state = tox_friend_get_connection_status(tox, fid.normal(), nullptr) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
+            else
+                cd.state = CS_UNKNOWN;
         }
         
         switch (st)
@@ -2734,31 +2960,35 @@ void contact_descriptor_s::update_contact()
                 break;
         }
 
-        str_c details_json_string;
+        std::string details_json_string;
         prepare_details(details_json_string, cd);
+
+        savebuffer cdata;
+        if (data)
+            prepare_protodata(cd, cdata);
 
         hf->update_contact(&cd);
     } else
     {
-        contact_data_s cd(get_id(), CDM_STATE);
+        contact_data_s cd(get_id(true), CDM_STATE);
         cd.state = CS_OFFLINE;
         hf->update_contact(&cd);
     }
 }
 
-asptr message_part_s::extract_create_time(u64 &t, const asptr &msgbody, int /*cid*/)
+std::asptr message_part_s::extract_create_time(u64 &t, const std::asptr &msgbody, contact_id_s /*cid*/)
 {
     int offset = 0;
     if (msgbody.s[0] == '\1')
     {
-        offset = CHARz_findn(msgbody.s, '\2', msgbody.l);
+        offset = std::CHARz_findn(msgbody.s, '\2', msgbody.l);
         if (offset < 0)
         {
             offset = 1;
         }
         else {
             ++offset;
-            t = pstr_c(asptr(msgbody.s + 1, offset - 2)).as_num<u64>();
+            t = std::pstr_c(std::asptr(msgbody.s + 1, offset - 2)).as_num<u64>();
         }
     }
 
@@ -2766,7 +2996,7 @@ asptr message_part_s::extract_create_time(u64 &t, const asptr &msgbody, int /*ci
     return msgbody.skip(offset);
 }
 
-static contact_descriptor_s * find_descriptor(int cid)
+static contact_descriptor_s * find_descriptor(contact_id_s cid)
 {
     auto it = id2desc.find(cid);
     if (it != id2desc.end())
@@ -2774,43 +3004,47 @@ static contact_descriptor_s * find_descriptor(int cid)
     return nullptr;
 }
 
-static contact_descriptor_s * find_restore_descriptor(int fid)
+static contact_descriptor_s * find_descriptor(fid_s fid)
 {
     auto it = fid2desc.find(fid);
     if (it != fid2desc.end())
         return it->second;
+    return nullptr;
+}
 
-    if (fid >= CONFERENCE_ID_OFFSET)
-        return nullptr;
+static void restore_descriptor(int tox_fid)
+{
+    fid_s fid = fid_s::make_normal(tox_fid);
 
-    if (!tox || !tox_friend_exists(tox,fid)) return nullptr;
+    if (!tox || !tox_friend_exists(tox,fid.normal())) return;
+
+    tox_address_c a;
+    a.setup_public_key(fid);
+
+    if (contact_descriptor_s *desc = find_descriptor(fid))
+    {
+        ASSERT( a == desc->address );
+        return;
+    }
 
     contact_descriptor_s *desc = new contact_descriptor_s(ID_CONTACT, fid);
 
-    desc->address.setup_public_key(fid);
+    desc->address = a;
     desc->state = CS_OFFLINE;
 
     ASSERT( contact_descriptor_s::find(desc->address) == desc ); // check that such pubid is single
 
-    contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE );
+    contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE );
     
-    sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+    std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
     cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
     cd.public_id = pubid.cstr();
 
     cd.state = CS_OFFLINE;
     hf->update_contact(&cd);
-
-    return desc;
 }
 
-static void update_init_contact(int fid)
-{
-    if (contact_descriptor_s *desc = find_restore_descriptor( fid ))
-        desc->update_contact();
-}
-
-static int find_tox_unknown_contact(const public_key_s &id, const asptr &name)
+static fid_s find_tox_unknown_contact(const public_key_s &id, const std::asptr &name)
 {
     contact_descriptor_s *desc = contact_descriptor_s::find(id);
 
@@ -2824,35 +3058,35 @@ static int find_tox_unknown_contact(const public_key_s &id, const asptr &name)
 
     if (name.l)
     {
-        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_STATE | CDF_CONFERENCE_MEMBER | CDM_PUBID );
-        cdata.name = name.s;
-        cdata.name_len = name.l;
-        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
-        cdata.public_id = pubid.cstr();
-        cdata.state = CS_UNKNOWN;
+        contact_data_s cd(desc->get_id(true), CDM_NAME | CDM_STATE | CDM_PUBID );
+        cd.name = name.s;
+        cd.name_len = name.l;
+        std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cd.public_id = pubid.cstr();
+        cd.state = CS_UNKNOWN;
 
-        str_c details_json_string;
-        desc->prepare_details( details_json_string, cdata );
+        std::string details_json_string;
+        desc->prepare_details(details_json_string, cd);
 
-        hf->update_contact(&cdata);
+        hf->update_contact(&cd);
     }
     
-    return desc->get_fidgnum();
+    return desc->get_fid();
 }
 
-static int find_tox_fid(const public_key_s &id)
+static fid_s find_tox_fid(const public_key_s &id)
 {
     u32 r = tox_friend_by_public_key(tox, id.key, nullptr);
     if ( r == UINT32_MAX )
     {
         if ( contact_descriptor_s *desc = contact_descriptor_s::find( id ) )
-            if (desc->is_fid_ok())
+            if (desc->get_fid().is_valid())
                 return desc->get_fid();
 
-        return -1;
+        return fid_s();
     }
-    return r;
+    return fid_s::make_normal(r);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2867,32 +3101,37 @@ static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t len
     desc->address = pk;
     desc->state = CS_INVITE_RECEIVE;
 
-    int fid = find_tox_fid(pk);
-    desc->set_fid( fid, fid >= 0 );
+    fid_s fid = find_tox_fid(pk);
+    desc->set_fid( fid );
 
-    contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE );
+    contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE );
 
     //PUBKEY
-    sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+    std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
     cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
     cd.public_id = pubid.cstr();
-
     cd.state = desc->state;
+
+    savebuffer cdata;
+    desc->prepare_protodata(cd, cdata);
+
     hf->update_contact(&cd);
 
     time_t create_time = now();
 
-    hf->message(MT_FRIEND_REQUEST, 0, desc->get_id(), create_time, (const char *)msg, static_cast<int>(length));
+    hf->message(MT_FRIEND_REQUEST, contact_id_s(), desc->get_id(true), create_time, (const char *)msg, static_cast<int>(length));
     hf->save();
 }
 
-static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const byte *message, size_t length, void *)
+static void cb_friend_message(Tox *, uint32_t tox_fid, TOX_MESSAGE_TYPE type, const byte *message, size_t length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    fid_s fid = fid_s::make_normal(tox_fid);
+
+    if (contact_descriptor_s *desc = find_descriptor(fid))
     {
         for (auto it = other_typing.begin(); it != other_typing.end(); ++it)
         {
-            if (it->fid == (int)fid)
+            if (it->fid == fid)
             {
                 other_typing.erase(it);
                 break;
@@ -2900,7 +3139,7 @@ static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const 
         }
 
         if ( TOX_MESSAGE_TYPE_NORMAL == type )
-            message_part_s::msg(desc->get_id(), 0, (const char *)message, static_cast<int>(length));
+            message_part_s::msg(desc->get_id(true), 0, (const char *)message, static_cast<int>(length));
         else
         {
             // TODO
@@ -2908,35 +3147,35 @@ static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const 
     }
 }
 
-static void cb_name_change(Tox *, uint32_t fid, const byte * newname, size_t length, void *)
+static void cb_name_change(Tox *, uint32_t tox_fid, const byte * newname, size_t length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
-        contact_data_s cd(desc->get_id(), CDM_NAME);
+        contact_data_s cd(desc->get_id(true), CDM_NAME);
         cd.name = (const char *)newname;
-        cd.name_len = (int)length;
+        cd.name_len = static_cast<int>(length);
         hf->update_contact(&cd);
     }
 }
 
-static void cb_status_message(Tox *, uint32_t fid, const byte * newstatus, size_t length, void *)
+static void cb_status_message(Tox *, uint32_t tox_fid, const byte * newstatus, size_t length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
-        contact_data_s cd( desc->get_id(), CDM_STATUSMSG );
+        contact_data_s cd( desc->get_id(true), CDM_STATUSMSG );
         cd.status_message = (const char *)newstatus;
-        cd.status_message_len = (int)length;
+        cd.status_message_len = static_cast<int>(length);
 
         hf->update_contact(&cd);
     }
 }
 
-static void cb_friend_status(Tox *, uint32_t fid, TOX_USER_STATUS status, void *)
+static void cb_friend_status(Tox *, uint32_t tox_fid, TOX_USER_STATUS status, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         desc->state = CS_OFFLINE;
-        contact_data_s cd(desc->get_id(), CDM_ONLINE_STATE);
+        contact_data_s cd(desc->get_id(true), CDM_ONLINE_STATE);
         switch (status)
         {
             case TOX_USER_STATUS_NONE:
@@ -2953,14 +3192,14 @@ static void cb_friend_status(Tox *, uint32_t fid, TOX_USER_STATUS status, void *
     }
 }
 
-static void cb_read_receipt(Tox *, uint32_t fid, uint32_t message_id, void *)
+static void cb_read_receipt(Tox *, uint32_t tox_fid, uint32_t message_id, void *)
 {
-    message2send_s::read(fid, message_id);
+    message2send_s::read(fid_s::make_normal(tox_fid), message_id);
 }
 
-static asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
+static std::asptr bb_tags[] = { STD_ASTR("u"), STD_ASTR("i"), STD_ASTR("b"), STD_ASTR("s") };
 
-static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32_t len, uint32_t /*max_len*/)
+static uint32_t cb_isotoxin_special(Tox *, uint32_t tox_fid, uint8_t *packet, uint32_t len, uint32_t /*max_len*/)
 {
     switch (packet[0])
     {
@@ -2968,15 +3207,15 @@ static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32
     case PACKET_ID_STATUSMESSAGE:
     //case PACKET_ID_MESSAGE:
     //case PACKET_ID_ACTION:
-        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
         {
-            pstr_c s( asptr((const char *)packet+1,len-1) );
-            sstr_t<32> bopen(CONSTASTR("[")), bclose(CONSTASTR("[/"));
-            str_c fixed;
-            for( const asptr & bb : bb_tags )
+            std::pstr_c s(std::asptr((const char *)packet+1,len-1) );
+            std::sstr_t<32> bopen(STD_ASTR("[")), bclose(STD_ASTR("[/"));
+            std::string fixed;
+            for( const std::asptr & bb : bb_tags )
             {
                 bool supported = false;
-                for (token<char> bbsupported(desc->bbcodes_supported,','); bbsupported; ++bbsupported )
+                for (std::token<char> bbsupported(desc->bbcodes_supported,','); bbsupported; ++bbsupported )
                     if (bbsupported->equals(bb))
                     {
                         supported = true;
@@ -2989,11 +3228,11 @@ static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32
                 if (s.find_pos(bopen) >= 0)
                 {
                     if (fixed.is_empty())
-                        fixed = s;
+                        fixed = s.as_sptr();
 
                     bclose.set_length(2).append(bb).append_char(']');
-                    fixed.replace_all( bopen, CONSTASTR("") );
-                    fixed.replace_all( bclose, CONSTASTR("") );
+                    fixed.replace_all( bopen, STD_ASTR("") );
+                    fixed.replace_all( bclose, STD_ASTR("") );
                     s.set( fixed.as_sptr() );
                 }
             }
@@ -3009,9 +3248,9 @@ static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32
 }
 
 
-static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void * /*object*/)
+static void cb_isotoxin(Tox *, uint32_t tox_fid, const byte *data, size_t len, void * /*object*/)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         if (desc->cip)
         {
@@ -3019,8 +3258,8 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
             {
             case PACKETID_EXTENSION:
                 {
-                    token<char> t(asptr((const char *)data + 1, (int)len - 1), '/');
-                    if (t && t->equals(CONSTASTR("viewsize")))
+                    std::token<char> t(std::asptr((const char *)data + 1, (int)len - 1), '/');
+                    if (t && t->equals(STD_ASTR("viewsize")))
                     {
                         ++t;
                         int w = t ? t->as_uint() : 0;
@@ -3033,10 +3272,10 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
                         {
                             desc->cip->remote_so.view_w = w;
                             desc->cip->remote_so.view_h = h;
-                            hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
+                            hf->av_stream_options(contact_id_s(), desc->get_id(true), &desc->cip->remote_so);
                         }
                     }
-                    if (t && t->equals(CONSTASTR("initvdecoder")))
+                    if (t && t->equals(STD_ASTR("initvdecoder")))
                     {
                         if (desc->cip)
                         {
@@ -3052,7 +3291,7 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
                             ++t;
                             desc->cip->cfg_dec.h = t ? t->as_uint() : 0;
                             ++t;
-                            desc->cip->decoder_vp8 = !t || t->equals( CONSTASTR( "vp8" ) );
+                            desc->cip->decoder_vp8 = !t || t->equals( STD_ASTR( "vp8" ) );
                         }
                     }
                 }
@@ -3067,18 +3306,18 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
     }
 }
 
-static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_status, void *)
+static void cb_connection_status(Tox *, uint32_t tox_fid, TOX_CONNECTION connection_status, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         bool prev_online = desc->is_online();
         bool accepted = desc->state == CS_INVITE_SEND;
         desc->state = CS_OFFLINE;
-        contact_data_s cd(desc->get_id(), CDM_STATE);
+        contact_data_s cd(desc->get_id(true), CDM_STATE);
         cd.state = (TOX_CONNECTION_NONE != connection_status) ? CS_ONLINE : CS_OFFLINE;
         SETUPFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE, CS_ONLINE == cd.state );
 
-        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
         if (accepted)
         {
             cd.mask |= CDM_PUBID;
@@ -3092,39 +3331,39 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
 
         if (!prev_online && desc->is_online() || accepted)
         {
-            if (const char * clidcaps = (const char *)tox_friend_get_client_caps(tox, fid))
+            if (const char * clidcaps = (const char *)tox_friend_get_client_caps(tox, tox_fid))
             {
-                for (token<char> t(asptr(clidcaps), '\n'); t; ++t)
+                for (std::token<char> t(std::asptr(clidcaps), '\n'); t; ++t)
                 {
-                    token<char> ln(*t, ':');
-                    if (ln->equals(CONSTASTR("client")))
+                    std::token<char> ln(*t, ':');
+                    if (ln->equals(STD_ASTR("client")))
                     {
                         ++ln;
                         if (!desc->clientname.equals(*ln))
                         {
-                            desc->clientname = *ln;
+                            desc->clientname = ln->as_sptr();
                             UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
                         }
-                    } else if (ln->equals(CONSTASTR("support_viewsize")))
+                    } else if (ln->equals(STD_ASTR("support_viewsize")))
                     {
                         ++ln;
                         if (ln->as_uint((unsigned)-1) == 1)
                             desc->ccc_caps |= CCC_VIEW_SIZE;
-                    } else if (ln->equals(CONSTASTR("support_msg_chain")))
+                    } else if (ln->equals(STD_ASTR("support_msg_chain")))
                     {
                         ++ln;
                         if (ln->as_uint((unsigned)-1) == 1)
                             desc->ccc_caps |= CCC_MSG_CHAIN;
-                    } else if (ln->equals(CONSTASTR("support_msg_cr_time")))
+                    } else if (ln->equals(STD_ASTR("support_msg_cr_time")))
                     {
                         ++ln;
                         if (ln->as_uint((unsigned)-1) == 1)
                             desc->ccc_caps |= CCC_MSG_CRTIME;
-                    } else if (ln->equals(CONSTASTR("support_bbtags")))
+                    } else if (ln->equals(STD_ASTR("support_bbtags")))
                     {
                         ++ln;
-                        desc->bbcodes_supported = *ln;
-                    } else if (ln->equals(CONSTASTR("support_video_ex")))
+                        desc->bbcodes_supported = ln->as_sptr();
+                    } else if (ln->equals(STD_ASTR("support_video_ex")))
                     {
                         ++ln;
                         if (ln->as_uint((unsigned)-1) == 1)
@@ -3141,17 +3380,22 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
             desc->on_offline();
         }
 
-        str_c details_json_string;
+        std::string details_json_string;
         desc->prepare_details(details_json_string, cd);
 
+        savebuffer cdata;
+        if (accepted)
+            desc->prepare_protodata(cd, cdata);
+
         hf->update_contact(&cd);
-        if ( accepted )
+        if (accepted)
             hf->save();
     }
 }
 
-static void cb_file_chunk_request(Tox *, uint32_t fid, uint32_t file_number, u64 position, size_t length, void *)
+static void cb_file_chunk_request(Tox *, uint32_t tox_fid, uint32_t file_number, u64 position, size_t length, void *)
 {
+    fid_s fid = fid_s::make_normal(tox_fid);
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->fid == fid && f->fnn == file_number)
         {
@@ -3160,9 +3404,10 @@ static void cb_file_chunk_request(Tox *, uint32_t fid, uint32_t file_number, u64
         }
 }
 
-static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t kind, u64 filesize, const byte *filename, size_t filename_length, void *)
+static void cb_tox_file_recv(Tox *, uint32_t tox_fid, uint32_t filenumber, uint32_t kind, u64 filesize, const byte *filename, size_t filename_length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    fid_s fid = fid_s::make_normal(tox_fid);
+    if (contact_descriptor_s *desc = find_descriptor(fid))
     {
         if (TOX_FILE_KIND_AVATAR == kind)
         {
@@ -3171,7 +3416,7 @@ static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t 
 
             if (0 == filesize)
             {
-                tox_file_control(tox, fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
+                tox_file_control(tox, tox_fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
 
                 memset(desc->avatar_hash, 0, TOX_HASH_LENGTH);
                 if (desc->avatar_tag == 0) return;
@@ -3179,18 +3424,22 @@ static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t 
                 // avatar changed to none, so just send empty avatar to application (avatar tag == 0)
 
                 desc->avatar_tag = 0;
-                contact_data_s cd(desc->get_id(), CDM_AVATAR_TAG);
+                contact_data_s cd(desc->get_id(true), CDM_AVATAR_TAG);
                 cd.avatar_tag = 0;
+
+                savebuffer cdata;
+                desc->prepare_protodata(cd, cdata);
+
                 hf->update_contact(&cd);
                 hf->save();
 
             } else
             {
                 byte hash[TOX_HASH_LENGTH] = {};
-                if (!tox_file_get_file_id(tox,fid,filenumber,hash,nullptr) || 0 == memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
+                if (!tox_file_get_file_id(tox, tox_fid,filenumber,hash,nullptr) || 0 == memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
                 {
                     // same avatar - cancel avatar transfer
-                    tox_file_control(tox, fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
+                    tox_file_control(tox, tox_fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
 
                 } else
                 {
@@ -3199,10 +3448,14 @@ static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t 
                     ++desc->avatar_tag; // new avatar version
 
                     desc->avatar_recv_fnn = filenumber;
-                    new incoming_avatar_s(fid, filenumber, filesize, asptr((const char *)filename, (int)filename_length)); // not memleak
+                    new incoming_avatar_s(fid, filenumber, filesize, std::string((const char *)filename, filename_length)); // not memleak
 
-                    contact_data_s cd(desc->get_id(), CDM_AVATAR_TAG);
+                    contact_data_s cd(desc->get_id(true), CDM_AVATAR_TAG);
                     cd.avatar_tag = desc->avatar_tag;
+
+                    savebuffer cdata;
+                    desc->prepare_protodata(cd, cdata);
+
                     hf->update_contact(&cd);
                     hf->save();
                 }
@@ -3211,14 +3464,15 @@ static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t 
         }
 
 
-        incoming_file_s *f = new incoming_file_s(fid, filenumber, (TOX_FILE_KIND)kind, filesize, asptr((const char *)filename, (int)filename_length)); // not memleak
-        hf->incoming_file(desc->get_id(), f->utag, filesize, (const char *)filename, (int)filename_length);
+        incoming_file_s *f = new incoming_file_s(fid, filenumber, (TOX_FILE_KIND)kind, filesize, std::string((const char *)filename, filename_length)); // not memleak
+        hf->incoming_file(desc->get_id(true), f->utag, filesize, (const char *)filename, static_cast<int>(filename_length));
     }
 
 }
 
-static void cb_file_recv_control(Tox *, uint32_t fid, uint32_t filenumber, TOX_FILE_CONTROL control, void * /*userdata*/)
+static void cb_file_recv_control(Tox *, uint32_t tox_fid, uint32_t filenumber, TOX_FILE_CONTROL control, void * /*userdata*/)
 {
+    fid_s fid = fid_s::make_normal(tox_fid);
     file_transfer_s *ft = nullptr;
     // outgoing
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
@@ -3258,8 +3512,9 @@ static void cb_file_recv_control(Tox *, uint32_t fid, uint32_t filenumber, TOX_F
     }
 }
 
-static void cb_tox_file_recv_chunk(Tox *, uint32_t fid, uint32_t filenumber, u64 position, const byte *data, size_t length, void * /*userdata*/)
+static void cb_tox_file_recv_chunk(Tox *, uint32_t tox_fid, uint32_t filenumber, u64 position, const byte *data, size_t length, void * /*userdata*/)
 {
+    fid_s fid = fid_s::make_normal(tox_fid);
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
         if (f->fid == fid && f->fnn == filenumber)
         {
@@ -3271,11 +3526,12 @@ static void cb_tox_file_recv_chunk(Tox *, uint32_t fid, uint32_t filenumber, u64
         }
 }
 
-static void cb_friend_typing(Tox *, uint32_t fid, bool is_typing, void * /*userdata*/)
+static void cb_friend_typing(Tox *, uint32_t tox_fid, bool is_typing, void * /*userdata*/)
 {
+    fid_s fid = fid_s::make_normal(tox_fid);
     for( auto it = other_typing.begin(); it != other_typing.end(); ++it )
     {
-        if (it->fid == (int)fid)
+        if (it->fid == fid)
         {
             if (!is_typing)
                 other_typing.erase(it);
@@ -3290,7 +3546,7 @@ static void cb_friend_typing(Tox *, uint32_t fid, bool is_typing, void * /*userd
 void contact_descriptor_s::update_members()
 {
     TOX_ERR_CONFERENCE_PEER_QUERY e;
-    int num = tox_conference_peer_count( tox, get_gnum(), &e );
+    int num = tox_conference_peer_count( tox, fid.confa(), &e );
 
     if (e != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
         num = 0;
@@ -3299,7 +3555,7 @@ void contact_descriptor_s::update_members()
     {
         TOX_ERR_CONFERENCE_PEER_QUERY pq;
         public_key_s member_pubkey;
-        tox_conference_peer_get_public_key( tox, get_gnum(), m, member_pubkey.key, &pq );
+        tox_conference_peer_get_public_key( tox, fid.confa(), m, member_pubkey.key, &pq );
         if (pq != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
             continue;
 
@@ -3312,95 +3568,93 @@ void contact_descriptor_s::update_members()
 
             if ( desc->state == CS_UNKNOWN )
             {
-                sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+                std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
 
-                contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_DETAILS | CDF_CONFERENCE_MEMBER );
-
+                contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_DETAILS );
                 cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
                 cd.public_id = pubid.cstr();
 
-                str_c details_json_string;
+                std::string details_json_string;
                 desc->prepare_details( details_json_string, cd );
 
-                hf->update_contact( &cd );
+                hf->update_contact(&cd);
             } else
-                desc->update_contact();
+                desc->update_contact(true);
         }
     }
 }
 
 
-void contact_descriptor_s::setup_members_and_send(contact_data_s &cdata)
+void contact_descriptor_s::setup_members_and_send(contact_data_s &cd)
 {
     TOX_ERR_CONFERENCE_PEER_QUERY e;
-    cdata.members_count = tox_conference_peer_count(tox, get_gnum(), &e);
+    cd.members_count = tox_conference_peer_count(tox, fid.confa(), &e);
     
     if ( e != TOX_ERR_CONFERENCE_PEER_QUERY_OK )
-        cdata.members_count = 0;
+        cd.members_count = 0;
 
-    cdata.members = (int *)_alloca( cdata.members_count * sizeof( int ) );
+    cd.members = (contact_id_s *)_alloca( cd.members_count * sizeof(contact_id_s) ); //-V630
 
     int mm = 0;
-    str_c name;
-    for (int m = 0; m < cdata.members_count; ++m)
+    std::string name;
+    for (int m = 0; m < cd.members_count; ++m)
     {
         TOX_ERR_CONFERENCE_PEER_QUERY pq;
         public_key_s member_pubkey;
-        tox_conference_peer_get_public_key(tox, get_gnum(), m, member_pubkey.key, &pq);
+        tox_conference_peer_get_public_key(tox, fid.confa(), m, member_pubkey.key, &pq);
         if (pq != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
             continue;
 
         if (lastmypubid == member_pubkey)
             continue; // do not put self to members list
 
-        cdata.mask |= CDM_STATE;
-        cdata.state = CS_ONLINE;
+        cd.mask |= CDM_STATE;
+        cd.state = CS_ONLINE;
         state = CS_ONLINE;
 
-        size_t nsz = tox_conference_peer_get_name_size( tox, get_gnum(), m, nullptr );
+        size_t nsz = tox_conference_peer_get_name_size( tox, fid.confa(), m, nullptr );
         name.set_length( static_cast<int>( nsz ), false );
-        if (!tox_conference_peer_get_name( tox, get_gnum(), m, (uint8_t *)name.str(), nullptr ) )
+        if (!tox_conference_peer_get_name( tox, fid.confa(), m, (uint8_t *)name.str(), nullptr ) )
             name.clear();
 
-        int cid = 0;
-        int mfid = find_tox_fid( member_pubkey );
+        contact_id_s cid;
+        fid_s mfid = find_tox_fid( member_pubkey );
         bool disablenamesend = false;
-        if ( mfid < 0 ) // negative means not found
+        if (!mfid.is_valid()) // negative means not found
             mfid = find_tox_unknown_contact( member_pubkey, name ), disablenamesend = true;
 
-        if (contact_descriptor_s *desc = find_restore_descriptor( mfid ))
+        if (contact_descriptor_s *desc = find_descriptor( mfid ))
         {
-            cid = desc->get_id();
+            cid = desc->get_id(true);
             if ((CS_UNKNOWN == desc->state && !disablenamesend) || CS_INVITE_RECEIVE == desc->state || CS_INVITE_SEND == desc->state)
             {
                 // wow, we know name of invited friend!
 
-                contact_data_s cd(cid, CDM_NAME);
-                cd.name = name.cstr();
-                cd.name_len = name.get_length();
-                hf->update_contact(&cd);
+                contact_data_s cdn(cid, CDM_NAME);
+
+                cdn.name = name.cstr();
+                cdn.name_len = name.get_length();
+                hf->update_contact(&cdn);
             }
         }
 
-        if (cid == 0)
+        if (cid.is_self())
             continue;
 
-        cdata.members[mm++] = cid;
+        cd.members[mm++] = cid;
     }
 
-    cdata.members_count = mm;
-    cdata.mask |= CDM_PUBID | CDM_SPECIAL_BITS;
+    cd.members_count = mm;
+    cd.mask |= CDM_PUBID;
 
     //CONFAID
-    sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-    cdata.public_id_len = address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-    cdata.public_id = pubid.cstr();
+    std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+    cd.public_id_len = address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+    cd.public_id = pubid.cstr();
 
-    cdata.public_id = pubid.cstr();
-    cdata.public_id_len = TOX_CONFERENCE_UID_SIZE * 2;
-    SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, is_audio_conference() );
+    cd.id.audio = is_audio_conference();
 
-    hf->update_contact(&cdata);
+    hf->update_contact(&cd);
 }
 
 static void callback_av_conference_audio(void *, int gnum, int peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void * /*userdata*/)
@@ -3410,24 +3664,24 @@ static void callback_av_conference_audio(void *, int gnum, int peernum, const in
     if (lastmypubid == pubkey)
         return; // ignore self message
 
-    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
+    if (contact_descriptor_s *gdesc = find_descriptor( fid_s::make_confa(gnum) ))
     {
-        int cid = 0;
-        int fid = find_tox_fid(pubkey);
-        if (fid < 0)
-            fid = find_tox_unknown_contact(pubkey, asptr());
+        contact_id_s cid;
+        fid_s fid = find_tox_fid(pubkey);
+        if (!fid.is_valid())
+            fid = find_tox_unknown_contact(pubkey, std::asptr());
 
-        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-            cid = desc->get_id();
+        if (contact_descriptor_s *desc = find_descriptor(fid))
+            cid = desc->get_id(true);
 
         media_data_s mdt;
         mdt.afmt.sample_rate = sample_rate;
         mdt.afmt.bits = 16;
         mdt.afmt.channels = channels;
         mdt.audio_frame = pcm;
-        mdt.audio_framesize = (int)samples * channels * mdt.afmt.bits / 8;
+        mdt.audio_framesize = static_cast<int>(samples) * channels * mdt.afmt.bits / 8;
 
-        hf->av_data(gdesc->get_id(), cid, &mdt);
+        hf->av_data(gdesc->get_id(true), cid, &mdt);
     }
 }
 
@@ -3447,7 +3701,7 @@ static void cb_conference_invite(Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, con
     }
     if (gnum >= 0)
     {
-        str_c gn;
+        std::string gn;
         TOX_ERR_CONFERENCE_TITLE gte;
         size_t l = tox_conference_get_title_size( tox, gnum, &gte );
         if ( gte == TOX_ERR_CONFERENCE_TITLE_OK && l )
@@ -3464,7 +3718,7 @@ static void cb_conference_invite(Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, con
         {
             if ( d->address == gid )
             {
-                d->set_fid( gnum + CONFERENCE_ID_OFFSET, true );
+                d->set_fid( fid_s::make_confa(gnum) );
                 desc = d;
                 if ( desc->cip )
                     desc->stop_call();
@@ -3474,7 +3728,7 @@ static void cb_conference_invite(Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, con
 
         if ( !desc )
         {
-            desc = new contact_descriptor_s( ID_CONFERENCE, gnum + CONFERENCE_ID_OFFSET );
+            desc = new contact_descriptor_s( ID_CONFERENCE, fid_s::make_confa(gnum));
             desc->address = gid;
             desc->state = CS_OFFLINE;
         }
@@ -3485,20 +3739,20 @@ static void cb_conference_invite(Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, con
             desc->cip->remote_so.options |= SO_RECEIVING_AUDIO | SO_SENDING_AUDIO;
         }
 
-        contact_data_s cdata(desc->get_id(), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS );
+        contact_data_s cd(desc->get_id(true), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS );
         if ( desc->state != CS_ONLINE )
-            cdata.state = CS_OFFLINE;
-        cdata.name = gn.cstr();
-        cdata.name_len = gn.get_length();
-        cdata.conference_permissions = -1;
+            cd.state = CS_OFFLINE;
+        cd.name = gn.cstr();
+        cd.name_len = gn.get_length();
+        cd.conference_permissions = -1;
 
-        str_c details_json_string;
-        desc->prepare_details( details_json_string, cdata );
+        std::string details_json_string;
+        desc->prepare_details( details_json_string, cd );
 
-        desc->setup_members_and_send(cdata);
+        desc->setup_members_and_send(cd);
 
         if (t == TOX_CONFERENCE_TYPE_AV )
-            hf->av_stream_options( desc->get_id(), 0, &desc->cip->remote_so );
+            hf->av_stream_options( desc->get_id(true), contact_id_s(), &desc->cip->remote_so );
     }
 }
 
@@ -3510,22 +3764,22 @@ static void conference_message( int gnum, int peernum, const char * message, int
     if (lastmypubid == pubkey)
     {
         // confirm delivery
-        message2send_s::read( asptr( message, length ) );
+        message2send_s::read(std::asptr( message, length ) );
         return;
     }
 
-    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
+    if (contact_descriptor_s *gdesc = find_descriptor(fid_s::make_confa(gnum)))
     {
-        int cid = 0;
-        int fid = find_tox_fid(pubkey);
-        if (fid < 0)
-            fid = find_tox_unknown_contact(pubkey, asptr());
+        contact_id_s cid;
+        fid_s fid = find_tox_fid(pubkey);
+        if (!fid.is_valid())
+            fid = find_tox_unknown_contact(pubkey, std::asptr());
 
-        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-            cid = desc->get_id();
+        if (contact_descriptor_s *desc = find_descriptor(fid))
+            cid = desc->get_id(true);
 
         if ( is_message )
-            hf->message(MT_MESSAGE, gdesc->get_id(), cid, now(), message, length);
+            hf->message(MT_MESSAGE, gdesc->get_id(true), cid, now(), message, length);
         else
         {
             // TODO: MT_ACTION
@@ -3541,31 +3795,29 @@ static void cb_conference_message(Tox *, uint32_t gnum, uint32_t peernum, TOX_ME
 static void cb_conference_namelist_change(Tox *, uint32_t gnum, uint32_t /*pid*/, TOX_CONFERENCE_STATE_CHANGE /*change*/, void *)
 {
     // any change - rebuild members list
-    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_confa(gnum)))
     {
-        contact_data_s cdata(desc->get_id(), CDM_MEMBERS);
-        desc->setup_members_and_send(cdata);
+        contact_data_s cd(desc->get_id(true), CDM_MEMBERS);
+        desc->setup_members_and_send(cd);
     }
 }
 
 static void cb_conference_title(Tox *, uint32_t gnum, uint32_t /*pid*/, const uint8_t * title, size_t length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_confa(gnum)))
     {
-        str_c gn( (const char *)title, static_cast<int>( length ) );
+        std::string gn( (const char *)title, static_cast<int>( length ) );
 
-        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_PUBID | CDM_SPECIAL_BITS);
-        cdata.name = gn.cstr();
-        cdata.name_len = gn.get_length();
+        contact_data_s cd(desc->get_id(true), CDM_NAME | CDM_PUBID);
+        cd.name = gn.cstr();
+        cd.name_len = gn.get_length();
 
         //CONFAID
-        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-        cdata.public_id = pubid.cstr();
+        std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cd.public_id = pubid.cstr();
 
-        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
-
-        hf->update_contact( &cdata );
+        hf->update_contact( &cd );
         hf->save();
     }
 }
@@ -3574,14 +3826,14 @@ static void cb_conference_title(Tox *, uint32_t gnum, uint32_t /*pid*/, const ui
 ///// Tox AV callbacks /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void cb_toxav_incoming_call(ToxAV *av, uint32_t friend_number, bool audio_enabled, bool video_enabled, void * /*user_data*/)
+static void cb_toxav_incoming_call(ToxAV *av, uint32_t tox_fid, bool audio_enabled, bool video_enabled, void * /*user_data*/)
 {
     if (av != toxav) return;
-    if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         if (nullptr != desc->cip)
         {
-            toxav_call_control(toxav, friend_number, TOXAV_CALL_CONTROL_CANCEL, nullptr);
+            toxav_call_control(toxav, tox_fid, TOXAV_CALL_CONTROL_CANCEL, nullptr);
             return;
         }
 
@@ -3592,24 +3844,24 @@ static void cb_toxav_incoming_call(ToxAV *av, uint32_t friend_number, bool audio
         SETUPFLAG( desc->cip->remote_so.options, SO_SENDING_VIDEO, video_enabled );
 
         if (video_enabled)
-            hf->message(MT_INCOMING_CALL, 0, desc->get_id(), now(), "video", 5);
+            hf->message(MT_INCOMING_CALL, contact_id_s(), desc->get_id(true), now(), "video", 5);
         else
-            hf->message(MT_INCOMING_CALL, 0, desc->get_id(), now(), "audio", 5);
+            hf->message(MT_INCOMING_CALL, contact_id_s(), desc->get_id(true), now(), "audio", 5);
     }
 }
 
-static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t state, void * /*user_data*/)
+static void cb_toxav_call_state(ToxAV *av, uint32_t tox_fid, uint32_t state, void * /*user_data*/)
 {
     if (av != toxav) return;
 
     if (TOXAV_FRIEND_CALL_STATE_ERROR == state || TOXAV_FRIEND_CALL_STATE_FINISHED == state)
     {
-        if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
+        if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
             desc->stop_call();
         return;
     }
 
-    if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         if (!desc->cip) return;
 
@@ -3623,7 +3875,7 @@ static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t stat
             // start call
             desc->cip->started = true;
             desc->cip->calling = false;
-            hf->message(MT_CALL_ACCEPTED, 0, desc->get_id(), now(), nullptr, 0);
+            hf->message(MT_CALL_ACCEPTED, contact_id_s(), desc->get_id(true), now(), nullptr, 0);
 
             // WORKAROUND
             // signal to other peer that we always accept video, even audio call
@@ -3633,15 +3885,15 @@ static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t stat
         if (!ISFLAG(desc->cip->remote_so.options, SO_SENDING_AUDIO) && desc->cip->video_ex)
             desc->cip->current_recv_frame = -1;
 
-        hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
+        hf->av_stream_options(contact_id_s(), desc->get_id(true), &desc->cip->remote_so);
     }
 }
 
 
-void cb_toxav_audio(ToxAV *av, uint32_t friend_number, const int16_t *pcm, size_t sample_count, uint8_t channels, uint32_t sampling_rate, void * /*user_data*/)
+void cb_toxav_audio(ToxAV *av, uint32_t tox_fid, const int16_t *pcm, size_t sample_count, uint8_t channels, uint32_t sampling_rate, void * /*user_data*/)
 {
     if (av != toxav) return;
-    if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         if (desc->cip == nullptr)
             return;
@@ -3649,31 +3901,31 @@ void cb_toxav_audio(ToxAV *av, uint32_t friend_number, const int16_t *pcm, size_
         media_data_s mdt;
         mdt.afmt = audio_format_s(sampling_rate,channels,16);
         mdt.audio_frame = pcm;
-        mdt.audio_framesize = (int)sample_count * mdt.afmt.channels * mdt.afmt.bits / 8;
+        mdt.audio_framesize = static_cast<int>(sample_count) * mdt.afmt.channels * mdt.afmt.bits / 8;
 
-        hf->av_data(0, desc->get_id(), &mdt);
+        hf->av_data(contact_id_s(), desc->get_id(true), &mdt);
     }
 }
 
-void cb_toxav_video(ToxAV *av, uint32_t friend_number, uint16_t width,
+void cb_toxav_video(ToxAV *av, uint32_t tox_fid, uint16_t width,
                                           uint16_t height, const uint8_t *y, const uint8_t *u, const uint8_t *v,
                                           int32_t ystride, int32_t ustride, int32_t vstride, void * /*user_data*/)
 {
     if (av != toxav) return;
-    if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
+    if (contact_descriptor_s *desc = find_descriptor(fid_s::make_normal(tox_fid)))
     {
         media_data_s mdt;
         mdt.vfmt.width = width;
         mdt.vfmt.height = height;
-        mdt.vfmt.pitch[0] = (unsigned short)ystride;
-        mdt.vfmt.pitch[1] = (unsigned short)ustride;
-        mdt.vfmt.pitch[2] = (unsigned short)vstride;
+        mdt.vfmt.pitch[0] = static_cast<unsigned short>(ystride);
+        mdt.vfmt.pitch[1] = static_cast<unsigned short>(ustride);
+        mdt.vfmt.pitch[2] = static_cast<unsigned short>(vstride);
         mdt.vfmt.fmt = VFMT_I420;
         mdt.video_frame[0] = y;
         mdt.video_frame[1] = u;
         mdt.video_frame[2] = v;
 
-        hf->av_data(0, desc->get_id(), &mdt );
+        hf->av_data(contact_id_s(), desc->get_id(true), &mdt );
     }
 }
 
@@ -3681,7 +3933,7 @@ static void audio_sender()
 {
     callstate.lock_write()().audio_sender = true;
 
-    std::vector<byte> prebuffer; // just ones allocated buffer for raw audio
+    byte_buffer prebuffer; // just ones allocated buffer for raw audio
     
     const int audio_frame_duration = 60;
 
@@ -3742,19 +3994,19 @@ static void audio_sender()
             if (0 == (remote_so & SO_RECEIVING_AUDIO))
                 continue;
 
-            int gnum = d->get_gnum();
+            fid_s fid = d->get_fid();
             ++ss.locked;
             w.unlock(); // no need lock anymore
 
             ASSERT( fmt.bits == 16 );
 
-            if (gnum >= 0)
+            if (fid.is_confa())
             {
-                toxav_group_send_audio(tox, gnum, (int16_t *)prebuffer.data(), (int)samples, (byte)fmt.channels, fmt.sample_rate );
+                toxav_group_send_audio(tox, fid.confa(), (int16_t *)prebuffer.data(), (int)samples, (byte)fmt.channels, fmt.sample_rate );
 
             } else
             {
-                toxav_audio_send_frame(toxav, d->get_fid(), (int16_t *)prebuffer.data(), (int)samples, (byte)fmt.channels, fmt.sample_rate, nullptr );
+                toxav_audio_send_frame(toxav, fid.normal(), (int16_t *)prebuffer.data(), (int)samples, (byte)fmt.channels, fmt.sample_rate, nullptr );
             }
             w = callstate.lock_write();
             --ss.locked;
@@ -3811,7 +4063,7 @@ static void video_encoder()
                 continue;
 
             bool video_ex = d->cip->video_ex;
-            int fid = d->get_fid();
+            fid_s fid = d->get_fid();
             const uint8_t *y = (const uint8_t *)ss.video_data;
             ss.video_data = nullptr;
 
@@ -3823,12 +4075,12 @@ static void video_encoder()
             if (video_ex && d->cip->vquality >= 0)
             {
                 // isotoxin video ex transfer
-                d->cip->isotoxin_video_send_frame(fid, ss.video_w, ss.video_h, y, y + ysz, y + (ysz + ysz / 4));
+                d->cip->isotoxin_video_send_frame(fid.normal(), ss.video_w, ss.video_h, y, y + ysz, y + (ysz + ysz / 4));
             
             } else
             {
                 // toxcore video transfer
-                toxav_video_send_frame(toxav, fid, (uint16_t)ss.video_w, (uint16_t)ss.video_h, y, y + ysz, y + (ysz + ysz / 4), nullptr);
+                toxav_video_send_frame(toxav, fid.normal(), (uint16_t)ss.video_w, (uint16_t)ss.video_h, y, y + ysz, y + (ysz + ysz / 4), nullptr);
                 d->cip->vquality = video_quality;
             }
             hf->free_video_data(y);
@@ -3906,7 +4158,7 @@ static void video_sender()
             d->cip->current_busy = true;
             spinlock::simple_unlock(d->cip->sync_frame);
 
-            int fid = d->get_fid();
+            fid_s fid = d->get_fid();
 
             ++ss.locked;
             w.unlock(); // no need lock anymore
@@ -3923,7 +4175,7 @@ static void video_sender()
             int d2sz = f->size - f->offset;
             if (d2sz > TOX_MAX_CUSTOM_PACKET_SIZE - d1sz) d2sz = TOX_MAX_CUSTOM_PACKET_SIZE - d1sz;
 
-            if (tox_friend_send_lossless_packet2(tox, fid, d1, d1sz, d2, d2sz))
+            if (tox_friend_send_lossless_packet2(tox, fid.normal(), d1, d1sz, d2, d2sz))
                 f->offset += d2sz;
 
             if (f->is_done())
@@ -4038,6 +4290,8 @@ static void stop_senders()
 
 static TOX_ERR_NEW prepare()
 {
+    delete_all_descs();
+
     reconnect = false;
     if (tox) tox_kill(tox);
 
@@ -4154,58 +4408,78 @@ static void connect()
         return;
     }
 
-    auto get_node = []()->const dht_node_s&
+    auto get_node = []()->dht_node_s&
     {
-        int min_used = INT_MAX;
-        for( dht_node_s &node : nodes )
-        {
-            if (node.used < min_used)
-                min_used = node.used;
-            node.random = rand();
-        }
         dht_node_s *n2r = nullptr;
-        int max_rand = -1;
+        uint32_t prevrnd = 0;
+
+        int minpc = INT_MAX;
         for (dht_node_s &node : nodes)
         {
-            if ( node.used == min_used && node.random > max_rand )
-            {
-                n2r = &node;
-            }
+            if (node.push_count < minpc)
+                minpc = node.push_count;
         }
 
-        ++n2r->used;
+        for( dht_node_s &node : nodes )
+        {
+            if (node.push_count != minpc)
+                continue;
+
+            uint32_t r = random64([](u64) {return false; }) & 0xffffffff;
+            if (r > prevrnd)
+                n2r = &node, prevrnd = r;
+        }
+
+        if (n2r == nullptr)
+            n2r = &nodes[ (random64([](u64) {return false; }) & 0xffffffff) % nodes.size() ];
+
         return *n2r;
 
     };
     
-    aint n = min(nodes.size(),4);
-    for (int i = 0; i < n; ++i)
+    size_t n = min(nodes.size(),4);
+    for (size_t i = 0; i < n; ++i)
     {
-        const dht_node_s &node = get_node();
-        TOX_ERR_BOOTSTRAP er;
-        tox_bootstrap(tox, node.addr4.cstr(), (uint16_t)node.port, node.pubid, &er);
-        if (options.ipv6_enabled && !node.addr6.is_empty())
-            tox_bootstrap(tox, node.addr6.cstr(), (uint16_t)node.port, node.pubid, &er);
-        if (TOX_ERR_BOOTSTRAP_BAD_HOST == er)
-        {
+        dht_node_s &node = get_node();
+        ++node.push_count;
+        if (!node.accepted) --node.accept_count; if (node.accept_count < 0) node.accept_count = 0;
+        if (node.push_count > 1 && node.accept_count == 0)
             ++n;
-            if (n > (int)nodes.size() && i >= (int)nodes.size()) break;
-            continue;
+        if (n > nodes.size() && i >= nodes.size()) break;
+
+        TOX_ERR_BOOTSTRAP er;
+        //if (options.proxy_type == TOX_PROXY_TYPE_NONE)
+        {
+            tox_bootstrap(tox, node.addr4.cstr(), node.port, node.pubid.key, &er);
+            if (options.ipv6_enabled && !node.addr6.is_empty())
+                tox_bootstrap(tox, node.addr6.cstr(), node.port, node.pubid.key, &er);
+            if (TOX_ERR_BOOTSTRAP_BAD_HOST == er)
+            {
+                ++n;
+                if (n > nodes.size() && i >= nodes.size()) break;
+                continue;
+            }
         }
-        tox_add_tcp_relay(tox, node.addr4.cstr(), (uint16_t)node.port, node.pubid, &er);
+
+        tox_add_tcp_relay(tox, node.addr4.cstr(), node.port, node.pubid.key, &er);
         if (options.ipv6_enabled && !node.addr6.is_empty())
-            tox_add_tcp_relay(tox, node.addr6.cstr(), (uint16_t)node.port, node.pubid, &er);
+            tox_add_tcp_relay(tox, node.addr6.cstr(), node.port, node.pubid.key, &er);
     }
 
     
 }
 
-void __stdcall offline();
-void __stdcall online();
-void __stdcall stop_call(int id);
-void do_on_offline_stuff();
+static void do_on_offline_stuff();
+static void online();
+static void offline()
+{
+    online_flag = false;
+    do_on_offline_stuff();
+}
 
-void __stdcall tick(int *sleep_time_ms)
+void PROTOCALL stop_call(contact_id_s id);
+
+void PROTOCALL tick(int *sleep_time_ms)
 {
     if (restart_module)
     {
@@ -4227,7 +4501,7 @@ void __stdcall tick(int *sleep_time_ms)
         tryconnect = now() - 60;
 
         *sleep_time_ms = 100;
-        self_typing_contact = 0;
+        self_typing_contact.clear();
         return;
     }
     *sleep_time_ms = 1;
@@ -4235,11 +4509,11 @@ void __stdcall tick(int *sleep_time_ms)
     {
         // self typing
         // may be time to stop typing?
-        if (self_typing_contact && (curt-self_typing_time) > 0)
+        if (!self_typing_contact.is_empty() && (curt-self_typing_time) > 0)
         {
             if (contact_descriptor_s *cd = find_descriptor(self_typing_contact))
-                tox_self_set_typing(tox, cd->get_fid(), false, nullptr);
-            self_typing_contact = 0;
+                tox_self_set_typing(tox, cd->get_fid().normal(), false, nullptr);
+            self_typing_contact.clear();
         }
 
         // other peers typing
@@ -4248,8 +4522,8 @@ void __stdcall tick(int *sleep_time_ms)
         {
             if ( (curt-ot.time) > 0 )
             {
-                if (contact_descriptor_s *desc = find_restore_descriptor(ot.fid))
-                    hf->typing(0, desc->get_id());
+                if (contact_descriptor_s *desc = find_descriptor(ot.fid))
+                    hf->typing(contact_id_s(), desc->get_id(true));
                 ot.time += 1000;
             }
         }
@@ -4273,16 +4547,27 @@ void __stdcall tick(int *sleep_time_ms)
         bool forceupdateself = false;
         if ((curt - nextt) > 0)
         {
-            //DWORD xxx = time_ms();
             tox_iterate(tox, nullptr);
-            //DWORD yyy = time_ms();
-            //DWORD zzz = yyy - xxx;
             nextt = curt + tox_iteration_interval(tox);
 
 
             tox_address_c temp; temp.setup_self_address();
             if (lastmypubid != temp)
                 forceupdateself = true;
+
+            if ((curt - next_check_accept_nodes_time) > 0)
+            {
+                next_check_accept_nodes_time = time_ms() + 60000;
+                if (accepted_nodes < 4 || zero_online())
+                    ++zero_online_connect_cnt, connect();
+
+                if (zero_online_connect_cnt > 10)
+                {
+                    restart_module = true;
+                    MaskLog(LFLS_TIMEOUT, "Zero online, Restart... (%u)", GetCurrentProcessId());
+                }
+            }
+            
         }
         bool on_offline = false;
         contact_state_e nst = tox_self_get_connection_status( tox ) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
@@ -4333,7 +4618,7 @@ void __stdcall tick(int *sleep_time_ms)
                 {
                     if (f->cip->calling && (curt - f->cip->call_stop_time) > 0)
                     {
-                        int id = f->get_id();
+                        contact_id_s id = f->get_id(false);
                         r.unlock();
                         stop_call(id);
                         break;
@@ -4357,7 +4642,7 @@ void __stdcall tick(int *sleep_time_ms)
     }
 }
 
-void __stdcall goodbye()
+static void goodbye()
 {
     delete_all_descs();
 
@@ -4390,7 +4675,7 @@ void __stdcall goodbye()
     WSACleanup();
 }
 
-void __stdcall set_name(const char*utf8name)
+void PROTOCALL set_name(const char*utf8name)
 {
     if (tox)
     {
@@ -4405,7 +4690,7 @@ void __stdcall set_name(const char*utf8name)
         tox_self_set_name(tox,(const byte *)utf8name,len,&er);
     }
 }
-void __stdcall set_statusmsg(const char*utf8status)
+void PROTOCALL set_statusmsg(const char*utf8status)
 {
     if (tox)
     {
@@ -4418,7 +4703,7 @@ void __stdcall set_statusmsg(const char*utf8status)
     }
 }
 
-void __stdcall set_ostate(int ostate)
+void PROTOCALL set_ostate(int ostate)
 {
     if (tox)
     {
@@ -4436,22 +4721,11 @@ void __stdcall set_ostate(int ostate)
         }
     }
 }
-void __stdcall set_gender(int /*gender*/)
+void PROTOCALL set_gender(int /*gender*/)
 {
 }
 
-void __stdcall get_avatar(int id)
-{
-    if (tox)
-    {
-        auto it = id2desc.find(id);
-        if (it == id2desc.end()) return;
-        contact_descriptor_s *cd = it->second;
-        cd->recv_avatar();
-    }
-}
-
-void __stdcall set_avatar(const void*data, int isz)
+void PROTOCALL set_avatar(const void*data, int isz)
 {
     static int prevavalen = 0;
 
@@ -4503,40 +4777,42 @@ static cmd_result_e tox_err_to_cmd_result( TOX_ERR_NEW toxerr )
 
 static void send_configurable()
 {
-    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_IPv6_ENABLE, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
-    str_c svalues[5];
+    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, copname<auto_co_ipv6_enable>::name().s, copname<auto_co_udp_enable>::name().s, copname<auto_co_hole_punch>::name().s, copname<auto_co_local_discovery>::name().s, CFGF_SERVER_PORT };
+    std::string svalues[7];
     svalues[0].set_as_int(tox_proxy_type);
     if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
     svalues[2].set_as_int(options.ipv6_enabled ? 1 : 0);
     svalues[3].set_as_int(options.udp_enabled ? 1 : 0);
-    svalues[4].set_as_int(options.tcp_port);
-    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr(), svalues[4].cstr() };
+    svalues[4].set_as_int(options.hole_punching_enabled ? 1 : 0);
+    svalues[5].set_as_int(options.local_discovery_enabled ? 1 : 0);
+    svalues[6].set_as_int(options.tcp_port);
+    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr(), svalues[4].cstr(), svalues[5].cstr(), svalues[6].cstr() };
 
     static_assert( ARRAY_SIZE(fields) == ARRAY_SIZE(values) && ARRAY_SIZE(values) == ARRAY_SIZE(svalues), "check len" );
 
-    hf->configurable(5, fields, values);
+    hf->configurable(ARRAY_SIZE(fields), fields, values);
 }
 
 static bool setproto = false;
-static void apply_par( const pstr_c &field, const pstr_c &val )
+static void apply_par( const std::pstr_c &field, const std::pstr_c &val )
 {
-    if ( field.equals( CONSTASTR( CFGF_VIDEO_CODEC ) ) )
+    if ( field.equals( STD_ASTR( CFGF_VIDEO_CODEC ) ) )
     {
-        use_vp9_codec = val.equals( CONSTASTR("vp9") );
+        use_vp9_codec = val.equals( STD_ASTR("vp9") );
         return;
     }
-    if ( field.equals( CONSTASTR( CFGF_VIDEO_BITRATE ) ) )
+    if ( field.equals( STD_ASTR( CFGF_VIDEO_BITRATE ) ) )
     {
         video_bitrate = val.as_int();
         return;
     }
-    if ( field.equals( CONSTASTR( CFGF_VIDEO_QUALITY ) ) )
+    if ( field.equals( STD_ASTR( CFGF_VIDEO_QUALITY ) ) )
     {
         video_quality = val.as_int();
         return;
     }
 
-    if ( field.equals( CONSTASTR( CFGF_PROXY_TYPE ) ) )
+    if ( field.equals( STD_ASTR( CFGF_PROXY_TYPE ) ) )
     {
         int new_proxy_type = val.as_int();
         if ( new_proxy_type != tox_proxy_type )
@@ -4544,9 +4820,9 @@ static void apply_par( const pstr_c &field, const pstr_c &val )
         proxy_settings_ok = true;
         return;
     }
-    if ( field.equals( CONSTASTR( CFGF_PROXY_ADDR ) ) )
+    if ( field.equals( STD_ASTR( CFGF_PROXY_ADDR ) ) )
     {
-        str_c paddr( tox_proxy_host ); paddr.append_char( ':' ).append_as_uint( tox_proxy_port );
+        std::string paddr( tox_proxy_host.as_sptr() ); paddr.append_char( ':' ).append_as_uint( tox_proxy_port );
         if ( !paddr.equals( val ) )
         {
             set_proxy_addr( val );
@@ -4555,38 +4831,159 @@ static void apply_par( const pstr_c &field, const pstr_c &val )
         proxy_settings_ok = true;
         return;
     }
-    if ( field.equals( CONSTASTR( CFGF_SERVER_PORT ) ) )
+    if ( field.equals( STD_ASTR( CFGF_SERVER_PORT ) ) )
     {
         int new_server_port = val.as_int();
         if ( new_server_port != options.tcp_port )
-            options.tcp_port = (uint16_t)new_server_port, reconnect = true;
+            options.tcp_port = static_cast<uint16_t>(new_server_port), reconnect = true;
         return;
     }
 
-    if ( field.equals( CONSTASTR( CFGF_IPv6_ENABLE ) ) )
-    {
-        bool ipv6 = val.as_int() != 0;
-        if ( ipv6 != options.ipv6_enabled )
-            options.ipv6_enabled = ipv6, reconnect = true;
-        return;
-    }
+    handle_cop< SETBIT(auto_co_ipv6_enable) | SETBIT(auto_co_udp_enable) | SETBIT(auto_co_hole_punch) | SETBIT(auto_co_local_discovery) >(field.as_sptr(), val.as_sptr(), [&](auto_conn_options_e co, bool v) {
+        if (auto_co_ipv6_enable == co && options.ipv6_enabled != v)
+            options.ipv6_enabled = v, reconnect = true;
+        else if (auto_co_udp_enable == co && options.udp_enabled != v)
+            options.udp_enabled = v, reconnect = true;
+        else if (auto_co_hole_punch == co && options.hole_punching_enabled != v)
+            options.hole_punching_enabled = v, reconnect = true;
+        else if (auto_co_local_discovery == co && options.local_discovery_enabled != v)
+            options.local_discovery_enabled = v, reconnect = true;
+    });
 
-    if ( field.equals( CONSTASTR( CFGF_UDP_ENABLE ) ) )
-    {
-        bool udp = val.as_int() != 0;
-        if ( udp != options.udp_enabled )
-            options.udp_enabled = udp, reconnect = true;
-        return;
-    }
-    if ( field.equals( CONSTASTR( CFGF_SETPROTO ) ) )
+    if ( field.equals( STD_ASTR( CFGF_SETPROTO ) ) )
     {
         setproto = val.as_int() != 0;
         return;
     }
 }
 
+static contact_id_s as_contactid(u32 v)
+{
+    if (v & 0xff000000)
+    {
+        contact_id_s id;
+        *(u32 *)&id = v;
+        return id;
+    }
+    return contact_id_s(contact_id_s::CONTACT, v);
+}
 
-void __stdcall set_config(const void*idata, int iisz)
+static contact_descriptor_s * load_descriptor(contact_id_s id, loader &l)
+{
+    int descriptor_size = l(chunk_descriptor);
+    if (descriptor_size == 0)
+        return nullptr;
+
+    loader lc(l.chunkdata(), descriptor_size);
+
+    if (lc(chunk_descriptor_id))
+    {
+        contact_id_s idd = as_contactid(lc.get_u32());
+        ASSERT(id.is_empty() || idd == id);
+        id = idd;
+    }
+
+    if (id.is_conference() || id.is_self())
+        return nullptr;
+
+    hf->use_id(id.id);
+
+    tox_address_c address;
+
+    if (int asz = lc(chunk_descriptor_address, false))
+    {
+        loader al(lc.chunkdata(), asz);
+        int dsz;
+        if (const void *toxid = al.get_data(dsz))
+        {
+            if (TOX_ADDRESS_SIZE == dsz)
+                address.setup(toxid, tox_address_c::TAT_FULL_ADDRESS);
+            else if (TOX_PUBLIC_KEY_SIZE == dsz)
+                address.setup(toxid, tox_address_c::TAT_PUBLIC_KEY);
+        }
+
+    } else if (lc(chunk_descriptor_pubid))
+        address.setup(lc.get_astr());
+
+    contact_descriptor_s *desc = contact_descriptor_s::find(address);
+    if (!desc) desc = new contact_descriptor_s(SKIP_ID_GEN);
+
+    desc->address = address;
+
+    if (lc(chunk_descriptor_dnsname))
+        desc->dnsname.set(lc.get_astr());
+    if (lc(chunk_descriptor_state))
+        desc->state = static_cast<contact_state_e>(lc.get_i32());
+    if (lc(chunk_descriptor_avatartag))
+        desc->avatar_tag = lc.get_i32();
+
+    if (desc->avatar_tag != 0)
+    {
+        if (int bsz = lc(chunk_descriptor_avatarhash))
+        {
+            loader hbl(lc.chunkdata(), bsz);
+            int dsz;
+            if (const void *mb = hbl.get_data(dsz))
+                memcpy(desc->avatar_hash, mb, min(dsz, TOX_HASH_LENGTH));
+        }
+    }
+
+    if (lc(chunk_descriptor_invmsg))
+        desc->invitemsg.set(lc.get_astr());
+    
+
+    fid_s fid;
+    if (desc->state != CS_UNKNOWN)
+    {
+        if (tox)
+        {
+            fid = desc->restore_tox_friend();
+        }
+
+    } else
+    {
+        fid.setup_new_unknown();
+    }
+
+
+    if (!id.is_empty()) desc->set_id(id);
+    desc->set_fid(fid);
+    return desc;
+}
+
+static void load_node(loader &l)
+{
+    int node_data_size = l(chunk_node);
+    if (node_data_size == 0)
+        return;
+
+    loader lc(l.chunkdata(), node_data_size);
+
+    if (int asz = lc(chunk_node_key))
+    {
+        loader al(lc.chunkdata(), asz);
+        int dsz;
+        if (const void *pubk = al.get_data(dsz))
+        {
+            if (TOX_PUBLIC_KEY_SIZE == dsz)
+            {
+                const public_key_s &pk = *(const public_key_s *)pubk;
+                auto x = std::lower_bound(nodes.begin(), nodes.end(), pk);
+                if (x->pubid == pk)
+                {
+                    if (lc(chunk_node_push_count))
+                        x->push_count = lc.get_i32();
+
+                    if (lc(chunk_node_accept_count))
+                        x->accept_count = lc.get_i32();
+                }
+            }
+        }
+    }
+}
+
+
+void PROTOCALL set_config(const void*idata, int iisz)
 {
     proxy_settings_ok = false;
     if ( iisz < 4 ) return;
@@ -4614,7 +5011,8 @@ void __stdcall set_config(const void*idata, int iisz)
 
     conf_encrypted = false;
 
-    u64 _now = now();
+    delete_all_descs();
+
     if ( ca.native_data && ca.native_data_len > TOX_ENC_SAVE_MAGIC_LENGTH && !memcmp( TOX_ENC_SAVE_MAGIC_NUMBER, ca.native_data, TOX_ENC_SAVE_MAGIC_LENGTH ) )
     {
         toxerr = TOX_ERR_NEW_LOAD_ENCRYPTED;
@@ -4649,16 +5047,27 @@ void __stdcall set_config(const void*idata, int iisz)
             options.udp_enabled = true;
         }
 
+        size_t version = 0;
+        if (ldr(chunk_magic,false))
+            version = static_cast<size_t>(ldr.get_u64() - 0x111BADF00D2C0FE6ull);
+
         if (ldr(chunk_proxy_type))
             tox_proxy_type = ldr.get_i32();
         if (ldr(chunk_proxy_address))
             set_proxy_addr(ldr.get_astr());
         if (ldr(chunk_server_port))
-            options.tcp_port = (uint16_t)ldr.get_i32();
+            options.tcp_port = static_cast<uint16_t>(ldr.get_i32());
         if (ldr(chunk_use_ipv6))
             options.ipv6_enabled = ldr.get_i32() != 0;
         if (ldr(chunk_use_udp))
             options.udp_enabled = ldr.get_i32() != 0;
+
+        if (ldr(chunk_use_hole_punching, false))
+            options.hole_punching_enabled = ldr.get_i32() != 0;
+
+        if (ldr(chunk_use_local_discovery, false))
+            options.local_discovery_enabled = ldr.get_i32() != 0;
+
         if (int sz = ldr(chunk_toxid))
         {
             loader l(ldr.chunkdata(), sz);
@@ -4686,123 +5095,23 @@ void __stdcall set_config(const void*idata, int iisz)
             toxerr = prepare(); // prepare anyway
         }
 
+        if (version == 1)
         if (int sz = ldr(chunk_descriptors))
         {
-            delete_all_descs();
-
             loader l(ldr.chunkdata(), sz);
             for (int cnt = l.read_list_size(); cnt > 0; --cnt)
-                if (int descriptor_size = l(chunk_descriptor))
-                {
-                    loader lc(l.chunkdata(), descriptor_size);
+                load_descriptor(contact_id_s(), l);
 
-                    int id = 0, fid = -1;
-                    bool fid_ok = false;
-
-                    if (lc(chunk_descriptor_id))
-                        id = lc.get_i32();
-                    
-                    if ( id < 0 )
-                        continue;
-
-                    contact_descriptor_s *desc = new contact_descriptor_s( SKIP_ID_GEN );
-
-                    if (int asz = lc( chunk_descriptor_address, false ))
-                    {
-                        loader al( lc.chunkdata(), asz );
-                        int dsz;
-                        if (const void *toxid = al.get_data( dsz ))
-                        {
-                            if (TOX_ADDRESS_SIZE == dsz)
-                                desc->address.setup( toxid, tox_address_c::TAT_FULL_ADDRESS );
-                            else if (TOX_PUBLIC_KEY_SIZE == dsz)
-                                desc->address.setup( toxid, tox_address_c::TAT_PUBLIC_KEY );
-                        }
-
-                    } else if (lc( chunk_descriptor_pubid ))
-                        desc->address.setup( lc.get_astr() );
-
-                    if (lc(chunk_descriptor_dnsname))
-                        desc->dnsname = lc.get_astr();
-                    if (lc(chunk_descriptor_state))
-                        desc->state = (contact_state_e)lc.get_i32();
-                    if (lc(chunk_descriptor_avatartag))
-                        desc->avatar_tag = lc.get_i32();
-
-                    if (desc->avatar_tag != 0)
-                    {
-                        if (int bsz = lc(chunk_descriptor_avatarhash))
-                        {
-                            loader hbl(lc.chunkdata(), bsz);
-                            int dsz;
-                            if (const void *mb = hbl.get_data(dsz))
-                                memcpy(desc->avatar_hash, mb, min(dsz, TOX_HASH_LENGTH));
-                        }
-                    }
-
-                    if (id == 0) continue;
-
-                    if (desc->state != CS_UNKNOWN)
-                    {
-                        if (tox)
-                        {
-                            const public_key_s &pk = desc->address.as_public_key();
-                            fid = find_tox_fid(pk);
-
-                            if (fid >= 0)
-                            {
-                                auto it = fid2desc.find(fid);
-                                if (it != fid2desc.end())
-                                {
-                                    // oops oops
-                                    // contact dup!!!
-                                    delete desc;
-                                    continue;
-                                }
-                                fid_ok = true;
-                            }
-                        }
-
-                    } else
-                    {
-                        fid = -id;
-                        fid_ok = true;
-                    }
-
-
-                    if (id != 0) desc->set_id(id);
-                    desc->set_fid(fid, fid_ok);
-                }
+            aint cnt = tox_self_get_friend_list_size(tox);
+            for (int fid = 0; fid < cnt; ++fid)
+                restore_descriptor(fid);
         }
 
-        if (int sz = ldr(chunk_msgs_receiving))
+        if (int sz = ldr(chunk_nodes))
         {
-            for (; message_part_s::first;)
-                delete message_part_s::first;
-
             loader l(ldr.chunkdata(), sz);
             for (int cnt = l.read_list_size(); cnt > 0; --cnt)
-                if (int message_data_size = l(chunk_msg_receiving))
-                {
-                    loader lc(l.chunkdata(), message_data_size);
-
-                    u64 create_time = _now;
-                    int cid = 0;
-                    if (lc(chunk_msg_receiving_cid))
-                        cid = lc.get_i32();
-                    //if (lc(chunk_msg_receiving_type))
-                    //    mt = (message_type_e)lc.get_byte();
-                    if (lc(chunk_msg_receiving_createtime))
-                        create_time = lc.get_u64();
-                    if (cid)
-                        if (int bsz = lc(chunk_msg_receiving_body))
-                        {
-                            loader mbl(lc.chunkdata(), bsz);
-                            int dsz;
-                            if (const void *mb = mbl.get_data(dsz))
-                                new message_part_s(cid, create_time, asptr((const char *)mb, dsz), true);
-                        }
-                }
+                load_node(l);
         }
 
     } else if (!tox)
@@ -4815,28 +5124,36 @@ void __stdcall set_config(const void*idata, int iisz)
     send_configurable();
 }
 
-void __stdcall init_done()
+static void init_done()
 {
     update_self();
 
     if (tox)
     {
-        aint cnt = tox_self_get_friend_list_size(tox);
-        for(aint i=0;i<cnt;++i)
+        if (tox_self_get_friend_list_size(tox))
         {
-            if (tox_friend_exists(tox, static_cast<int>(i) ))
-                update_init_contact( static_cast<int>(i) );
-        }
-        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-        {
-            if (!f->is_fid_ok() && f->state == CS_INVITE_RECEIVE)
-                f->update_contact();
+            // because Version 2 of save doesn't contain friends, so current is 1 and must be saved as 2
+
+            for (contact_descriptor_s *desc = contact_descriptor_s::first_desc; desc; desc = desc->next)
+            {
+                if (desc->is_conference())
+                    continue;
+
+                contact_data_s cd(desc->get_id(true), 0);
+                savebuffer cdata;
+                desc->prepare_protodata(cd, cdata);
+                hf->update_contact(&cd);
+            }
+
+            hf->save(); 
         }
     }
 }
 
-void __stdcall online()
+static void online()
 {
+    reset_accepted_nodes();
+
     if ( conf_encrypted )
     {
         hf->operation_result( LOP_ONLINE, CR_ENCRYPTED );
@@ -4856,74 +5173,49 @@ void __stdcall online()
         {
             if (f->is_conference())
                 continue;
-            int fid = find_tox_fid( f->address.as_public_key() );
-            if (fid >= 0)
-                f->set_fid(fid, true);
+            f->set_fid(f->restore_tox_friend());
         }
     }
 
     connect();
 }
 
-void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
+void PROTOCALL app_signal(app_signal_e s)
 {
-    if ( !desc.is_fid_ok() || desc.state == contact_state_check || desc.state == CS_UNKNOWN || desc.state == CS_ROTTEN || desc.is_conference() )
-        return; // tox protocol does not support unknown contacts... and no persistent conferences supported too
-
-    chunk mm( chunkm.b, chunk_descriptor );
-
-    chunk(chunkm.b, chunk_descriptor_id) << desc.get_id();
-    chunk(chunkm.b, chunk_descriptor_address ) << desc.address.as_bytes();
-    chunk(chunkm.b, chunk_descriptor_pubid) << desc.address.raw_str(); // KEEP SAVING PUBID FOR FORWARD COMPATIBILITY
-    chunk(chunkm.b, chunk_descriptor_dnsname) << desc.dnsname;
-    chunk(chunkm.b, chunk_descriptor_state) << (i32)desc.state;
-    chunk(chunkm.b, chunk_descriptor_avatartag) << desc.avatar_tag;
-    if (desc.avatar_tag != 0)
+    switch (s)
     {
-        chunk(chunkm.b, chunk_descriptor_avatarhash) << bytes(desc.avatar_hash, TOX_HASH_LENGTH);
+    case APPS_INIT_DONE:
+        init_done();
+        break;
+    case APPS_ONLINE:
+        online();
+        break;
+    case APPS_OFFLINE:
+        offline();
+        break;
+    case APPS_GOODBYE:
+        goodbye();
+        break;
     }
-    
-}
-
-/*
-void operator<<(chunk &chunkm, const message2send_s &m)
-{
-    chunk mm(chunkm.b, chunk_msg_sending);
-
-    chunk(chunkm.b, chunk_msg_sending_fid) << m.fid;
-    chunk(chunkm.b, chunk_msg_sending_type) << (byte)m.mt;
-    chunk(chunkm.b, chunk_msg_sending_utag) << m.utag;
-    chunk(chunkm.b, chunk_msg_sending_mid) << (m.mid > 0 ? 0 : m.mid);
-    chunk(chunkm.b, chunk_msg_sending_createtime) << (u64)m.create_time;
-    chunk(chunkm.b, chunk_msg_sending_body) << bytes(m.msg.cstr(), m.msg.get_length());
-}
-*/
-
-void operator<<(chunk &chunkm, const message_part_s &m)
-{
-    chunk mm(chunkm.b, chunk_msg_receiving);
-
-    chunk(chunkm.b, chunk_msg_receiving_cid) << m.cid;
-    //chunk(chunkm.b, chunk_msg_receiving_type) << (byte)m.mt;
-    chunk(chunkm.b, chunk_msg_receiving_createtime) << (u64)m.create_time;
-    chunk(chunkm.b, chunk_msg_receiving_body) << bytes(m.msgb.cstr(), m.msgb.get_length());
 }
 
 static void save_current_stuff( savebuffer &b )
 {
-    chunk(b, chunk_magic) << (u64)(0x111BADF00D2C0FE6ull + SAVE_VERSION);
+    chunk(b, chunk_magic) << static_cast<u64>(0x111BADF00D2C0FE6ull + SAVE_VERSION);
     chunk(b, chunk_proxy_type) << tox_proxy_type;
-    chunk(b, chunk_proxy_address) << ( str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port) );
-    chunk(b, chunk_server_port) << (i32)options.tcp_port;
-    chunk(b, chunk_use_ipv6) << (i32)(options.ipv6_enabled ? 1 : 0);
-    chunk(b, chunk_use_udp) << (i32)(options.udp_enabled ? 1 : 0);
+    chunk(b, chunk_proxy_address) << ( std::string(tox_proxy_host.as_sptr()).append_char(':').append_as_uint(tox_proxy_port) );
+    chunk(b, chunk_server_port) << static_cast<i32>(options.tcp_port);
+    chunk(b, chunk_use_ipv6) << static_cast<i32>(options.ipv6_enabled ? 1 : 0);
+    chunk(b, chunk_use_udp) << static_cast<i32>(options.udp_enabled ? 1 : 0);
+    chunk(b, chunk_use_hole_punching) << static_cast<i32>(options.hole_punching_enabled ? 1 : 0);
+    chunk(b, chunk_use_local_discovery) << static_cast<i32>(options.local_discovery_enabled ? 1 : 0);
     chunk(b, chunk_toxid) << lastmypubid.as_bytes();
 
     if (tox)
     {
-        size_t sz = tox_get_savedata_size(tox);
+        size_t sz = tox_get_savedata_size(tox,0);
         void *data = chunk(b, chunk_tox_data).alloc(sz);
-        tox_get_savedata(tox, (byte *)data);
+        tox_get_savedata(tox, (byte *)data,0);
 
     } else if (buf_tox_config.size())
     {
@@ -4931,20 +5223,12 @@ static void save_current_stuff( savebuffer &b )
         memcpy(data, buf_tox_config.data(), buf_tox_config.size());
     }
 
-    chunk(b, chunk_descriptors) << serlist<contact_descriptor_s>(contact_descriptor_s::first_desc);
-    //chunk(b, chunk_msgs_sending) << serlist<message2send_s>(message2send_s::first);
-    chunk(b, chunk_msgs_receiving) << serlist<message_part_s>(message_part_s::first);
+    chunk(b, chunk_nodes) << servec<dht_node_s>(nodes);
 }
 
-
-void __stdcall offline()
+static void do_on_offline_stuff()
 {
-    online_flag = false;
-    do_on_offline_stuff();
-}
-
-void do_on_offline_stuff()
-{
+    reset_accepted_nodes();
     stop_senders();
 
     if (tox)
@@ -4962,27 +5246,51 @@ void do_on_offline_stuff()
             delete f;
         }
 
-        size_t sz = tox_get_savedata_size(tox);
+        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f;)
+        {
+            contact_descriptor_s *fnext = f->next;
+            if (f->state == CS_UNKNOWN)
+            {
+                f->die();
+                f = fnext;
+                continue;
+            }
+            if (f->is_conference())
+            {
+                contact_data_s cd(f->get_id(true), CDM_STATE);
+                cd.state = CS_OFFLINE;
+                hf->update_contact(&cd);
+
+                f->on_offline();
+                f->die();
+                f = fnext;
+                continue;
+            }
+            if (f->state != CS_INVITE_RECEIVE && f->state != CS_INVITE_SEND)
+                f->on_offline();
+            if (!tox) f->set_fid(fid_s());
+
+            contact_data_s cd(f->get_id(true), CDM_STATE);
+            cd.state = CS_OFFLINE;
+            hf->update_contact(&cd);
+
+            f = fnext;
+        }
+
+        size_t sz = tox_get_savedata_size(tox, 0);
         buf_tox_config.resize(sz);
-        tox_get_savedata(tox, buf_tox_config.data());
+        tox_get_savedata(tox, buf_tox_config.data(), 0);
         prepare();
         if (tox) buf_tox_config.clear();
 
-        contact_data_s self(0, CDM_STATE);
+        contact_data_s self(contact_id_s::make_self(), CDM_STATE);
         self.state = CS_OFFLINE;
         hf->update_contact(&self);
 
-        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-        {
-            if ( f->state == CS_INVITE_RECEIVE || f->state == CS_INVITE_SEND || f->state == CS_UNKNOWN ) continue;
-            f->on_offline();
-            if (!tox) f->set_fid(-1, false);
-            f->update_contact();
-        }
     }
 }
 
-void __stdcall save_config(void * param)
+void PROTOCALL save_config(void * param)
 {
     if (tox || buf_tox_config.size())
     {
@@ -4998,13 +5306,13 @@ static int send_request(const char *dnsname, const tox_address_c &toxaddr, const
     {
         if (resend) // before resend we have to delete contact in Tox system, otherwise we will get an error TOX_FAERR_ALREADYSENT
             if (contact_descriptor_s *desc = contact_descriptor_s::find(toxaddr.as_public_key()))
-                tox_friend_delete(tox, desc->get_fid(), nullptr);
+                tox_friend_delete(tox, desc->get_fid().normal(), nullptr);
 
-        str_c invmsg = utf8clamp(invite_message_utf8, TOX_MAX_FRIEND_REQUEST_LENGTH);
-        if (invmsg.get_length() == 0) invmsg = CONSTASTR("?");
+        std::string invmsg( utf8clamp(invite_message_utf8, TOX_MAX_FRIEND_REQUEST_LENGTH) );
+        if (invmsg.get_length() == 0) invmsg.set( STD_ASTR("?") );
 
         TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
-        int fid = tox_friend_add(tox, toxaddr.get(tox_address_c::TAT_FULL_ADDRESS), (const byte *)invmsg.cstr(), invmsg.get_length(), &er);
+        int tox_fid = tox_friend_add(tox, toxaddr.get(tox_address_c::TAT_FULL_ADDRESS), (const byte *)invmsg.cstr(), invmsg.get_length(), &er);
         switch (er) //-V719
         {
             case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
@@ -5018,30 +5326,35 @@ static int send_request(const char *dnsname, const tox_address_c &toxaddr, const
         }
 
         contact_descriptor_s *desc = contact_descriptor_s::find( toxaddr.as_public_key() );
-        if (desc) desc->set_fid(fid, fid >= 0);
-        else desc = new contact_descriptor_s( ID_CONTACT, fid );
+        if (desc) desc->set_fid(fid_s::make_normal(tox_fid));
+        else desc = new contact_descriptor_s( ID_CONTACT, fid_s::make_normal(tox_fid));
         memset( desc->avatar_hash, 0, sizeof( desc->avatar_hash ) );
         desc->avatar_tag = 0;
         desc->dnsname = dnsname;
         desc->address = toxaddr;
+        desc->invitemsg = invmsg;
         desc->state = CS_INVITE_SEND;
 
-        contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE );
+        contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE );
 
         //PUBID
-        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
-        cdata.public_id = pubid.cstr();
+        std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cd.public_id = pubid.cstr();
 
-        cdata.state = CS_INVITE_SEND;
-        hf->update_contact(&cdata);
+        cd.state = CS_INVITE_SEND;
+
+        savebuffer cdata;
+        desc->prepare_protodata(cd, cdata);
+
+        hf->update_contact(&cd);
 
         return CR_OK;
     }
     return CR_FUNCTION_NOT_FOUND;
 }
 
-int __stdcall resend_request(int id, const char* invite_message_utf8)
+int PROTOCALL resend_request(contact_id_s id, const char* invite_message_utf8)
 {
     if (tox)
     {
@@ -5061,32 +5374,49 @@ static void add_conference( TOX_CONFERENCE_TYPE t, const conference_id_s &id, co
         int nlen = 0;
         if (name)
         {
-            nlen = CHARz_len( name );
-            tox_conference_set_title( tox, desc->get_gnum(), (const byte *)name, nlen, nullptr );
+            nlen = std::CHARz_len( name );
+            tox_conference_set_title( tox, desc->get_fid().confa(), (const byte *)name, nlen, nullptr );
         }
 
         desc->state = CS_ONLINE;
 
-        contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE | (name ? CDM_NAME : 0) | CDM_SPECIAL_BITS );
-        cdata.state = CS_ONLINE;
-        cdata.name = name;
-        cdata.name_len = nlen;
+        contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE | (name ? CDM_NAME : 0) );
+        cd.state = CS_ONLINE;
+        cd.name = name;
+        cd.name_len = nlen;
         //CONFAID
-        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-        cdata.public_id = pubid.cstr();
-        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
+        std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cd.public_id = pubid.cstr();
 
-        hf->update_contact( &cdata );
-
+        hf->update_contact( &cd );
     }
 
 }
 
-
-int __stdcall add_contact(const char* public_id, const char* invite_message_utf8)
+void PROTOCALL contact(const contact_data_s * icd)
 {
-    pstr_c s = asptr( public_id );
+    if (icd->data_size)
+    {
+        loader ldr(icd->data, icd->data_size);
+        if (contact_descriptor_s *desc = load_descriptor(icd->id, ldr))
+        {
+            contact_data_s cd(desc->get_id(true), CDM_STATE|CDM_PUBID);
+            std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+            cd.public_id_len = desc->address.as_str(pubid, tox_address_c::TAT_PUBLIC_KEY);
+            cd.public_id = pubid.cstr();
+
+            cd.state = desc->state;
+            hf->update_contact(&cd);
+        }
+
+    }
+}
+
+int PROTOCALL add_contact(const char* public_id, const char* invite_message_utf8)
+{
+    std::pstr_c s; s.set(std::asptr(public_id));
+
     if (s.get_length() == TOX_CONFERENCE_UID_SIZE * 2 + 1 + 8 && (s.get_char( TOX_CONFERENCE_UID_SIZE * 2 ) == '-' || s.get_char( TOX_CONFERENCE_UID_SIZE * 2 ) == '+'))
     {
         conference_id_s confaid;
@@ -5107,13 +5437,13 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
         }
     }
 
-    if (s.get_length() == (TOX_PUBLIC_KEY_SIZE * 2) && s.contain_chars( CONSTASTR( "0123456789abcdefABCDEF" ) ))
+    if (s.get_length() == (TOX_PUBLIC_KEY_SIZE * 2) && s.contain_chars( STD_ASTR( "0123456789abcdefABCDEF" ) ))
     {
         public_key_s pk;
         s.hex2buf<TOX_PUBLIC_KEY_SIZE>( pk.key );
 
         TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
-        int fid = tox_friend_add_norequest( tox, pk.key, &er );
+        int tox_fid = tox_friend_add_norequest( tox, pk.key, &er );
         switch (er) //-V719
         {
         case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
@@ -5127,70 +5457,100 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
         }
 
         contact_descriptor_s *desc = contact_descriptor_s::find( pk );
-        if (desc) desc->set_fid( fid, fid >= 0 );
+        if (desc) desc->set_fid(fid_s::make_normal(tox_fid));
         else
         {
-            desc = new contact_descriptor_s( ID_CONTACT, fid );
+            desc = new contact_descriptor_s(ID_CONTACT, fid_s::make_normal(tox_fid));
             desc->address = pk;
         }
         memset( desc->avatar_hash, 0, sizeof( desc->avatar_hash ) );
         desc->avatar_tag = 0;
         desc->state = CS_OFFLINE;
 
-        contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE );
+        contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE );
 
         //PUBID
-        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
-        cdata.public_id = pubid.cstr();
+        std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cd.public_id = pubid.cstr();
 
-        cdata.state = CS_WAIT;
-        hf->update_contact( &cdata );
+        cd.state = CS_WAIT;
+        hf->update_contact( &cd );
         return CR_OK;
     }
 
-    if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars( CONSTASTR( "0123456789abcdefABCDEF" ) ))
+    if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars( STD_ASTR( "0123456789abcdefABCDEF" ) ))
     {
         tox_address_c toxaddr;
-        toxaddr.setup( asptr( public_id, TOX_ADDRESS_SIZE * 2) );
+        toxaddr.setup(std::asptr( public_id, TOX_ADDRESS_SIZE * 2) );
 
         return send_request( "", toxaddr, invite_message_utf8, false );
     }
 
     if (s.find_pos('@') > 0)
     {
-        new discoverer_s(s, asptr(invite_message_utf8));
+        new discoverer_s(s, std::asptr(invite_message_utf8));
         return CR_OPERATION_IN_PROGRESS;
     }
 
     return CR_INVALID_PUB_ID;
 }
 
-void __stdcall refresh_details( int id )
+void PROTOCALL request(contact_id_s id, request_entity_e re)
 {
-    if (tox && id != 0)
+    switch (re)
     {
-        auto it = id2desc.find( id );
-        if (it == id2desc.end()) return;
-        contact_descriptor_s *desc = it->second;
-        UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
+    case RE_DETAILS:
+        if (tox && !id.is_self())
+        {
+            auto it = id2desc.find(id);
+            if (it == id2desc.end()) return;
+            contact_descriptor_s *desc = it->second;
+            UNSETFLAG(desc->flags, contact_descriptor_s::F_DETAILS_SENT);
 
-        if (desc->is_conference())
-            desc->update_members();
+            if (desc->is_conference())
+                desc->update_members();
 
-        desc->update_contact();
+            desc->update_contact(false);
+        }
+        break;
+    case RE_AVATAR:
+        if (tox)
+        {
+            auto it = id2desc.find(id);
+            if (it == id2desc.end()) return;
+            contact_descriptor_s *cd = it->second;
+            cd->recv_avatar();
+        }
+        break;
+    case RE_EXPORT_DATA:
+        if (tox)
+        {
+            size_t sz = tox_get_savedata_size(tox, 1);
+            void *data = _alloca(sz);
+            tox_get_savedata(tox, (byte *)data, 1);
+            hf->export_data(data, static_cast<int>(sz));
+        } else if (buf_tox_config.size())
+        {
+            hf->export_data(buf_tox_config.data(), static_cast<int>(buf_tox_config.size()));
+        } else
+        {
+            hf->export_data(nullptr, 0);
+        }
+        break;
     }
+
 }
 
 
-void __stdcall del_contact(int id)
+void PROTOCALL del_contact(contact_id_s id)
 {
-    if (tox && id != 0)
+    if (tox && !id.is_self())
     {
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
-        if (!desc->is_fid_ok())
+        if (!desc->get_fid().is_valid())
         {
             desc->die();
             hf->save();
@@ -5214,7 +5574,7 @@ void __stdcall del_contact(int id)
                         tox_conference_peer_get_public_key( tox, gnum, p, mkey.key, nullptr );
                         if (desc->address == mkey)
                         {
-                            auto itc = fid2desc.find( gnum + CONFERENCE_ID_OFFSET );
+                            auto itc = fid2desc.find(fid_s::make_confa(gnum));
                             if ( itc != fid2desc.end() )
                             {
                                 confas.push_back( itc->second );
@@ -5226,18 +5586,18 @@ void __stdcall del_contact(int id)
                 }
             }
 
-            tox_friend_delete(tox, desc->get_fid(), nullptr);
+            tox_friend_delete(tox, desc->get_fid().normal(), nullptr);
             desc->die();
             hf->save();
 
             for( contact_descriptor_s *confa : confas )
             {
-                contact_data_s cdata( confa->get_id(), CDM_MEMBERS );
-                confa->setup_members_and_send( cdata );
+                contact_data_s cd( confa->get_id(true), CDM_MEMBERS );
+                confa->setup_members_and_send( cd );
             }
         } else
         {
-            tox_conference_delete( tox, desc->get_gnum(), nullptr );
+            tox_conference_delete( tox, desc->get_fid().n, nullptr );
             desc->die();
         }
     }
@@ -5245,7 +5605,7 @@ void __stdcall del_contact(int id)
 
 message2send_s *gms = nullptr;
 
-void __stdcall send_message(int id, const message_s *msg)
+void PROTOCALL send_message(contact_id_s id, const message_s *msg)
 {
     if (tox)
     {
@@ -5256,14 +5616,16 @@ void __stdcall send_message(int id, const message_s *msg)
 
         if (id == self_typing_contact)
         {
-            tox_self_set_typing(tox, desc->get_fid(), false, nullptr);
-            self_typing_contact = 0;
+            if (desc->get_fid().is_normal())
+                tox_self_set_typing(tox, desc->get_fid().n, false, nullptr);
+
+            self_typing_contact.clear();
         }
-        gms = new message2send_s( msg->utag, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
+        gms = new message2send_s( msg->utag, desc->get_fid(), std::asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
     }
 }
 
-void __stdcall del_message( u64 utag )
+void PROTOCALL del_message( u64 utag )
 {
     for (message2send_s *x = message2send_s::first; x; x = x->next)
     {
@@ -5276,7 +5638,7 @@ void __stdcall del_message( u64 utag )
     }
 }
 
-void __stdcall accept(int id)
+void PROTOCALL accept(contact_id_s id)
 {
     if (tox)
     {
@@ -5284,24 +5646,28 @@ void __stdcall accept(int id)
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
         
-        if (desc->address.compatible(tox_address_c::TAT_PUBLIC_KEY) && !desc->is_fid_ok())
+        if (desc->address.compatible(tox_address_c::TAT_PUBLIC_KEY) && !desc->get_fid().is_valid())
         {
             TOX_ERR_FRIEND_ADD er;
-            int fid = tox_friend_add_norequest(tox, desc->address.as_public_key().key, &er);
+            int tox_fid = tox_friend_add_norequest(tox, desc->address.as_public_key().key, &er);
             if (TOX_ERR_FRIEND_ADD_OK != er)
                 return;
-            desc->set_fid(fid, fid >= 0);
+            desc->set_fid(fid_s::make_normal(tox_fid));
             desc->state = CS_OFFLINE;
 
-            contact_data_s cdata( desc->get_id(), CDM_STATE );
-            cdata.state = CS_WAIT;
-            hf->update_contact(&cdata);
+            contact_data_s cd( desc->get_id(true), CDM_STATE );
+            cd.state = CS_WAIT;
+
+            savebuffer cdata;
+            desc->prepare_protodata(cd, cdata);
+
+            hf->update_contact(&cd);
             hf->save();
         }
     }
 }
 
-void __stdcall reject(int id)
+void PROTOCALL reject(contact_id_s id)
 {
     if (tox)
     {
@@ -5310,19 +5676,19 @@ void __stdcall reject(int id)
         contact_descriptor_s *desc = it->second;
         desc->state = CS_ROTTEN;
 
-        contact_data_s cdata(desc->get_id(), CDM_STATE);
-        cdata.state = CS_ROTTEN;
-        hf->update_contact(&cdata);
+        contact_data_s cd(desc->get_id(true), CDM_STATE);
+        cd.state = CS_ROTTEN;
+        hf->update_contact(&cd);
 
-        if (desc->is_fid_ok() && desc->get_fid() >= 0)
-            tox_friend_delete(tox, desc->get_fid(), nullptr);
+        if (desc->get_fid().is_normal())
+            tox_friend_delete(tox, desc->get_fid().normal(), nullptr);
 
         desc->die();
         hf->save();
     }
 }
 
-void __stdcall call(int id, const call_info_s *ci)
+void PROTOCALL call(contact_id_s id, const call_info_s *ci)
 {
     if (tox)
     {
@@ -5332,12 +5698,12 @@ void __stdcall call(int id, const call_info_s *ci)
         if (nullptr != cd->cip)
             return; // already call
         
-        if (toxav_call(toxav, cd->get_fid(), DEFAULT_AUDIO_BITRATE, ci->call_type == call_info_s::VIDEO_CALL ? DEFAULT_VIDEO_BITRATE : 0, nullptr ))
+        if (toxav_call(toxav, cd->get_fid().normal(), DEFAULT_AUDIO_BITRATE, ci->call_type == call_info_s::VIDEO_CALL ? DEFAULT_VIDEO_BITRATE : 0, nullptr ))
             cd->prepare_call(ci->duration);
     }
 }
 
-void __stdcall stop_call(int id)
+void PROTOCALL stop_call(contact_id_s id)
 {
     if (tox)
     {
@@ -5347,12 +5713,12 @@ void __stdcall stop_call(int id)
         if (nullptr == cd->cip)
             return; // not call
 
-        toxav_call_control(toxav, cd->get_fid(), TOXAV_CALL_CONTROL_CANCEL, nullptr);
+        toxav_call_control(toxav, cd->get_fid().normal(), TOXAV_CALL_CONTROL_CANCEL, nullptr);
         cd->stop_call();
     }
 }
 
-void __stdcall accept_call(int id)
+void PROTOCALL accept_call(contact_id_s id)
 {
     if (tox)
     {
@@ -5365,17 +5731,17 @@ void __stdcall accept_call(int id)
 
         // desc->cip->local_so is initialized before accept
 
-        desc->cip->started = toxav_answer(toxav, desc->get_fid(),
+        desc->cip->started = toxav_answer(toxav, desc->get_fid().normal(),
             0 != ( desc->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
             0 != ( desc->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
 
         // desc->cip->remote_so is initialized on incoming call callback
 
-        hf->av_stream_options( 0, desc->get_id(), &desc->cip->remote_so );
+        hf->av_stream_options(contact_id_s(), desc->get_id(true), &desc->cip->remote_so );
     }
 }
 
-void __stdcall stream_options(int id, const stream_options_s * so)
+void PROTOCALL stream_options(contact_id_s id, const stream_options_s * so)
 {
     if (tox)
     {
@@ -5391,13 +5757,11 @@ void __stdcall stream_options(int id, const stream_options_s * so)
 
             if ( cd->cip->started )
             {
-                int gnum = cd->get_gnum();
-                if (gnum >= 0)
+                if (cd->get_fid().is_confa())
                 {
-                }
-                else
+                } else
                 {
-                    toxav_bit_rate_set(toxav, cd->get_fid(),
+                    toxav_bit_rate_set(toxav, cd->get_fid().normal(),
                         0 != (cd->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
                         0 != (cd->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
 
@@ -5405,10 +5769,10 @@ void __stdcall stream_options(int id, const stream_options_s * so)
                     if (changedso)
                     {
                         if (SO_RECEIVING_AUDIO & changedso)
-                            toxav_call_control(toxav, cd->get_fid(), 0 == (cd->cip->local_so.options & SO_RECEIVING_AUDIO) ? TOXAV_CALL_CONTROL_MUTE_AUDIO : TOXAV_CALL_CONTROL_UNMUTE_AUDIO, nullptr);
+                            toxav_call_control(toxav, cd->get_fid().normal(), 0 == (cd->cip->local_so.options & SO_RECEIVING_AUDIO) ? TOXAV_CALL_CONTROL_MUTE_AUDIO : TOXAV_CALL_CONTROL_UNMUTE_AUDIO, nullptr);
 
                         if (SO_RECEIVING_VIDEO & changedso)
-                            toxav_call_control(toxav, cd->get_fid(), 0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
+                            toxav_call_control(toxav, cd->get_fid().normal(), 0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
                     }
 
                     if (0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) && cd->cip->video_ex)
@@ -5428,7 +5792,7 @@ void __stdcall stream_options(int id, const stream_options_s * so)
     }
 }
 
-int __stdcall send_av(int id, const call_info_s * ci)
+int PROTOCALL send_av(contact_id_s id, const call_info_s * ci)
 {
     if (tox)
     {
@@ -5467,7 +5831,7 @@ int __stdcall send_av(int id, const call_info_s * ci)
     return SEND_AV_OK;
 }
 
-void __stdcall file_send(int cid, const file_send_info_s *finfo)
+void PROTOCALL file_send(contact_id_s cid, const file_send_info_s *finfo)
 {
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
         if (f->utag == finfo->utag)
@@ -5482,12 +5846,14 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
     {
         if (contact_descriptor_s *cd = find_descriptor(cid))
         {
-            str_c fnc;
-            asptr fn(finfo->filename, finfo->filename_len);
+            ASSERT(cd->get_fid().is_normal());
+
+            std::string fnc;
+            std::asptr fn(finfo->filename, finfo->filename_len);
             while(fn.l >= TOX_MAX_FILENAME_LENGTH)
             {
-                wstr_c w = to_wstr(fn);
-                fnc = to_str( w.as_sptr().skip(1) );
+                std::wstr_c w = to_wstr(fn);
+                fnc.super::set( to_utf8( w.as_sptr().skip(1) ) );
                 fn = fnc.as_sptr();
             }
 
@@ -5495,7 +5861,7 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
 
             byte fileid[ TOX_FILE_ID_LENGTH ];
 
-            str_c temp( asptr(finfo->filename, finfo->filename_len) );
+            std::string temp(std::asptr(finfo->filename, finfo->filename_len) );
             temp.append_char('-');
             temp.append_as_num( finfo->utag );
             temp.append_char( '-' );
@@ -5504,31 +5870,31 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
             crypto_hash_sha256( fileid, (const unsigned char *)temp.cstr(), temp.get_length() );
 
             TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
-            uint32_t tr = tox_file_send(tox, cd->get_fid(), TOX_FILE_KIND_DATA, finfo->filesize, fileid, (const byte *)fn.s, (uint16_t)fn.l, &er);
+            uint32_t tr = tox_file_send(tox, cd->get_fid().normal(), TOX_FILE_KIND_DATA, finfo->filesize, fileid, (const byte *)fn.s, fn.l, &er);
             if (er != TOX_ERR_FILE_SEND_OK)
             {
                 hf->file_control( finfo->utag, FIC_DISCONNECT ); // put it to send queue: assume transfer broken
                 return;
             }
-            new transmitting_file_s(cd->get_fid(), tr, finfo->utag, fileid, finfo->filesize, fn); // not memleak
+            new transmitting_file_s(cd->get_fid(), tr, finfo->utag, fileid, finfo->filesize, std::string(fn)); // not memleak
         }
     }
 
 }
 
-void __stdcall file_accept(u64 utag, u64 offset)
+void PROTOCALL file_accept(u64 utag, u64 offset)
 {
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
         if (f->utag == utag)
         {
             if (offset)
-                tox_file_seek(tox, f->fid, f->fnn, offset, nullptr);
-            tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
+                tox_file_seek(tox, f->fid.normal(), f->fnn, offset, nullptr);
+            tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
             break;
         }
 }
 
-void __stdcall file_control(u64 utag, file_control_e fctl)
+void PROTOCALL file_control(u64 utag, file_control_e fctl)
 {
     if (tox)
     {
@@ -5538,13 +5904,13 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
                 switch (fctl)
                 {
                 case FIC_UNPAUSE:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
                     break;
                 case FIC_PAUSE:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
                     break;
                 case FIC_BREAK:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
                     delete f;
                     break;
                 }
@@ -5558,18 +5924,18 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
                 {
                 case FIC_ACCEPT:
                 case FIC_UNPAUSE:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
                     break;
                 case FIC_PAUSE:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
                     break;
                 case FIC_REJECT:
                 case FIC_BREAK:
-                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
+                    tox_file_control(tox, f->fid.normal(), f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
                     delete f;
                     break;
                 case FIC_DONE:
-                    tox_file_send_chunk(tox, f->fid, f->fnn, 0, nullptr, 0, nullptr);
+                    tox_file_send_chunk(tox, f->fid.normal(), f->fnn, 0, nullptr, 0, nullptr);
                     delete f;
                     break;
                 }
@@ -5583,7 +5949,7 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
     }
 }
 
-bool __stdcall file_portion(u64 utag, const file_portion_s *portion)
+bool PROTOCALL file_portion(u64 utag, const file_portion_s *portion)
 {
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->utag == utag)
@@ -5592,14 +5958,14 @@ bool __stdcall file_portion(u64 utag, const file_portion_s *portion)
     return false;
 }
 
-void __stdcall del_conference( const char *conference_id )
+void PROTOCALL del_conference( const char *conference_id )
 {
     conference_id_s id;
-    pstr_c( asptr( conference_id ) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
+    std::pstr_c( std::asptr( conference_id ) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
 
     if (contact_descriptor_s *desc = contact_descriptor_s::find( id ))
     {
-        tox_conference_delete( tox, desc->get_gnum(), nullptr );
+        tox_conference_delete( tox, desc->get_fid().confa(), nullptr );
         desc->die();
     } else
     {
@@ -5611,10 +5977,10 @@ void __stdcall del_conference( const char *conference_id )
     hf->save();
 }
 
-void __stdcall enter_conference( const char *conference_id )
+void PROTOCALL enter_conference( const char *conference_id )
 {
     conference_id_s id;
-    pstr_c( asptr(conference_id) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
+    std::pstr_c(std::asptr(conference_id) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
 
     uint32_t cid = tox_conference_by_uid( tox, id.id, NULL );
     if (cid != UINT32_MAX)
@@ -5629,37 +5995,37 @@ void __stdcall enter_conference( const char *conference_id )
     }
 }
 
-void __stdcall leave_conference( int gid, int keep_leave )
+void PROTOCALL leave_conference(contact_id_s gid, int keep_leave )
 {
     auto it = id2desc.find( gid );
     if ( it == id2desc.end() ) return;
     contact_descriptor_s *desc = it->second;
     if ( desc->is_conference() )
     {
-        tox_conference_leave( tox, desc->get_gnum(), keep_leave & 1, nullptr );
+        tox_conference_leave( tox, desc->get_fid().confa(), keep_leave & 1, nullptr );
 
-        contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_MEMBERS | CDM_PUBID | CDM_SPECIAL_BITS );
-        cdata.state = CS_OFFLINE;
-        cdata.members_count = 0;
+        contact_data_s cd( desc->get_id(true), CDM_STATE | CDM_MEMBERS | CDM_PUBID );
+        cd.state = CS_OFFLINE;
+        cd.members_count = 0;
 
         //CONFAID
-        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-        cdata.public_id = pubid.cstr();
+        std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cd.public_id = pubid.cstr();
 
-        hf->update_contact( &cdata );
+        hf->update_contact( &cd );
 
         desc->die();
         hf->save();
     }
 }
 
-void __stdcall create_conference(const char *conferencename, const char *o)
+void PROTOCALL create_conference(const char *conferencename, const char *o)
 {
     bool audio_conference = false;
-    parse_values( asptr( o ), [&]( const pstr_c &field, const pstr_c &val ) {
-        if ( field.equals( CONSTASTR( CONFA_OPT_TYPE ) ) )
-            audio_conference = val.equals( CONSTASTR( "a" ) );
+    std::parse_values(std::asptr( o ), [&]( const std::pstr_c &field, const std::pstr_c &val ) {
+        if ( field.equals( STD_ASTR( CONFA_OPT_TYPE ) ) )
+            audio_conference = val.equals( STD_ASTR( "a" ) );
     } );
 
     if (tox)
@@ -5677,10 +6043,10 @@ void __stdcall create_conference(const char *conferencename, const char *o)
 
         if (gnum >= 0)
         {
-            asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
+            std::asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
             tox_conference_set_title(tox, gnum, (const uint8_t *)gn.s, gn.l, nullptr);
 
-            contact_descriptor_s *desc = new contact_descriptor_s(ID_CONFERENCE, gnum + CONFERENCE_ID_OFFSET);
+            contact_descriptor_s *desc = new contact_descriptor_s(ID_CONFERENCE, fid_s::make_confa(gnum));
             desc->state = CS_ONLINE; // conferences are always online
 
             conference_id_s gid;
@@ -5688,54 +6054,52 @@ void __stdcall create_conference(const char *conferencename, const char *o)
 
             desc->address = gid;
 
-            uint32_t am = 0;
             if ( audio_conference )
-                am = CDF_AUDIO_CONFERENCE, desc->prepare_call();
+                desc->prepare_call();
 
-            contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_SPECIAL_BITS | CDM_PERMISSIONS | am );
-            cdata.state = CS_ONLINE;
-            cdata.name = gn.s;
-            cdata.name_len = gn.l;
+            contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_PERMISSIONS );
+            cd.state = CS_ONLINE;
+            cd.name = gn.s;
+            cd.name_len = gn.l;
             //CONFAID
-            sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-            cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-            cdata.public_id = pubid.cstr();
+            std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+            cd.public_id = pubid.cstr();
 
-            cdata.conference_permissions = -1;
+            cd.conference_permissions = -1;
 
-            str_c details_json_string;
-            desc->prepare_details( details_json_string, cdata );
+            std::string details_json_string;
+            desc->prepare_details( details_json_string, cd );
 
-            hf->update_contact(&cdata);
+            hf->update_contact(&cd);
         }
     }
 }
 
-void __stdcall ren_conference(int gid, const char *conferencename)
+void PROTOCALL ren_conference(contact_id_s gid, const char *conferencename)
 {
-    if (tox && gid < 0)
+    if (tox && gid.is_conference())
     {
         auto it = id2desc.find(gid);
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
-        asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
-        tox_conference_set_title(tox, desc->get_gnum(), (const uint8_t *)gn.s, gn.l, nullptr);
+        std::asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
+        tox_conference_set_title(tox, desc->get_fid().confa(), (const uint8_t *)gn.s, gn.l, nullptr);
 
-        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_PUBID | CDM_SPECIAL_BITS);
-        cdata.name = gn.s;
-        cdata.name_len = gn.l;
+        contact_data_s cd(desc->get_id(true), CDM_NAME | CDM_PUBID);
+        cd.name = gn.s;
+        cd.name_len = gn.l;
         //CONFAID
-        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
-        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
-        cdata.public_id = pubid.cstr();
-        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
-        hf->update_contact(&cdata);
+        std::sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cd.public_id = pubid.cstr();
+        hf->update_contact(&cd);
     }
 }
 
-void __stdcall join_conference(int gid, int cid)
+void PROTOCALL join_conference(contact_id_s gid, contact_id_s cid)
 {
-    if (tox && gid < 0 && cid > 0)
+    if (tox && gid.is_conference() && cid.is_contact())
     {
         auto git = id2desc.find(gid);
         if (git == id2desc.end()) return;
@@ -5748,13 +6112,13 @@ void __stdcall join_conference(int gid, int cid)
 
         if (!ccd->is_online()) return; // persistent conferences not yet supported
 
-        tox_conference_invite(tox, ccd->get_fid(), gcd->get_gnum(), nullptr);
+        tox_conference_invite(tox, ccd->get_fid().normal(), gcd->get_fid().confa(), nullptr);
     }
 }
 
-void __stdcall typing(int cid)
+void PROTOCALL typing(contact_id_s cid)
 {
-    if (cid < 0)
+    if (cid.is_conference())
     {
         // oops. toxcore does not support conference typing notification... :(
         return;
@@ -5763,39 +6127,22 @@ void __stdcall typing(int cid)
     if (contact_descriptor_s *cd = find_descriptor(cid))
         if (cd->is_online())
         {
-            if (!self_typing_contact)
+            if (self_typing_contact.is_empty())
             {
                 self_typing_contact = cid;
-                if (tox) tox_self_set_typing(tox, cd->get_fid(), true, nullptr);
+                if (tox) tox_self_set_typing(tox, cd->get_fid().normal(), true, nullptr);
                 self_typing_time = time_ms() + 1500;
             } else if ( self_typing_contact == cid )
                 self_typing_time = time_ms() + 1500;
         }
 }
 
-void __stdcall export_data()
-{
-    if ( tox )
-    {
-        size_t sz = tox_get_savedata_size(tox);
-        void *data = _alloca(sz);
-        tox_get_savedata(tox, (byte *)data);
-        hf->export_data( data, (int)sz );
-    } else if (buf_tox_config.size())
-    {
-        hf->export_data(buf_tox_config.data(), (int)buf_tox_config.size());
-    } else
-    {
-        hf->export_data(nullptr, 0);
-    }
-}
-
-void __stdcall logging_flags(unsigned int f)
+void PROTOCALL logging_flags(unsigned int f)
 {
     g_logging_flags = f;
 }
 
-void __stdcall telemetry_flags( unsigned int f )
+void PROTOCALL telemetry_flags( unsigned int f )
 {
     g_telemetry_flags = f;
 }
@@ -5803,16 +6150,33 @@ void __stdcall telemetry_flags( unsigned int f )
 
 proto_functions_s funcs =
 {
-#define FUNC0( rt, fn ) &fn,
 #define FUNC1( rt, fn, p0 ) &fn,
 #define FUNC2( rt, fn, p0, p1 ) &fn,
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 };
 
-proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
+static void node_accept_handler(const uint8_t *public_key)
+{
+    const public_key_s &pk = *(const public_key_s *)public_key;
+    auto x = std::lower_bound( nodes.begin(), nodes.end(), pk );
+    if (x->pubid == pk)
+    {
+        x->accept_count += 2;
+        if (!x->accepted)
+            ++accepted_nodes, x->accepted = true;
+    }
+}
+
+
+extern "C"
+{
+    typedef void node_f(const uint8_t *public_key);
+    extern node_f *node_responce;
+}
+
+proto_functions_s* PROTOCALL api_handshake(host_functions_s *hf_)
 {
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -5820,23 +6184,30 @@ proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
     srand(time_ms());
 
     hf = hf_;
+    node_responce = node_accept_handler;
 
     self_state = CS_OFFLINE;
     lastmypubid.clear();
 
     memset( &options, 0, sizeof(options) );
     options.udp_enabled = true;
+    options.hole_punching_enabled = true;
+    options.local_discovery_enabled = true;
 
     nodes.clear();
     nodes.reserve(32);
 
+#define CONSTASTR STD_ASTR
 #include "dht_nodes.inl"
+#undef CONSTASTR
 
-    //nodes.emplace_back( CONSTASTR("isotoxin.im"), 33445, CONSTASTR("5823FB947FF24CF83DDFAC3F3BAA18F96EA2018B16CC08429CB97FA502F40C23") );
+    std::sort( nodes.begin(), nodes.end() );
+
+    //nodes.emplace_back( STD_ASTR("isotoxin.im"), 33445, STD_ASTR("5823FB947FF24CF83DDFAC3F3BAA18F96EA2018B16CC08429CB97FA502F40C23") );
 
     pinnedservs.clear();
     pinnedservs.reserve(4);
-#define PINSERV(a, b) pinnedservs.emplace_back( CONSTASTR(a), CONSTASTR(b) );
+#define PINSERV(a, b) pinnedservs.emplace_back( STD_ASTR(a), STD_ASTR(b) );
     #include "pinned_srvs.inl"
 #undef PINSERV
 
@@ -5845,9 +6216,9 @@ proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
     return &funcs;
 }
 
-void __stdcall api_getinfo( proto_info_s *info )
+void PROTOCALL api_getinfo( proto_info_s *info )
 {
-    static sstr_t<1024> vers( "plugin: " SS( PLUGINVER ) ", toxcore: " );
+    static std::sstr_t<1024> vers( "plugin: " SS( PLUGINVER ) ", toxcore: " );
 
     vers.append_as_uint( TOX_VERSION_MAJOR );
     vers.append_char( '.' );
@@ -5881,5 +6252,69 @@ void __stdcall api_getinfo( proto_info_s *info )
     info->priority = 500;
     info->indicator = 500;
     info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_CONFERENCE | PF_CONFERENCE_ENTER_LEAVE; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_ipv6_enable | CF_udp_enable | CF_hole_punch | CF_local_discovery | CF_SERVER_OPTION;
+}
+
+extern "C"
+{
+    bool tox_options_get_ipv6_enabled(const struct Tox_Options *o)
+    {
+        return o->ipv6_enabled;
+    }
+    bool tox_options_get_udp_enabled(const struct Tox_Options *o)
+    {
+        return o->udp_enabled;
+    }
+    bool tox_options_get_local_discovery_enabled(const struct Tox_Options *o)
+    {
+        return o->local_discovery_enabled;
+    }
+    TOX_PROXY_TYPE tox_options_get_proxy_type(const struct Tox_Options *o)
+    {
+        return o->proxy_type;
+    }
+    const char *tox_options_get_proxy_host(const struct Tox_Options *o)
+    {
+        return o->proxy_host;
+    }
+    uint16_t tox_options_get_proxy_port(const struct Tox_Options *o)
+    {
+        return o->proxy_port;
+    }
+    uint16_t tox_options_get_start_port(const struct Tox_Options *o)
+    {
+        return o->start_port;
+    }
+    uint16_t tox_options_get_end_port(const struct Tox_Options *o)
+    {
+        return o->end_port;
+    }
+    uint16_t tox_options_get_tcp_port(const struct Tox_Options *o)
+    {
+        return o->tcp_port;
+    }
+    bool tox_options_get_hole_punching_enabled(const struct Tox_Options *o)
+    {
+        return o->hole_punching_enabled;
+    }
+    TOX_SAVEDATA_TYPE tox_options_get_savedata_type(const struct Tox_Options *o)
+    {
+        return o->savedata_type;
+    }
+    const uint8_t *tox_options_get_savedata_data(const struct Tox_Options *o)
+    {
+        return o->savedata_data;
+    }
+    size_t tox_options_get_savedata_length(const struct Tox_Options *o)
+    {
+        return o->savedata_length;
+    }
+    tox_log_cb *tox_options_get_log_callback(const struct Tox_Options *)
+    {
+        return nullptr;
+    }
+    void *tox_options_get_log_user_data(const struct Tox_Options *)
+    {
+        return nullptr;
+    }
 }

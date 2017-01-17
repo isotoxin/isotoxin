@@ -14,7 +14,7 @@ av_contact_s::av_contact_s( contact_root_c *c, contact_c *sub, state_e st ):sub(
 
     core->inactive = false;
     core->dirty_cam_size = true;
-    core->starttime = now();
+    core->starttime = ts::now();
     core->prevtick = ts::Time::current() - 1;
 
     volume = cfg().vol_talk();
@@ -271,7 +271,7 @@ void av_contact_s::on_frame_ready( const ts::bmpcore_exbody_s &ebm )
     if ( 0 == ( remote_so & SO_RECEIVING_VIDEO ) || core->ap == nullptr )
         return;
 
-    core->ap->send_video_frame( contact_key_s(avkey).contactid, ebm, core->mstime );
+    core->ap->send_video_frame( contact_key_s(avkey).gidcid(), ebm, core->mstime );
 }
 
 
@@ -298,6 +298,12 @@ void av_contact_s::add_audio( uint64 timestamp, const s3::Format &fmt, const voi
 
 void av_contact_s::play_audio( const s3::Format &fmt, const void *data, ts::aint size )
 {
+    if (core->mute)
+    {
+        g_app->F_AUDIO_MUTED = true;
+        return;
+    }
+
     int dspf = 0;
     if ( 0 != ( speaker_dsp_flags & DSP_SPEAKERS_NOISE ) ) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
     if ( 0 != ( speaker_dsp_flags & DSP_SPEAKERS_AGC ) ) dspf |= fmt_converter_s::FO_GAINER;
@@ -318,7 +324,7 @@ void av_contact_s::send_audio( const s3::Format& ifmt, const void *data, ts::ain
     {
         uint64 msmonotonic;
         active_protocol_c *ap;
-        int cid;
+        contact_id_s cid;
         void send_audio( const s3::Format& ofmt, const void *data, ts::aint size )
         {
             ap->send_audio( cid, data, static_cast<int>(size), msmonotonic - ofmt.bytesToMSec( static_cast<int>( size ) ) );
@@ -504,9 +510,29 @@ bool av_contacts_c::tick()
         if (m_indicators.lock_read()().count())
         {
             clean_started = true;
-            DEFERRED_UNIQUE_CALL( 0.1, DELEGATE( this, clean_indicators ), 0 );
-        }  else
-            g_app->F_INDICATOR_CHANGED = false;
+            DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, clean_indicators), 0);
+        }
+        g_app->F_INDICATOR_CHANGED = false;
+    }
+
+    if (g_app->F_AUDIO_MUTED)
+    {
+        ts::tmp_tbuf_t<uint64> ahists;
+        auto r = m_indicators.lock_read();
+        for (const ind_s &p : r())
+            ahists.add(p.avk);
+        r.unlock();
+
+        ts::tmp_tbuf_t<contact_key_s> hists;
+        for (uint64 avk : ahists)
+        {
+            if (contact_root_c *hr = contact_key_s(avk).find_root_contact())
+                hists.set(hr->getkey());
+        }
+        for (contact_key_s k : hists)
+        {
+            g_app->new_blink_reason(k).conference_audio();
+        }
     }
 
     bool c = false;

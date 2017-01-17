@@ -215,10 +215,10 @@ public:
         if (!is_table_exist(tablename))
         {
             if (readonly) return -1;
-            execsql(CONSTASTR("BEGIN"));
+            execsql(tmp_str_c(CONSTASTR("BEGIN")));
             create_table(tablename,columns,norowid);
             create_index(tablename,columns);
-            execsql(CONSTASTR("COMMIT"));
+            execsql(tmp_str_c(CONSTASTR("COMMIT")));
             return 1;
         }
 
@@ -273,7 +273,7 @@ public:
             if (recreate)
             {
                 if (readonly) return -1;
-                execsql(CONSTASTR("BEGIN"));
+                execsql(tmp_str_c(CONSTASTR("BEGIN")));
                 tbln.insert(0,CONSTASTR("new__"));
                 create_table(tbln,columns,norowid);
             
@@ -288,13 +288,13 @@ public:
                 sql << CONSTASTR("ALTER TABLE `") << tbln << CONSTASTR("` RENAME TO `") << tablename << "`";
                 execsql(sql.buffer());
                 create_index(tablename, columns);
-                execsql(CONSTASTR("COMMIT"));
+                execsql(tmp_str_c(CONSTASTR("COMMIT")));
             } else
             {
                 if (readonly) return 0;
-                execsql(CONSTASTR("BEGIN"));
+                execsql(tmp_str_c(CONSTASTR("BEGIN")));
                 create_index(tablename, columns);
-                execsql(CONSTASTR("COMMIT"));
+                execsql(tmp_str_c(CONSTASTR("COMMIT")));
             }
         }
         return 0;

@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2004-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2004-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -103,7 +103,7 @@ namespace gloox
   Client::Client( const std::string& server )
     : ClientBase( XMLNS_CLIENT, server ),
       m_rosterManager( 0 ), m_auth( 0 ),
-      m_presence( Presence::Available, JID() ), m_resourceBound( false ),
+      m_presence( Presence::Available, JID() ),
       m_forceNonSasl( false ), m_manageRoster( true ),
       m_smId( EmptyString ), m_smLocation( EmptyString ), m_smResume( false ), m_smWanted( false ), m_smMax( 0 ),
       m_streamFeatures( 0 )
@@ -115,7 +115,7 @@ namespace gloox
   Client::Client( const JID& jid, const std::string& password, int port )
     : ClientBase( XMLNS_CLIENT, password, EmptyString, port ),
       m_rosterManager( 0 ), m_auth( 0 ),
-      m_presence( Presence::Available, JID() ), m_resourceBound( false ),
+      m_presence( Presence::Available, JID() ),
       m_forceNonSasl( false ), m_manageRoster( true ),
       m_smId( EmptyString ), m_smLocation( EmptyString ), m_smResume( false ), m_smWanted( false ), m_smMax( 0 ),
       m_streamFeatures( 0 )

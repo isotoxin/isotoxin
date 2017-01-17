@@ -1,7 +1,7 @@
 #include "toolset.h"
 #include "platform.h"
 
-#if defined _DEBUG || defined _CRASH_HANDLER
+#if (defined _DEBUG || defined _CRASH_HANDLER) && defined _WIN32
 #include "excpn.h"
 
 #define SLASSERT ASSERTO

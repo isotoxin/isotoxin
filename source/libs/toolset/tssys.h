@@ -69,7 +69,7 @@ protected:
 public:
     typedef fastdelegate::FastDelegate< bool () > _HANDLER;
     typedef fastdelegate::FastDelegate< void (mouse_event_e, const ivec2&, const ivec2& ) > _HANDLER_M;
-    typedef fastdelegate::FastDelegate< bool ( wchar_t c ) > _HANDLER_C;
+    typedef fastdelegate::FastDelegate< bool ( wchar ) > _HANDLER_C;
     typedef fastdelegate::FastDelegate< bool ( int, bool, int ) > _HANDLER_K;
     typedef fastdelegate::FastDelegate< void () > _HANDLER_T;
     
@@ -187,7 +187,7 @@ public:
 extern static_setup<MASTER_CLASS, 0> master;
 
 // app specific
-bool TSCALL app_preinit(const wchar_t *cmdline);
+bool TSCALL app_preinit(const ts::wchar *cmdline);
 
 // keyboard
 enum casw_e : unsigned int

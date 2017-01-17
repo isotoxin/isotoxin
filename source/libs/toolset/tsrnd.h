@@ -118,24 +118,40 @@ public:
 #endif
 
 #ifdef RAND_MAX
-INLINE double RND(double from, double to)
+
+namespace rnd_internals
 {
-    return ((double)my_rnd()*(1.0/(RAND_MAX))*((double((to)-(from))))+(from));
+    template<typename NTYPE> struct rndgen_s
+    {
+        static NTYPE rnd(NTYPE from, NTYPE to)
+        {
+            return ((NTYPE)my_rnd())*((to)-(from)) / (RAND_MAX)+(from);
+        }
+    };
+    template<> struct rndgen_s<float>
+    {
+        static float rnd(float from, float to)
+        {
+            return float((double)my_rnd()*(1.0 / (RAND_MAX))*((double((to)-(from)))) + (from));
+        }
+    };
+    template<> struct rndgen_s<double>
+    {
+        static double rnd(double from, double to)
+        {
+            return ((double)my_rnd()*(1.0 / (RAND_MAX))*((double((to)-(from)))) + (from));
+        }
+    };
 }
 
-INLINE float RND(float from, float to)
+template<typename NTYPE> NTYPE rnd(NTYPE from, NTYPE to)
 {
-    return float((double)my_rnd()*(1.0/(RAND_MAX))*((double((to)-(from))))+(from));
-}
-
-INLINE aint RND(aint from, aint to) // [..)
-{
-    return ((aint)my_rnd())*((to)-(from))/(RAND_MAX)+(from);
+    return rnd_internals::rndgen_s<NTYPE>::rnd( from, to );
 }
 #endif
 
-#define FRND(x)    ((float)(ts::RND(0.0f,float(x))))
+#define FRND(x)    ((float)(ts::rnd<float>(0.0f,float(x))))
 #define FSRND(x)   (FRND(2.0f*(x))-float(x))
-#define IRND(n)    (ts::lround(ts::RND(0.0,double(n)-0.55)))
+#define IRND(n)    (ts::lround(ts::rnd<double>(0.0,double(n)-0.55)))
 
 }

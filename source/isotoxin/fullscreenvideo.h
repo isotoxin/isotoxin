@@ -92,6 +92,7 @@ struct common_videocall_stuff_s
 
 class fullscreenvideo_c : public gui_control_c
 {
+    typedef gui_control_c super;
     friend class gui_notice_callinprogress_c;
     guirect_watch_c watch;
     ts::safe_ptr<gui_notice_callinprogress_c> owner;

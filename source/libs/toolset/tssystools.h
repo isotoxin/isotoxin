@@ -14,6 +14,8 @@ irect   TSCALL wnd_get_max_size_fs(const irect &rfrom);
 ivec2   TSCALL wnd_get_center_pos( const ts::ivec2& size );
 void    TSCALL wnd_fix_rect(irect &r, int minw, int minh);
 
+int     TSCALL monitor_find_max_sz(const irect&fr, irect&maxr);
+int     TSCALL monitor_find(const ts::ivec2& pt); // find index by point
 int     TSCALL monitor_count();
 irect   TSCALL monitor_get_max_size_fs(int monitor);
 irect   TSCALL monitor_get_max_size(int monitor);

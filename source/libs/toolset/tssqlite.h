@@ -18,7 +18,6 @@ INLINE bool same_sqlite_type( data_type_e t1, data_type_e t2 )
 
 struct column_desc_s
 {
-    MOVABLE( true );
     asptr name_;
     asptr default_;
     data_type_e type_ = data_type_e::t_int;
@@ -44,9 +43,10 @@ struct column_desc_s
     }
 };
 
+namespace internals { template <> struct movable<column_desc_s> : public movable_customized_yes {}; }
+
 struct data_value_s
 {
-    MOVABLE( true );
     str_c text;
     blob_c blob;
     union 
@@ -64,6 +64,8 @@ struct data_pair_s : public data_value_s
     data_type_e type_ = data_type_e::t_int;
 
 };
+
+namespace internals { template <> struct movable<data_pair_s> : public movable_customized_yes {}; }
 
 typedef fastdelegate::FastDelegate<data_type_e (int, data_value_s &)> SQLITE_DATAGETTER;
 typedef fastdelegate::FastDelegate<bool (int, SQLITE_DATAGETTER)> SQLITE_TABLEREADER;

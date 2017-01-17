@@ -3,6 +3,8 @@
 */
 #pragma once
 
+#define LCD_RENDER_MODE 0 // experimental, still bad looks
+
 struct FT_FaceRec_;
 typedef FT_FaceRec_*  FT_Face;
 
@@ -95,7 +97,7 @@ public:
 	glyph_s &operator[](wchar c);
 	static font_c &buildfont(const str_c &fontname, const font_params_s&fp);
 	int kerning_ci(int left, int right);
-	int kerning(wchar_t left, wchar_t right) { return kerning_ci(operator[](left).char_index, operator[](right).char_index); }
+	int kerning( wchar left, wchar right) { return kerning_ci(operator[](left).char_index, operator[](right).char_index); }
 
     str_c makename_bold();
     str_c makename_light();

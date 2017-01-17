@@ -34,7 +34,7 @@ gui_isodialog_c::~gui_isodialog_c()
 
 /*virtual*/ ts::irect gui_isodialog_c::get_client_area() const
 {
-    ts::irect clar = __super::get_client_area();
+    ts::irect clar = super::get_client_area();
     clar.lt += 5;
     clar.rb -= 5;
     return clar;

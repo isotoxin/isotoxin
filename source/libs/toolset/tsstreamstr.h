@@ -207,19 +207,7 @@ public:
         return *this;
     }
 
-    streamstr& operator<<(const streamstr_time &tim)
-    {
-        begin();
-        tm today;
-        #if defined _MSC_VER
-        _localtime64_s(&today, &tim.t);
-        #elif defined __GNUC__
-        localtime_r(&tim.t, &today);
-        #endif
-        char_t *cur = prepare_fill(16); if (!cur) return *this;
-        strftime(cur, boof_current_size(), "[%Y-%m-%d %H:%M:%S]", &today); boof_update_len(cur);
-        return *this;
-    }
+    streamstr& operator<<(const streamstr_time &tim);
 
     streamstr& operator<<(const void* v) { begin(); append_num_hex<sizeof(uint64)>((uint64)v); return *this; }
 

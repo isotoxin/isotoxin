@@ -1,6 +1,6 @@
 #pragma once
 
-#define __STATIC static
+#define STATIC_IN_RELEASE static
 
 #define MAJOR_VERSION 0
 #define MINOR_VERSION 0

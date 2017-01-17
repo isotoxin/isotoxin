@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="isotoxin" />
+		<Option platforms="Unix;" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../../bin/isotoxin" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="$(PROJECTDIR)/../../bin" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="0" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-Winit-self" />
+					<Add option="-Wundef" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-g" />
+					<Add option="-D_DEBUG" />
+					<Add option="-D_NIX" />
+					<Add directory="$(PROJECTDIR)../libs" />
+					<Add directory="$(PROJECTDIR)../libs-external" />
+					<Add directory="$(PROJECTDIR)../libs-external/cairo" />
+					<Add directory="$(PROJECTDIR)../libs-external/hunspell" />
+				</Compiler>
+				<Linker>
+					<Add option="-m64" />
+					<Add library="memspyd" />
+					<Add library="srsvgd" />
+					<Add library="rectanglesd" />
+					<Add library="toolsetd" />
+					<Add library="curl" />
+					<Add library="sodium" />
+					<Add library="pngstatic" />
+					<Add library="minizipstatic" />
+					<Add library="zstatic" />
+					<Add library="pthread" />
+					<Add library="freetype" />
+					<Add library="qrencode" />
+					<Add library="gifstatic" />
+					<Add library="jpegstatic" />
+					<Add library="cairostatic" />
+					<Add library="sqlitestatic" />
+					<Add library="dl" />
+					<Add directory="$(GARBAGE)/__libs/" />
+					<Add directory="$(PROJECTDIR)../libs/" />
+				</Linker>
+			</Target>
+			<Target title="Final">
+				<Option platforms="Unix;" />
+				<Option output="$(PROJECTDIR)/../../bin/isotoxin" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="$(PROJECTDIR)/../../bin" />
+				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
+				<Option type="0" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-march=atom" />
+					<Add option="-fomit-frame-pointer" />
+					<Add option="-O3" />
+					<Add option="-std=c++14" />
+					<Add option="-m64" />
+					<Add option="-D_FINAL" />
+					<Add option="-D_NIX" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-m64" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fexceptions" />
+		</Compiler>
+		<Unit filename="activeprotocol.cpp" />
+		<Unit filename="activeprotocol.h" />
+		<Unit filename="addcontact.cpp" />
+		<Unit filename="addcontact.h" />
+		<Unit filename="application.cpp" />
+		<Unit filename="application.h" />
+		<Unit filename="autoupdater.cpp" />
+		<Unit filename="avaselector.cpp" />
+		<Unit filename="avaselector.h" />
+		<Unit filename="avcontact.cpp" />
+		<Unit filename="avcontact.h" />
+		<Unit filename="config.cpp" />
+		<Unit filename="config.h" />
+		<Unit filename="contactlist.cpp" />
+		<Unit filename="contactlist.h" />
+		<Unit filename="contactprops.cpp" />
+		<Unit filename="contactprops.h" />
+		<Unit filename="contacts.cpp" />
+		<Unit filename="contacts.h" />
+		<Unit filename="conversation.cpp" />
+		<Unit filename="conversation.h" />
+		<Unit filename="emoticons.cpp" />
+		<Unit filename="emoticons.h" />
+		<Unit filename="filterbar.cpp" />
+		<Unit filename="filterbar.h" />
+		<Unit filename="firstrun.cpp" />
+		<Unit filename="firstrun.h" />
+		<Unit filename="fullscreenvideo.cpp" />
+		<Unit filename="fullscreenvideo.h" />
+		<Unit filename="images.cpp" />
+		<Unit filename="images.h" />
+		<Unit filename="isodialog.cpp" />
+		<Unit filename="isodialog.h" />
+		<Unit filename="isotoxin.cpp" />
+		<Unit filename="isotoxin.h" />
+		<Unit filename="mainrect.cpp" />
+		<Unit filename="mainrect.h" />
+		<Unit filename="mediasystem.cpp" />
+		<Unit filename="mediasystem.h" />
+		<Unit filename="metacontact.cpp" />
+		<Unit filename="metacontact.h" />
+		<Unit filename="prepareimage.cpp" />
+		<Unit filename="prepareimage.h" />
+		<Unit filename="profile.cpp" />
+		<Unit filename="profile.h" />
+		<Unit filename="settings.cpp" />
+		<Unit filename="settings.h" />
+		<Unit filename="signpk.inl" />
+		<Unit filename="simpledlg.cpp" />
+		<Unit filename="simpledlg.h" />
+		<Unit filename="smileselector.cpp" />
+		<Unit filename="smileselector.h" />
+		<Unit filename="tests.cpp" />
+		<Unit filename="todo.cpp" />
+		<Unit filename="tooldialogs.cpp" />
+		<Unit filename="tooldialogs.h" />
+		<Unit filename="tools.cpp" />
+		<Unit filename="tools.h" />
+		<Unit filename="videoprocessing.cpp" />
+		<Unit filename="videoprocessing.h" />
+		<Extensions>
+			<envvars set="default" />
+			<code_completion />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

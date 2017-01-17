@@ -11,9 +11,10 @@ template<> struct MAKE_ROOT<dialog_smileselector_c> : public _PROOT(dialog_smile
 
 class dialog_smileselector_c : public gui_control_c
 {
-    struct rectdef_s
+    typedef gui_control_c super;
+
+    struct rectdef_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         emoticon_s *e;
         ts::ivec2 p;
         rectdef_s( const ts::ivec2 &p, emoticon_s *e ):p(p), e(e) {}

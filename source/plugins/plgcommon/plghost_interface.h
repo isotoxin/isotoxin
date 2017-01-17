@@ -18,14 +18,15 @@ enum commands_e
     AQ_GET_PROTOCOLS_LIST,
     HA_PROTOCOLS_LIST,
 
+    AQ_SET_USED_IDS,
     AQ_SET_PROTO,
     AQ_SET_NAME,
     AQ_SET_STATUSMSG,
     AQ_SET_CONFIG,
-    AQ_INIT_DONE,
-    AQ_ONLINE,
-    AQ_OFFLINE,
+    AQ_SIGNAL,
     AQ_OSTATE,
+
+    AQ_CONTACT,
 
     HA_CONFIGURABLE,    // some configurable parameters from plugin to application
 
@@ -83,6 +84,7 @@ enum commands_e
     HQ_TYPING, // other typing
 
     HA_CMD_STATUS,
+    HA_CONNECTION_BITS,
     
     XX_PING,
     XX_PONG,
@@ -142,8 +144,8 @@ struct ipcr // reader
     }
 
 #ifdef STRTYPE
-    STRTYPE(char) getastr() { int l = get<unsigned short>(); const char *s = d + ptrdiff_t(ptr); ptr += l; ASSERT(ptr <= sz); return MAKESTRTYPE( char, s, l ); }
-    STRTYPE(wchar_t) getwstr() { int l = get<unsigned short>(); const wchar_t *s = (const wchar_t *)(d + ptrdiff_t(ptr)); ptr += l * sizeof(wchar_t); ASSERT(ptr <= sz); return MAKESTRTYPE( wchar_t, s, l ); }
+    STRTYPE(char) getastr() { int l = get<unsigned short>(); const char *s = d + ptrdiff_t(ptr); ptr += l; ASSERT(ptr <= sz); return MAKESTRTYPE(char, s, l); }
+    STRTYPE(WIDECHAR) getwstr() { int l = get<unsigned short>(); const WIDECHAR *s = (const WIDECHAR *)(d + ptrdiff_t(ptr)); ptr += l * sizeof(WIDECHAR); ASSERT(ptr <= sz); return MAKESTRTYPE(WIDECHAR, s, l); }
 #endif
 };
 

@@ -4,7 +4,6 @@
 
 struct vsb_descriptor_s
 {
-    MOVABLE( true );
     ts::wstr_c id;
     ts::wstr_c desc;
     ts::tbuf0_t<ts::ivec2> resolutions;
@@ -19,6 +18,8 @@ struct vsb_descriptor_s
         return false;
     }
 };
+
+DECLARE_MOVABLE(vsb_descriptor_s, true)
 
 typedef ts::array_inplace_t< vsb_descriptor_s, 0 > vsb_list_t;
 
@@ -246,7 +247,7 @@ class vsb_desktop_c : public vsb_c
         ~grab_desktop();
 
         void grab(const ts::irect &gr);
-        /*virtual*/ int iterate() override;
+        /*virtual*/ int iterate(ts::task_executor_c *e) override;
 
         void add_owner(vsb_desktop_c *owner);
         void remove_owner(vsb_desktop_c *owner);
@@ -352,7 +353,7 @@ public:
 
 struct incoming_video_frame_s // XRGB always
 {
-    int gid, cid;
+    contact_id_s gid, cid;
     ts::ivec2 sz;
     uint64 msmonotonic;
     uint64 padding;
@@ -370,7 +371,7 @@ class video_frame_decoder_c : public ts::task_c
     incoming_video_frame_s *f;
     vsb_display_c *display = nullptr;
 
-    /*virtual*/ int iterate() override;
+    /*virtual*/ int iterate(ts::task_executor_c *e) override;
     /*virtual*/ void done(bool canceled) override;
     /*virtual*/ void result() override;
 public:

@@ -237,7 +237,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
 
 }
 
-/*virtual*/ int vsb_desktop_c::grab_desktop::iterate()
+/*virtual*/ int vsb_desktop_c::grab_desktop::iterate(ts::task_executor_c *e)
 {
     spinlock::simple_lock(sync);
     if (stop_job)
@@ -451,8 +451,8 @@ vsb_dshow_camera_c::core_dshow_c::core_dshow_c(const vsb_descriptor_s &desc_, co
 {
     VideoConfig config;
 
-    config.name = desc_.desc;
-    config.path = desc_.id;
+    config.name.set( std::wsptr( desc_.desc.cstr(), desc_.desc.get_length() ) );
+    config.path.set( std::wsptr( desc_.id.cstr(), desc_.id.get_length() ) );
     config.callback = DELEGATE(this, dshocb);
     
     ts::ivec2 sz = ts::parsevec2(to_str(dpar.get(CONSTWSTR("res"))), ts::ivec2(0));
@@ -479,7 +479,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
 
         init_camera(const VideoConfig &config, core_c *camcore) :camcore(camcore), config(config), camera(DShow::InitGraph::True) {}
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             if (stop_job)
                 return R_CANCEL;
@@ -543,7 +543,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             if (camera.Active())
                 camera.Stop();
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
 
     };
@@ -650,7 +650,7 @@ video_frame_decoder_c::~video_frame_decoder_c()
 
 };
 
-/*virtual*/ int video_frame_decoder_c::iterate()
+/*virtual*/ int video_frame_decoder_c::iterate(ts::task_executor_c *e)
 {
     if (nullptr == f || nullptr == display->notice) return R_CANCEL;
     if ( display->get_desired_size() == ts::ivec2(0) ) return R_CANCEL;
@@ -672,7 +672,7 @@ video_frame_decoder_c::~video_frame_decoder_c()
 /*virtual*/ void video_frame_decoder_c::done(bool canceled)
 {
     gmsg<ISOGM_VIDEO_TICK>(videosize).send();
-    __super::done(canceled);
+    ts::task_c::done(canceled);
 }
 /*virtual*/ void video_frame_decoder_c::result()
 {

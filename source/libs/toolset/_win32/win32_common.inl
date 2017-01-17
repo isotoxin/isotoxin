@@ -2,9 +2,8 @@
 
 struct master_internal_stuff_s
 {
-    struct icon_cache_s
+    struct icon_cache_s : public movable_flag<true>
     {
-        MOVABLE( true );
         HICON hicon = nullptr;
         uint32 crc = 0;
         int ref = 0;
@@ -25,6 +24,7 @@ struct master_internal_stuff_s
         {
             SWAP( hicon, ic.hicon );
             SWAP( crc, ic.crc );
+            return *this;
         }
 
     private:

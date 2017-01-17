@@ -1,7 +1,7 @@
 # Makefile for pnglib
 # (C) 2016 Rotkaermota
 
-LIBNAME = pnglib
+LIBNAME = libpngstatic
 
 CC=gcc
 CFLAGS=-O3  -DHAVE_HIDDEN

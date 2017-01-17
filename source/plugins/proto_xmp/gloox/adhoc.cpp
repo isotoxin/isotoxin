@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2004-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2004-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -210,7 +210,7 @@ namespace gloox
       c->addAttribute( "sessionid", m_sessionid );
 
     if( m_plugin && *m_plugin )
-      c->addChild( m_plugin->tag()->clone() );
+      c->addChild( m_plugin->tag() );
 
     NoteList::const_iterator it = m_notes.begin();
     for( ; it != m_notes.end(); ++it )

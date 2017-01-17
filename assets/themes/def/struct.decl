@@ -1985,6 +1985,21 @@ buttons
 	  add-height=0,1
     }
   }
+  callv
+  {
+    gen 
+    { 
+      svg=`<svg width="128" height="128">
+			<g transform="translate(10 10) scale(0.55)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" />
+				<path fill="##gen_i2" stroke="none" d="m 78.241092,65.479166 -0.08031,-30.681771 -11.815229,11.959458 0,-8.249 c 0,-2.762 -2.238,-5 -5,-5 l -33,0 c -2.762,0 -5,2.238 -5,5 l 0,23 c 0,2.762 2.238,5 5,5 l 33,0 c 2.762,0 5,-2.238 5,-5 l 0,-7.781 z" />
+			</g></svg>`
+
+      color=##gen_call
+      k-press=0.95
+	  add-height=0,1
+    }
+  }
 
   explore
   {

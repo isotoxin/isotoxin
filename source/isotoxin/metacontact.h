@@ -28,13 +28,14 @@ class dialog_metacontact_c;
 template<> struct MAKE_ROOT<dialog_metacontact_c> : public _PROOT(dialog_metacontact_c)
 {
     dialog_metacontact_params_s prms;
-    MAKE_ROOT() :_PROOT(dialog_metacontact_c)() { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
-    MAKE_ROOT(bool, const dialog_metacontact_params_s &prms) :_PROOT(dialog_metacontact_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL|RS_MAINPARENT) ); }
+    MAKE_ROOT() :_PROOT(dialog_metacontact_c)() { init(RS_NORMAL_MAINPARENT); }
+    MAKE_ROOT(bool, const dialog_metacontact_params_s &prms) :_PROOT(dialog_metacontact_c)(), prms(prms) { init(RS_NORMAL_MAINPARENT); }
     ~MAKE_ROOT() {}
 };
 
 class dialog_metacontact_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     GM_RECEIVER( dialog_metacontact_c, ISOGM_METACREATE );
     GM_RECEIVER( dialog_metacontact_c, GM_DRAGNDROP );
 

@@ -2,6 +2,7 @@
 
 class dialog_colors_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     ts::wstr_c preset;
     ts::str_c curcolor;
     colors_map_s colsmap;
@@ -48,6 +49,7 @@ public:
 
 class dialog_cmdlinegenerator_c : public gui_isodialog_c
 {
+    typedef gui_isodialog_c super;
     ts::wstr_c password;
 
 protected:

@@ -8,7 +8,7 @@
 /*virtual*/ void dialog_smileselector_c::created()
 {
     set_theme_rect(CONSTASTR("smilesel"), false);
-    __super::created();
+    super::created();
 
     gui->register_kbd_callback(DELEGATE(this, esc_handler), ts::SSK_ESC, 0);
 
@@ -118,7 +118,7 @@ bool dialog_smileselector_c::find_undermouse()
     {
     case SQ_DRAW:
         if (rid != getrid()) return false;
-        __super::sq_evt(qp, rid, data);
+        super::sq_evt(qp, rid, data);
         {
             ts::irect drawarea = get_client_area();
             if (sbv)
@@ -214,5 +214,5 @@ bool dialog_smileselector_c::find_undermouse()
         return true;
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }

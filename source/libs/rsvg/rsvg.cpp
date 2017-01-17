@@ -49,7 +49,7 @@ namespace
                 cairo_surface_set_device_offset( surf.cs(), oox, ooy );
             }
         }
-    
+
     };
 }
 
@@ -127,7 +127,7 @@ bool rsvg_stroke_and_fill_s::load(ts::rapidxml::xml_attribute<char> *a)
         fillcolor = parsecolornone(ts::asptr(a->value()), ts::ARGB(0,0,0));
         return true;
     }
-    return __super::load(a);
+    return super::load(a);
 }
 
 
@@ -755,7 +755,7 @@ namespace
 
         void parse_path_do_cmd (bool final)
         {
-            switch (cmd) 
+            switch (cmd)
             {
             case 'm':
                 /* moveto */
@@ -1018,7 +1018,7 @@ namespace
                         if (got & RSVGN_GOT_SIGN)
                         {
                             error = true; // Two signs: not allowed
-                        } else 
+                        } else
                         {
                             sign = c == '+' ? +1 : -1;
                             got |= RSVGN_GOT_SIGN;

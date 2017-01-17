@@ -31,7 +31,7 @@ template<> struct wraptranslate<ts::wstr_c> : public ts::wstr_c
 };
 inline wraptranslate<ts::wstr_c> wraptranslate<ts::wsptr>::operator / (const ts::wsptr&r) const
 {
-    return wraptranslate<ts::wstr_c>(*this) / r;
+    return wraptranslate<ts::wstr_c>(ts::wstr_c(*this)) / r;
 }
 
 
@@ -46,13 +46,6 @@ const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag);
 
 #define TTT( txt, ... ) __translation(CONSTWSTR(txt),__VA_ARGS__)
 
-INLINE time_t now()
-{
-    time_t t;
-    _time64(&t);
-    return t;
-}
-
 enum mpd_e
 {
     MPD_UNAME = SETBIT(0),
@@ -63,7 +56,7 @@ enum mpd_e
     MPD_STATE = SETBIT(5),
 };
 
-ts::wstr_c make_proto_desc(const ts::wstr_c&idname, int mask);
+ts::wstr_c make_proto_desc(const ts::wsptr&idname, int mask);
 
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_mark(ts::TSCOLOR c)
 {
@@ -150,7 +143,7 @@ template<typename SCORE> void text_set_date(ts::str_t<ts::wchar, SCORE> & tstr, 
     else
         tstr.set_length(64);
     tstr.set_length( ts::generate_time_string(tstr.str(), tstr.get_capacity() - 1, fmt, tt) );
-    
+
 }
 
 template <typename TCH> bool text_find_link(const ts::sptr<TCH> &message, int from, ts::ivec2 & rslt);
@@ -167,7 +160,16 @@ INLINE ts::wstr_c enquote(const ts::wstr_c &x)
 }
 
 bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit );
-INLINE ts::pwstr_c text_non_letters() { return ts::pwstr_c(CONSTWSTR("?!:;*&^%$#@()<>[]{}=+.,~|/\r\n\t\\\"—«»„“”0123456789 _")); }
+INLINE ts::pwstr_c text_non_letters()
+{
+    static ts::wchar s[] = {'?', '!', ':', ';', '*', '&', '^', '%', '$', '#', '@',
+        '(', ')', '<', '>', '[', ']', '{', '}', '=', '+', '.', ',', '~', '|', '/', '\r',
+        '\n', '\t', '\\', '\"', '\'', '`', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '_',
+        0x00ab, 0x00bb, 0x2014, 0x201e, 0x201c, 0x201d
+    };
+
+    return ts::pwstr_c( ts::wsptr(s, ARRAY_SIZE(s) ) );
+}
 
 void render_pixel_text( ts::bitmap_c&tgt, const ts::irect& r, const ts::wsptr& t, ts::TSCOLOR bgcol, ts::TSCOLOR col );
 void gen_identicon( ts::bitmap_c&tgt, const unsigned char *random_bytes /* at least 16 bytes, md5 will be ok */ );
@@ -176,7 +178,7 @@ typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
 
 SLANGID detect_language();
-menu_c list_langs( SLANGID curlng, MENUHANDLER h );
+menu_c list_langs( SLANGID curlng, MENUHANDLER h, menu_c *m = nullptr );
 
 bool new_version();
 bool new_version( const ts::asptr &current, const ts::asptr &newver, bool same_version = false );
@@ -227,8 +229,7 @@ enum isogmsg_e
 {
     ISOGM_SEND_MESSAGE = GM_COUNT,  // signal to send message
     ISOGM_MESSAGE,                  // message itself // MULTIPASS!!!
-    ISOGM_PROFILE_TABLE_LOADED,
-    ISOGM_PROFILE_TABLE_SAVED,
+    ISOGM_PROFILE_TABLE_SL,
     ISOGM_UPDATE_CONTACT,           // new or update contact - signal from protocol
     ISOGM_V_UPDATE_CONTACT,         // visual update (add to list, or update caption)
     ISOGM_SELECT_CONTACT,           // nullptr means total contacts unload
@@ -263,6 +264,13 @@ enum isogmsg_e
     ISOGM_ON_EXIT,
 
     ISOGM_COUNT,
+};
+
+template<> struct gmsg<ISOGM_PROFILE_TABLE_SL> : public gmsgbase
+{
+    gmsg( int tabi, bool saved ) :gmsgbase( ISOGM_PROFILE_TABLE_SL ), tabi( tabi ), saved( saved ) {}
+    int tabi;
+    bool saved;
 };
 
 template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
@@ -305,18 +313,6 @@ template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
     int id; // -1 - downloading new version
     int downloaded;
     int total;
-};
-
-enum profile_table_e;
-template<> struct gmsg<ISOGM_PROFILE_TABLE_LOADED> : public gmsgbase
-{
-    gmsg(profile_table_e tabi) :gmsgbase(ISOGM_PROFILE_TABLE_LOADED),tabi(tabi) {}
-    profile_table_e tabi;
-};
-template<> struct gmsg<ISOGM_PROFILE_TABLE_SAVED> : public gmsgbase
-{
-    gmsg(profile_table_e tabi) :gmsgbase(ISOGM_PROFILE_TABLE_SAVED), tabi(tabi) {}
-    profile_table_e tabi;
 };
 
 template<> struct gmsg<ISOGM_DELIVERED> : public gmsgbase
@@ -364,7 +360,7 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
     contact_root_c *historian = nullptr;
     rectengine_c *created = nullptr;
     const post_s &post;
-    
+
     uint64 prev_found = 0;
     uint64 next_found = 0;
 
@@ -469,16 +465,17 @@ enum loctext_e
     loc_qrcode,
     loc_moveup,
     loc_movedn,
+    loc_language,
 
     loc_connection_name,
     loc_module,
     loc_state,
 };
 
-ts::wstr_c loc_text(loctext_e);
+ts::wsptr loc_text(loctext_e);
 
 ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only = false );
-ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1 );
+ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1);
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
 class text_match_c
@@ -510,10 +507,96 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
 
 struct data_block_s
 {
-    const void *data;
-    ts::aint datasize;
+    const void *data = nullptr;
+    ts::aint datasize = 0;
+    data_block_s() {}
     data_block_s(const void *data, ts::aint datasize) :data(data), datasize(datasize) {}
+    data_block_s(const ts::buf0_c &b) :data(b.data()), datasize(b.size()) {}
 };
+
+namespace tools_helpers
+{
+    template <typename T> struct appender_s
+    {
+        static void append( ts::tmp_buf_c& b, const T &v )
+        {
+            TS_STATIC_CHECK( std::is_pod<T>::value, "T is not pod" );
+            b.tappend<T>( v );
+        }
+    };
+
+    template<> struct appender_s<data_block_s>
+    {
+        static void append( ts::tmp_buf_c& b, const data_block_s &d )
+        {
+            b.tappend<uint>( static_cast<uint>(d.datasize) );
+            b.append_buf( d.data, d.datasize );
+        }
+    };
+
+    template<> struct appender_s<ts::asptr>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::asptr &s )
+        {
+            b.tappend<unsigned short>( static_cast<unsigned short>(s.l) );
+            b.append_buf( s.s, s.l );
+        }
+    };
+
+    template<> struct appender_s<ts::wsptr>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::wsptr &s )
+        {
+            b.tappend<unsigned short>( static_cast<unsigned short>(s.l) );
+            b.append_buf( s.s, s.l * sizeof( ts::wchar ) );
+        }
+    };
+
+    template<> struct appender_s<ts::str_c>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::str_c &s )
+        {
+            b.tappend<unsigned short>( static_cast<unsigned short>(s.get_length()) );
+            b.append_buf( s.cstr(), s.get_length() );
+        }
+    };
+
+    template<> struct appender_s<ts::wstr_c>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::wstr_c &s )
+        {
+            b.tappend<unsigned short>( static_cast<unsigned short>(s.get_length()) );
+            b.append_buf( s.cstr(), s.get_length() * sizeof( ts::wchar ) );
+        }
+    };
+
+    template<> struct appender_s<ts::blob_c>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::blob_c &bb )
+        {
+            b.tappend<ts::int32>( static_cast<ts::int32>(bb.size()) );
+            b.append_buf( bb );
+        }
+    };
+
+    template<> struct appender_s<ts::tmp_buf_c>
+    {
+        static void append( ts::tmp_buf_c& b, const ts::tmp_buf_c &bb )
+        {
+            b.tappend<ts::int32>( static_cast<ts::int32>(bb.size()) );
+            b.append_buf( bb );
+        }
+    };
+
+    template<> struct appender_s<contact_id_s>
+    {
+        static void append(ts::tmp_buf_c& b, contact_id_s id)
+        {
+            b.tappend<contact_id_s>(id);
+        }
+    };
+
+}
 
 struct ipcw : public ts::tmp_buf_c
 {
@@ -522,14 +605,7 @@ struct ipcw : public ts::tmp_buf_c
         tappend<data_header_s>( data_header_s(cmd) );
     }
 
-    template<typename T> ipcw & operator<<(const T &v) { TS_STATIC_CHECK(std::is_pod<T>::value, "T is not pod"); tappend<T>(v); return *this; }
-    template<> ipcw & operator<<(const data_block_s &d) { tappend<uint>((uint)d.datasize); append_buf(d.data,d.datasize); return *this; }
-    template<> ipcw & operator<<(const ts::asptr &s) { tappend<unsigned short>((unsigned short)s.l); append_buf(s.s,s.l); return *this; }
-    template<> ipcw & operator<<(const ts::wsptr &s) { tappend<unsigned short>((unsigned short)s.l); append_buf(s.s,s.l*sizeof(ts::wchar)); return *this; }
-    template<> ipcw & operator<<(const ts::str_c &s) { tappend<unsigned short>((unsigned short)s.get_length()); append_buf(s.cstr(), s.get_length()); return *this; }
-    template<> ipcw & operator<<(const ts::wstr_c &s) { tappend<unsigned short>((unsigned short)s.get_length()); append_buf(s.cstr(), s.get_length()*sizeof(ts::wchar)); return *this; }
-    template<> ipcw & operator<<(const ts::blob_c &b) { tappend<int>((int)b.size()); append_buf(b); return *this; }
-    template<> ipcw & operator<<( const ts::tmp_buf_c &b ) { tappend<int>( (int)b.size() ); append_buf( b ); return *this; }
+    template<typename T> ipcw & operator<<(const T &v) { tools_helpers::appender_s<T>::append(*this, v); return *this; }
 };
 
 struct isotoxin_ipc_s
@@ -587,7 +663,7 @@ struct leech_dock_top_s : public autoparam_i
     int height;
     leech_dock_top_s(int height) :height(height) {}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -601,7 +677,7 @@ struct leech_dock_bottom_center_s : public autoparam_i
     int num;
     leech_dock_bottom_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -615,7 +691,7 @@ struct leech_dock_top_center_s : public autoparam_i
     int num;
     leech_dock_top_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -629,7 +705,7 @@ struct leech_dock_right_center_s : public autoparam_i
     int num;
     leech_dock_right_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num) {}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -643,7 +719,7 @@ struct leech_dock_left_center_s : public autoparam_i
     int num;
     leech_dock_left_center_s( int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1 ) :width( width ), height( height ), x_space( x_space ), y_space( y_space ), index( index ), num( num ) {}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched( to )) { update_ctl_pos(); return true; } return false; };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (autoparam_i::i_leeched( to )) { update_ctl_pos(); return true; } return false; };
     /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 };
 
@@ -655,7 +731,7 @@ struct leech_dock_bottom_right_s : public autoparam_i
     int y_space;
     leech_dock_bottom_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -667,7 +743,7 @@ struct leech_dock_top_right_s : public autoparam_i
     int y_space;
     leech_dock_top_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
     void update_ctl_pos();
-    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -681,8 +757,8 @@ struct leech_at_right : public autoparam_i
     }
     /*virtual*/ bool i_leeched(guirect_c &to) override
     {
-        if (&to != of) 
-            if (!__super::i_leeched(to)) return false;
+        if (&to != of)
+            if (!autoparam_i::i_leeched(to)) return false;
 
         if (&to == owner)
         {
@@ -696,16 +772,17 @@ struct leech_at_right : public autoparam_i
 
 struct leech_at_left_s : public autoparam_i
 {
-    int space;
     guirect_c::sptr_t of;
+    int space;
     leech_at_left_s(guirect_c *of, int space) :of(of), space(space)
     {
         of->leech(this);
     }
+    virtual ts::irect calcrect() const;
     /*virtual*/ bool i_leeched(guirect_c &to) override
     {
-        if (&to != of) 
-            if (!__super::i_leeched(to))
+        if (&to != of)
+            if (!autoparam_i::i_leeched(to))
                 return false;
         if (&to == owner)
         {
@@ -717,6 +794,27 @@ struct leech_at_left_s : public autoparam_i
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
+struct leech_at_left_animated_s : public leech_at_left_s
+{
+    int time; // negative - reverse mode
+    ts::Time starttime;
+    leech_at_left_animated_s(guirect_c *of, int space, int time = 500, bool skip_animation = false);
+    virtual ts::irect calcrect() const override;
+    bool tick(RID, GUIPARAM);
+    virtual ~leech_at_left_animated_s();
+
+    void forward();
+    void reverse(); // will delete owner at end of
+};
+
+struct leech_inout_handler_s : public autoparam_i
+{
+    GUIPARAMHANDLER h;
+    leech_inout_handler_s(GUIPARAMHANDLER h) :h(h)
+    {
+    }
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
 
 struct leech_save_proportions_s : public autoparam_i
 {
@@ -743,8 +841,6 @@ struct leech_save_size_s : public autoparam_i
 
 struct protocol_description_s
 {
-    MOVABLE( true );
-
     ts::astrings_c strings;
     int connection_features = 0;
     int features = 0;
@@ -774,6 +870,8 @@ struct protocol_description_s
     }
 
 };
+
+DECLARE_MOVABLE(protocol_description_s, true)
 
 struct available_protocols_s : public ts::array_inplace_t<protocol_description_s,0>
 {
@@ -854,4 +952,4 @@ template<ts::aint hashsize> void blake2b( ts::uint8 *hash, const void *inbytes, 
 
 template<ts::aint hashsize> void blake2b( ts::uint8 *hash, const void *inbytes1, ts::aint insize1, const void *inbytes2, ts::aint insize2 );
 
-#define BLAKE2B(h,d,s, ...) blake2b< ARRAY_SIZE(h) >(h, d, s, __VA_ARGS__)
+#define BLAKE2B(h,d,s, ...) blake2b< ARRAY_SIZE(h) >(h, d, s, ## __VA_ARGS__)

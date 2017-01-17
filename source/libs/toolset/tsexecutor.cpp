@@ -11,6 +11,11 @@ namespace ts
     static const int f_exec_after_result = 16;
     static const int f_sleeping = 32;
 
+    bool task_c::should_stop(task_executor_c *e)
+    {
+        return e->sync.lock_read()().worker_should_stop;
+    }
+
 task_executor_c::task_executor_c()
 {
     base_thread_id = spinlock::pthread_self();
@@ -27,7 +32,7 @@ task_executor_c::~task_executor_c()
     // now cancel all tasks
     while (executing.try_pop(t))
     {
-        t->resetflag( f_executing );
+        t->changeflag(f_executing, 0);
         t->done(true);
     }
 
@@ -48,30 +53,30 @@ task_executor_c::~task_executor_c()
     // cancel all tasks again
     while (executing.try_pop(t))
     {
-        t->resetflag(f_executing);
+        t->changeflag(f_executing, 0);
         t->done(true);
     }
 
     while (results.try_pop(t))
     {
-        t->resetflag(f_result);
+        t->changeflag(f_result, 0);
         t->result();
     }
 
     while (finished.try_pop(t))
     {
-        t->resetflag(f_finished);
+        t->changeflag(f_finished, 0);
         t->done(false);
     }
 
     while (canceled.try_pop(t))
     {
-        t->resetflag(f_canceled);
+        t->changeflag(f_canceled, 0);
         t->done(true);
     }
     while ( sleeping.try_pop( t ) )
     {
-        t->resetflag( f_sleeping );
+        t->changeflag(f_sleeping, 0);
         t->done( true );
     }
 
@@ -94,35 +99,35 @@ void task_executor_c::work()
         task_c *t;
         while (executing.try_pop(t))
         {
-            t->resetflag( f_executing );
+            t->changeflag(f_executing, 0);
 
             timeout = false;
-            int r = t->call_iterate();
+            int r = t->call_iterate(this);
 
             if ( sync.lock_read()( ).worker_should_stop && r != task_c::R_DONE )
                 r = task_c::R_CANCEL;
 
             if (r > 0)
             {
-                t->setflag( f_sleeping );
+                t->changeflag(0, f_sleeping);
                 sleeping.push(t);
             } else if (r == task_c::R_DONE)
             {
-                t->setflag( f_finished );
+                t->changeflag(0, f_finished);
                 finished.push(t);
 
             } else if (r == task_c::R_CANCEL)
             {
-                t->setflag( f_canceled );
+                t->changeflag(0, f_canceled);
                 canceled.push(t);
 
             } else if (r == task_c::R_RESULT)
             {
-                t->setflag( f_executing );
+                t->changeflag(0, f_executing);
 
                 if (!t->is_flag(f_result))
                 {
-                    t->setflag(f_result);
+                    t->changeflag(0, f_result);
                     results.push(t); // only one result
                 }
 
@@ -131,14 +136,14 @@ void task_executor_c::work()
             {
                 if (!t->is_flag(f_result))
                 {
-                    t->setflag(f_exec_after_result | f_result);
+                    t->changeflag(0, f_exec_after_result | f_result);
                     results.push(t); // only one result
                 } else
                     executing.push(t);
 
             } else
             {
-                t->setflag( f_executing );
+                t->changeflag(0, f_executing);
                 executing.push(t); // next iteration
             }
         }
@@ -176,7 +181,7 @@ void task_executor_c::add(task_c *task)
     ++w().tasks;
     w.unlock();
 
-    task->setflag(f_executing);
+    task->changeflag(0,f_executing);
     executing.push(task);
     SetEvent(evt);
 
@@ -194,12 +199,11 @@ void task_executor_c::tick()
     {
         while (results.try_pop(t))
         {
-            t->resetflag(f_result);
+            t->changeflag(f_result, 0);
             t->result();
             if (t->is_flag(f_exec_after_result))
             {
-                t->resetflag( f_exec_after_result );
-                t->setflag( f_executing );
+                t->changeflag( f_exec_after_result, f_executing);
                 executing.push(t); // next iteration
                 SetEvent(evt);
             }
@@ -207,14 +211,14 @@ void task_executor_c::tick()
 
         while (finished.try_pop(t))
         {
-            t->resetflag(f_finished);
+            t->changeflag(f_finished, 0);
             t->done(false);
             ++finished_tasks;
         }
 
         while (canceled.try_pop(t))
         {
-            t->resetflag(f_canceled);
+            t->changeflag(f_canceled, 0);
             t->done(true);
             ++finished_tasks;
         }
@@ -223,10 +227,10 @@ void task_executor_c::tick()
         int curtime = timeGetTime();
         while ( sleeping.try_pop( t ) )
         {
-            t->resetflag( f_sleeping );
+            t->changeflag(f_sleeping, 0);
             if (curtime >= t->__wake_up_time)
             {
-                t->setflag( f_executing );
+                t->changeflag(0,f_executing);
                 executing.push( t ); // next iteration
                 SetEvent( evt );
             } else
@@ -236,14 +240,14 @@ void task_executor_c::tick()
         }
         for( task_c *x : sltasks )
         {
-            x->setflag( f_sleeping );
+            x->changeflag(0,f_sleeping);
             sleeping.push(x);
         }
         if ( sync.lock_read()().reexec() )
         {
             while ( executing.try_pop( t ) )
             {
-                t->resetflag( f_executing );
+                t->changeflag(f_executing, 0);
                 add( t );
                 break;
             }

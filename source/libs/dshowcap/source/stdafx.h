@@ -1,6 +1,8 @@
 #pragma once
 
 #define _ALLOW_RTCc_IN_STL
+#include <zstrings/z_str_fake_std.h> // 1st include fake std::string
+
 
 #define WIN32_LEAN_AND_MEAN
 #define __STREAMS__

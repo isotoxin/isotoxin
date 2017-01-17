@@ -94,7 +94,7 @@ bool gui_c::b_close(RID r, GUIPARAM param)
 }
 bool gui_c::b_maximize(RID r, GUIPARAM param)
 {
-    MODIFY(RID::from_param(param)).maximize(true);
+    MODIFY(RID::from_param(param)).dock(true, true);
     return true;
 }
 bool gui_c::b_minimize(RID r, GUIPARAM param)
@@ -105,7 +105,7 @@ bool gui_c::b_minimize(RID r, GUIPARAM param)
 bool gui_c::b_normalize(RID r, GUIPARAM param)
 {
     MEMT( MEMT_GUI_COMMON );
-    MODIFY(RID::from_param(param)).decollapse().maximize(false);
+    MODIFY(RID::from_param(param)).decollapse().dock(false, false);
     return true;
 }
 
@@ -133,8 +133,10 @@ gui_c::gui_c()
 
 }
 
-gui_c::~gui_c() 
+gui_c::~gui_c()
 {
+    m_flags.set(F_DIP);
+
     if (dndproc) TSDEL(dndproc);
     ASSERT(gui == this);
 
@@ -325,7 +327,7 @@ void gui_c::heartbeat()
         int numw = 0;
         int curi = 0;
         int oldnumw = 0;
-    
+
         void add(HWND h)
         {
             if (!IsWindowVisible(h)) return;
@@ -333,11 +335,11 @@ void gui_c::heartbeat()
             for(int i=0;i<oldnumw;++i)
                 if (massiv[i] == h)
                 {
-                    if (i > curi) 
+                    if (i > curi)
                     {
                         SWAP( massiv[i], massiv[curi] );
                     }
-                    if (i >= curi) 
+                    if (i >= curi)
                         ++curi;
                     return;
                 }
@@ -371,7 +373,7 @@ void gui_c::heartbeat()
                 GetClassNameA(hwnd, c, 255);
                 parent = GetParent(hwnd);
                 owner = GetWindow(hwnd, GW_OWNER);
-                
+
             }
 
             static const char *ignore[] = {
@@ -381,7 +383,7 @@ void gui_c::heartbeat()
                 "NotifyIconOverflowWindow",
                 "TaskListThumbnailWnd",
             };
-            
+
             for(int i=0;i<ARRAY_SIZE(ignore);++i)
             {
                 if (ts::CHARz_equal(ignore[i], c)) return;
@@ -462,7 +464,7 @@ bool gui_c::handle_keyboard(int scan, bool dn, int casw)
     return false;
 }
 
-bool gui_c::handle_char( wchar_t c )
+bool gui_c::handle_char( ts::wchar c )
 {
     if ( c == 8 || c == 9 || c == 27 ) // some codes cannot be handled by wchar
         return false;
@@ -493,7 +495,7 @@ void gui_c::handle_mouse( ts::mouse_event_e me, const ts::ivec2 &scrpos )
         else if (me == ts::MEVT_LUP)
             dndproc->droped();
     }
-    
+
     if (me == ts::MEVT_WHEELUP || me == ts::MEVT_WHEELDN)
         if (RID f = gui->get_minside())
             if (allow_input(f))
@@ -618,7 +620,7 @@ bool gui_c::is_menu(RID r) const
     if (!r) return false;
     HOLD hr(r);
     if (!hr) return false;
-    
+
     guirect_c *rct = &hr.engine().getrect().getroot()->getrect();
     return nullptr != dynamic_cast<gui_popup_menu_c *>(rct);
 }
@@ -652,6 +654,103 @@ guirect_watch_c::~guirect_watch_c()
 {
     if (gui && watchrid)
         LIST_DEL( this, gui->first_watch, gui->last_watch, prev, next );
+}
+
+void gui_c::do_addition_rect_control(rectengine_root_c *re, mousetrack_type_e t)
+{
+    ts::ivec2 p = ts::get_cursor_pos();
+    ts::irect fsr(0);
+    bool show = false;
+
+    switch (t)
+    {
+    case MTT_RESIZE:
+        for (int i = 0, mc = ts::monitor_count(); i < mc; ++i)
+        {
+            fsr = ts::monitor_get_max_size(i);
+            fsr.lt.x = re->getrect().getprops().rect().lt.x;
+            fsr.rb.x = re->getrect().getprops().rect().rb.x;
+
+            if (fsr.inside(p))
+            {
+                int delta = p.y - fsr.lt.y;
+                if (delta <= 2)
+                {
+                    show = 0 != (mtrack_.area & AREA_TOP);
+                }
+                else if (delta <= 10)
+                {
+                    if (m_curshade && m_curshade->getprops().screenrect() == fsr)
+                        return;
+                }
+
+                delta = fsr.rb.y - p.y;
+                if (delta <= 2)
+                {
+                    show = 0 != (mtrack_.area & AREA_BOTTOM);
+                }
+                else if (delta <= 10)
+                {
+                    if (m_curshade && m_curshade->getprops().screenrect() == fsr)
+                        return;
+                }
+                break;
+            }
+        }
+        break;
+    case MTT_MOVE:
+
+        for (int i = 0, mc = ts::monitor_count(); i < mc; ++i)
+        {
+            fsr = ts::monitor_get_max_size(i);
+            if (fsr.inside(p))
+            {
+                int delta = p.y - fsr.lt.y;
+                if (delta <= 2)
+                {
+                    show = true;
+                }
+                else if (delta <= 10)
+                {
+                    if (m_curshade && m_curshade->getprops().screenrect() == fsr)
+                        return;
+                }
+
+                break;
+            }
+        }
+
+        break;
+    case MTT_MOVE_OFF:
+    case MTT_RESIZE_OFF:
+        if (m_curshade)
+        {
+            ts::irect maxrect = m_curshade->getprops().screenrect();
+            TSDEL(m_curshade.get());
+
+            ts::irect oldmaxrect;
+            ts::monitor_find_max_sz(mtrack_.rect, oldmaxrect);
+            ts::irect r = correct_rect_by_maxrect(oldmaxrect, maxrect, mtrack_.rect, false);
+
+            re->manual_move_resize(true);
+            MODIFY(re->getrect()).pos(r.lt).size(r.size()).dock(maxrect, true, MTT_MOVE_OFF == t);
+            re->manual_move_resize(false);
+        }
+        break;
+    }
+
+    if (show)
+    {
+        if (m_curshade && m_curshade->getprops().screenrect() == fsr)
+            return;
+    }
+
+    if (m_curshade)
+        TSDEL(m_curshade.get());
+
+    if (show)
+        m_curshade = app_create_shade(fsr);
+
 }
 
 void gui_c::restore_focus( RID rid )
@@ -851,7 +950,7 @@ public:
 
 void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, bcreate_s *closeb, bcreate_s *minb )
 {
-    bcreate_s buttons[] = { 
+    bcreate_s buttons[] = {
         {BUTTON_FACE(close), DELEGATE( this, b_close ), CBT_CLOSE, DELEGATE( this, tt_close ) },
         {BUTTON_FACE(maximize), DELEGATE( this, b_maximize ), CBT_MAXIMIZE, DELEGATE( this, tt_maximize ) },
         {BUTTON_FACE(normalize), DELEGATE( this, b_normalize ), CBT_NORMALIZE, DELEGATE( this, tt_normalize ) },
@@ -1976,7 +2075,7 @@ const ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, ts::
     }
 
     if (!candidate)
-    { 
+    {
         ASSERT(m_textures.size() < max_pool_size);
         candidate = TSNEW(texture_s);
         m_textures.add(candidate);

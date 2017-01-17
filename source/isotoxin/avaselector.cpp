@@ -187,7 +187,7 @@ void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     buf = pngshka.outbuf;
 }
 
-/*virtual*/ int dialog_avaselector_c::compressor_s::iterate()
+/*virtual*/ int dialog_avaselector_c::compressor_s::iterate(ts::task_executor_c *)
 {
     if (!dlg || bitmap2encode.info().sz < ts::ivec2(1) ) return R_CANCEL;
 
@@ -276,7 +276,7 @@ void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     if (!canceled && dlg)
         dlg->compressor_job_done(this);
 
-    __super::done(canceled);
+    ts::task_c::done(canceled);
 }
 
 namespace
@@ -288,7 +288,7 @@ namespace
 
         enum_video_devices_s(dialog_avaselector_c *dlg) :dlg(dlg) {}
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             enum_video_capture_devices(video_devices, false);
             return R_DONE;
@@ -298,14 +298,14 @@ namespace
             if (!canceled && dlg)
                 dlg->set_video_devices(std::move(video_devices));
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
 
     };
 }
 
 
-dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data) :gui_isodialog_c(data), avarect(0), protoid(data.prms.protoid) 
+dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data) :gui_isodialog_c(data), avarect(0), protoid(data.prms.protoid)
 {
     deftitle = title_avatar_creation_tool;
     g_app->add_task(TSNEW(enum_video_devices_s, this));
@@ -337,7 +337,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
 {
     set_theme_rect(CONSTASTR("avasel"), false);
     fd.prepare( get_default_text_color(3), get_default_text_color(4) );
-    __super::created();
+    super::created();
     tabsel( CONSTASTR("1") );
 
 }
@@ -382,8 +382,8 @@ dialog_avaselector_c::~dialog_avaselector_c()
     dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(loc_text(loc_pasteimagefromclipboard));
     dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( loc_text(loc_capturecamera) );
     dm().button( ts::wstr_c(), generate, DELEGATE( this, generate_identicon ) ).width( szgen.x ).height( szgen.y ).subctl( 3, ctlcam ).sethint( TTT("Generate random identicon",470) );
-    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(4,savebtn1);
-    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(5,savebtn2);
+    dm().button(ts::wstr_c(), b ? CONSTWSTR("face=save") : CONSTWSTR("save"), DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(4,savebtn1);
+    dm().button(ts::wstr_c(), b ? CONSTWSTR("face=save") : CONSTWSTR("save"), DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(5,savebtn2);
 
     l.append(ctlopen).append(CONSTWSTR("<nbsp>"));
     l.append(ctlpaste).append(CONSTWSTR("<nbsp>"));
@@ -908,7 +908,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
         int paw = pa.bmp.info().sz.x + 2;
         dd.offset = inforect.lt + ts::ivec2(paw, 0);
         dd.size = inforect.size(); dd.size.x -= paw;
-        getengine().draw(TTT("Compressing...",219), tdp);
+        getengine().draw(ts::wstr_c(TTT("Compressing...",219)), tdp);
         getengine().end_draw();
     }
 
@@ -923,7 +923,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
         switch (qp)
         {
         case SQ_DRAW:
-            __super::sq_evt(qp, rid, data);
+            super::sq_evt(qp, rid, data);
             prepare_stuff();
 
             selrectvisible = false;
@@ -983,7 +983,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     allowdndinfo = false;
                 }
             }
-            
+
             if (camera == nullptr && (image.info().sz > ts::ivec2(0)))
             {
                 allowdndinfo = false;
@@ -1032,7 +1032,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     getengine().end_draw();
                     selrectvisible = true;
                 }
-                
+
                 if (compressor)
                 {
                     draw_process( info_c, false, false );
@@ -1137,7 +1137,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     ts::ivec2 mp = data.detectarea.pos() - offset + imgrect.lt;
                     if (ts::tabs(mp.x - avarect.lt.x) < 4) data.detectarea.area |= AREA_LEFT;
                     else if (ts::tabs(mp.x - avarect.rb.x) < 4) data.detectarea.area |= AREA_RITE;
-                    
+
                     if (ts::tabs(mp.y - avarect.lt.y) < 4) data.detectarea.area |= AREA_TOP;
                     else if (ts::tabs(mp.y - avarect.rb.y) < 4) data.detectarea.area |= AREA_BOTTOM;
                     area = data.detectarea.area;
@@ -1250,7 +1250,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     avarect.rb.x = opd->rect.rb.x + data.mouse.screenpos().x - opd->mpos.x;
                     if (avarect.rb.x > image.info().sz.x) avarect.rb.x = image.info().sz.x;
                     if (avarect.width() < 16) avarect.rb.x = avarect.lt.x + 16;
-                    
+
                     avarect.setheight(avarect.width());
                     if (avarect.rb.y > image.info().sz.y)
                     {
@@ -1344,7 +1344,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 /*virtual*/ void dialog_avaselector_c::on_confirm()
 {
@@ -1363,7 +1363,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
         ap->set_avatar(ava);
 
     gmsg<ISOGM_CHANGED_SETTINGS>(protoid, PP_AVATAR).send();
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 

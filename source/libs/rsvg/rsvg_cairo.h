@@ -19,7 +19,13 @@ public:
 
 class cairo_paths_c
 {
-    ts::array_inplace_t< cairo_path_data_t, 16 > paths;
+    struct cairo_path_el_s : public ts::movable_flag<true>
+    {
+        cairo_path_data_t pd;
+        cairo_path_el_s() {};
+    };
+
+    ts::array_inplace_t< cairo_path_el_s, 16 > paths;
     int last_move_to_index = -1;
 public:
 
@@ -36,7 +42,7 @@ public:
     const cairo_path_data_t &last_moveto() const
     {
         if (last_move_to_index >= 0)
-            return paths.get(last_move_to_index+1);
+            return paths.get(last_move_to_index+1).pd;
         static cairo_path_data_t dummy;
         return dummy;
     }
@@ -44,7 +50,7 @@ public:
     const cairo_path_data_t &last() const
     {
         if ( paths.size() )
-            return paths.get( paths.size() - 1 );
+            return paths.get( paths.size() - 1 ).pd;
         static cairo_path_data_t dummy;
         return dummy;
     }

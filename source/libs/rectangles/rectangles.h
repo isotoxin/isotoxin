@@ -45,3 +45,5 @@ enum mem_type_rectangles_e
 
     MEMT_RECTANGLES_LAST
 };
+
+ts::irect correct_rect_by_maxrect(const ts::irect & oldmaxrect, const ts::irect & newmaxrect, const ts::irect & rect, bool force_correct);

@@ -1,6 +1,6 @@
 #include "isotoxin.h"
 
-/*virtual*/ int dialog_prepareimage_c::saver_s::iterate()
+/*virtual*/ int dialog_prepareimage_c::saver_s::iterate(ts::task_executor_c *e)
 {
     if (!dlg || bitmap2save.info().sz < ts::ivec2(1) ) return R_CANCEL;
 
@@ -33,7 +33,7 @@
     if (!canceled && dlg)
         dlg->saver_job_done(this);
 
-    __super::done(canceled);
+    ts::task_c::done(canceled);
 }
 
 namespace
@@ -45,7 +45,7 @@ namespace
 
         enum_video_devices_s(dialog_prepareimage_c *dlg) :dlg(dlg) {}
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -55,7 +55,7 @@ namespace
             if (!canceled && dlg)
                 dlg->set_video_devices(std::move(video_devices));
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
 
     };
@@ -99,7 +99,7 @@ dialog_prepareimage_c::~dialog_prepareimage_c()
 {
     set_theme_rect(CONSTASTR("prepimg"), false);
     fd.prepare( get_default_text_color(3), get_default_text_color(4) );
-    __super::created();
+    super::created();
     tabsel( CONSTASTR("1") );
 
     if (bitmap.info().sz >> 0)
@@ -709,7 +709,7 @@ void dialog_prepareimage_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy
 
 void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 
     if (bcr.tag == 1)
     {
@@ -727,7 +727,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
         switch (qp)
         {
         case SQ_DRAW:
-            __super::sq_evt(qp, rid, data);
+            super::sq_evt(qp, rid, data);
             prepare_stuff();
 
             selrectvisible = false;
@@ -1095,7 +1095,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 
     }
 
-    return __super::sq_evt(qp,rid,data);
+    return super::sq_evt(qp,rid,data);
 }
 
 /*virtual*/ ts::ivec2 dialog_prepareimage_c::get_min_size() const
@@ -1135,7 +1135,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
         c->send_file(tmpsave);
     }
 
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 
@@ -1160,7 +1160,7 @@ desktopgrab_c::~desktopgrab_c()
 /*virtual*/ void desktopgrab_c::created()
 {
     set_theme_rect( CONSTASTR( "desktopgrab" ), false );
-    __super::created();
+    super::created();
 
     fd.prepare( ts::ARGB(0,0,0), ts::ARGB( 255, 255, 255 ) );
 
@@ -1187,7 +1187,7 @@ bool desktopgrab_c::esc_handler( RID, GUIPARAM )
     switch ( qp )
     {
     case SQ_DRAW:
-        __super::sq_evt( qp, rid, data );
+        super::sq_evt( qp, rid, data );
 
         {
             getengine().begin_draw();
@@ -1258,7 +1258,7 @@ bool desktopgrab_c::esc_handler( RID, GUIPARAM )
         return true;
     }
 
-    return __super::sq_evt( qp, rid, data );
+    return super::sq_evt( qp, rid, data );
 }
 
 bool desktopgrab_c::ticktick( RID, GUIPARAM )

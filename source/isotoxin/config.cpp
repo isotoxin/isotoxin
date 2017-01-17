@@ -130,7 +130,7 @@ bool find_config(ts::wstr_c &path)
             path = ts::fn_change_name_ext(exepath, CONSTWSTR("config.db"));
             if (ts::is_file_exists(path))
             {
-                g_app->F_READONLY_MODE = true;
+                g_app->F_READONLY_MODE(true);
                 if (ts::is_admin_mode())
                 {
                     // super oops!
@@ -183,7 +183,7 @@ void config_c::load( const ts::wstr_c &path_override )
 
     } else
     {
-        db = ts::sqlitedb_c::connect(path, nullptr, g_app->F_READONLY_MODE);
+        db = ts::sqlitedb_c::connect(path, nullptr, g_app->F_READONLY_MODE());
     }
 
     if (db)
@@ -215,8 +215,8 @@ void config_c::load( const ts::wstr_c &path_override )
 
         int mf = misc_flags();
         gui->disable_special_border( ( mf & MISCF_DISABLEBORDER ) != 0 );
-        g_app->F_SPLIT_UI = 0 != ( mf & MISCF_SPLIT_UI );
-        g_app->F_BACKUP_PROFILE = 0 == ( mf & MISCF_DONT_BACKUP_PROFILE );
+        g_app->F_SPLIT_UI(0 != (mf & MISCF_SPLIT_UI));
+        g_app->F_BACKUP_PROFILE(0 == (mf & MISCF_DONT_BACKUP_PROFILE));
     }
 }
 

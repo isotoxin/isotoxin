@@ -58,6 +58,7 @@ enum rtitle_e
 
 class gui_isodialog_c : public gui_dialog_c
 {
+    typedef gui_dialog_c super;
     bool b_close(RID,GUIPARAM) { on_close(); return true; }
     bool b_confirm(RID,GUIPARAM) { on_confirm(); return true; }
 protected:

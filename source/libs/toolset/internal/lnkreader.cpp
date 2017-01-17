@@ -275,11 +275,10 @@ bool lnk_s::read()
     if( !header || header->header_size != 0x4c )
         return false;
 
-    const uint8 *tgtid = nullptr;
     if ((header->data_flags & LIBLNK_DATA_FLAG_HAS_LINK_TARGET_IDENTIFIER) != 0)
     {
         uint16 sz = READT(uint16);
-        tgtid = readblock(sz);
+        readblock(sz);
     }
     if ((header->data_flags & LIBLNK_DATA_FLAG_HAS_LOCATION_INFORMATION) != 0)
     {
@@ -306,12 +305,11 @@ bool lnk_s::read()
         aint unicode_local_path_offset = 0;
 	    if( location_information_header_size > 28 )
             unicode_local_path_offset = li->unicode_local_path_offset;
-
+#if 0
         aint unicode_common_path_offset = 0;
 	    if( location_information_header_size > 32 )
 	        unicode_common_path_offset = li->unicode_common_path_offset;
 
-#if 0
 	    // Volume information path
 	    if( ( ( li->location_flags & 0x00000001UL ) != 0 ) && ( volume_information_offset > 0 ) )
 	    {

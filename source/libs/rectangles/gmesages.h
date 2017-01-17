@@ -18,6 +18,10 @@ enum gmsg_e
     GM_COUNT
 };
 
+#ifdef _NIX
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif // _NIX
+
 #define GM_RECEIVER( parent, ev ) struct UNIQIDLINE( ev##clazz ) : public gm_receiver_c \
 { \
     UNIQIDLINE( ev##clazz )():gm_receiver_c(ev) {} \

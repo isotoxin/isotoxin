@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+#ifdef _WIN32
+
 #pragma USELIB(toolset)
 #pragma USELIB(rectangles)
 #pragma USELIB(ipc)
@@ -39,7 +41,6 @@
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "Shlwapi.lib")
 
-#ifdef _WIN32
 #include "toolset/_win32/win32_inc.inl"
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
@@ -64,7 +65,7 @@ namespace
 		ts::ccollection_c packs;
 
 	public:
-		fileop_c( ts::tsfileop_c ** oldfop  ) 
+		fileop_c( ts::tsfileop_c ** oldfop  )
 		{
 			deffop = *oldfop;
 			*oldfop = nullptr;
@@ -72,7 +73,7 @@ namespace
 			ts::wstr_c wd;
 			ts::set_work_dir(wd);
 
-			ts::enum_files( wd, *this, ts::wstr_c(), L"*.data" );
+			ts::enum_files( wd, *this, ts::wstr_c(), CONSTWSTR("*.data") );
 			packs.open_containers();
 
             /*
@@ -146,12 +147,12 @@ static bool check_instance()
 
 ts::static_setup< parsed_command_line_s, 1000 > g_commandline;
 
-static bool parsecmdl(const wchar_t *cmdl)
+static bool parsecmdl(const ts::wchar *cmdl)
 {
     ts::wstr_c wd;
     ts::set_work_dir(wd);
 
-    ts::token<wchar_t> cmds(cmdl, ' ');
+    ts::token<ts::wchar> cmds(cmdl, ' ');
     bool wait_cmd = false;
     bool installto = false;
     bool conf = false;
@@ -300,7 +301,7 @@ extern "C" { void sodium_init(); }
 void set_unhandled_exception_filter();
 void set_dump_filename( const ts::wsptr& n );
 
-bool _cdecl ts::app_preinit( const wchar_t *cmdl )
+bool TSCALL ts::app_preinit( const ts::wchar *cmdl )
 {
 #if defined _DEBUG || defined _CRASH_HANDLER
     set_unhandled_exception_filter();
@@ -330,7 +331,7 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
         CONSTWSTR( "x64.dmp" ) ) );
 #else
         CONSTWSTR( "dmp" ) ) );
-#endif // MODE64                   
+#endif // MODE64
     }
 
 #endif
@@ -352,7 +353,7 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
         //if (ts::check_write_access( path_exe ))
         //    download = ts::SMBR_YES == ts::sys_mb( L"error", L"Data not found! Do you want to download data now?", ts::SMB_YESNO_ERROR );
         //else
-            ts::sys_mb( L"error", L"Application data not found. Please re-install application", ts::SMB_OK_ERROR );
+            ts::sys_mb( WIDE2("error"), WIDE2("Application data not found. Please re-install application"), ts::SMB_OK_ERROR );
 
         return false;
     }

@@ -63,8 +63,77 @@ wstr_c  TSCALL monitor_get_description(int monitor)
     return mm.desc;
 #endif
 #ifdef _NIX
-    Display *X11 = XOpenDisplay(nullptr);
-    DEBUG_BREAK();
+    STOPSTUB("");
+    //Display *X11 = XOpenDisplay(nullptr);
+#endif
+}
+
+int TSCALL monitor_find_max_sz(const irect&fr, irect&maxr)
+{
+    int mc = monitor_count();
+    int maxia = -1;
+    int fm = -1;
+
+    ts::ivec2 fc = fr.center();
+    int dst = maximum<int>::value;
+    int fmdst = -1;
+
+    for (int i = 0; i < mc; ++i)
+    {
+        irect rr = monitor_get_max_size(i);
+        int ia = fr.intersect_area(rr);
+        if (ia > maxia)
+        {
+            fm = i;
+            maxia = ia;
+            maxr = rr;
+        }
+        if (fm < 0)
+        {
+            int d = (fc - rr.center()).sqlen();
+            if (d < dst)
+            {
+                dst = d;
+                fmdst = i;
+                maxr = rr;
+            }
+        }
+    }
+    return fm < 0 ? fmdst : fm;
+}
+
+
+int     TSCALL monitor_find(const ivec2& pt)
+{
+#ifdef _WIN32
+    struct mm
+    {
+        ts::ivec2 pt;
+        int i = -1;
+        int found = -1;
+
+        static BOOL CALLBACK findmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        {
+            mm * m = (mm *)dwData;
+            ++m->i;
+            if (ref_cast<irect>(*lprcMonitor).inside(m->pt))
+            {
+                m->found = m->i;
+                return FALSE;
+            }
+            return TRUE;
+        }
+    } m; m.pt = pt;
+
+    EnumDisplayMonitors(nullptr, nullptr, mm::findmc, (LPARAM)&m);
+    return m.found;
+#endif
+#ifdef _NIX
+    int c = monitor_count();
+    for (int i = 0; i < c; ++i)
+        if (monitor_get_max_size_fs(i).inside(pt))
+            return i;
+    return -1;
 #endif
 }
 
@@ -209,7 +278,7 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
     rmin.rb.x = -1000000;
     rmin.lt.y = 1000000;
     rmin.rb.y = -1000000;
-    
+
     for (int i = 0; i<mc; ++i)
     {
         irect mr = monitor_get_max_size_fs(i);
@@ -362,7 +431,7 @@ void TSCALL set_clipboard_text(const wsptr &t)
     CloseClipboard();
 #endif
 #ifdef _NIX
-    UNFINISHED("set_clipboard_text");
+    STOPSTUB("set_clipboard_text");
     DEBUG_BREAK();
 #endif
 }
@@ -469,7 +538,7 @@ void TSCALL explore_path( const wsptr &path, bool path_only )
     if ( path_only )
         ShellExecuteW( nullptr, L"explore", ts::tmp_wstr_c( path ), nullptr, nullptr, SW_SHOWDEFAULT );
     else
-        ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path( path ), SW_SHOWDEFAULT );
+        ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path(ts::wstr_c(path )).cstr(), SW_SHOWDEFAULT );
 #endif // _WIN32
 #ifdef _NIX
     DEBUG_BREAK();
@@ -500,7 +569,7 @@ bool TSCALL is_admin_mode()
         goto Cleanup;
     }
 
-    // Determine whether the SID of administrators group is enabled in 
+    // Determine whether the SID of administrators group is enabled in
     // the primary access token of the process.
     if (!CheckTokenMembership(NULL, pAdministratorsGroup, &fIsRunAsAdmin))
     {

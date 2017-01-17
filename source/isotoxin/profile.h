@@ -54,10 +54,12 @@ enum profile_options_e : unsigned
     SNDOPT_MUTE_ON_AWAY         = SETBIT(26),
     SNDOPT_MUTE_ON_DND          = SETBIT(27),
 
+    COPT_MUTE_MINIMIZED         = SETBIT(28),
+
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | COPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | COPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG|COPT_MUTE_MINIMIZED)
 
 enum profile_misc_flags_e
 {
@@ -88,16 +90,16 @@ struct active_protocol_s : public active_protocol_data_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int maxid = 65000;
     static const int columns = 1 + 10; // tag, name, uname, ustatus, conf, options, avatar, sortfactor, login, password
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
 };
 
+DECLARE_MOVABLE(active_protocol_s, true)
+
 struct backup_protocol_s
 {
-    MOVABLE( true );
     time_t time;
     int tick;
     int protoid;
@@ -112,9 +114,10 @@ struct backup_protocol_s
     static ts::data_type_e get_column_type(int index);
 };
 
+DECLARE_MOVABLE(backup_protocol_s, true)
+
 struct contacts_s
 {
-    MOVABLE( true );
     enum column_e
     {
         C_ID,
@@ -132,6 +135,7 @@ struct contacts_s
         C_MESSAGEHANDLER,
         C_AVATAR,
         C_AVATAR_TAG,
+        C_PROTO_DATA,
 
         C_count,
     };
@@ -148,16 +152,19 @@ struct contacts_s
     ts::astrings_c tags;
     time_t readtime; // time of last seen message
     ts::blob_c avatar;
+    ts::blob_c protodata;
     int avatar_tag;
 
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, greeting, comment, tags, msghandler, avatar, avatar_tag
+    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, greeting, comment, tags, msghandler, avatar, avatar_tag, protodata
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
 };
+
+DECLARE_MOVABLE(contacts_s, true)
 
 struct history_s : public post_s
 {
@@ -187,11 +194,12 @@ struct history_s : public post_s
     static ts::data_type_e get_column_type(int index);
 };
 
+DECLARE_MOVABLE(history_s, true)
+
 typedef post_s * allocpost( const ts::asptr&t, void *prm );
 
 struct unfinished_file_transfer_s
 {
-    MOVABLE( true );
     contact_key_s historian;
     contact_key_s sender;
     uint64 utag = 0;
@@ -210,10 +218,10 @@ struct unfinished_file_transfer_s
     static ts::data_type_e get_column_type(int index);
 };
 
+DECLARE_MOVABLE(unfinished_file_transfer_s, true)
+
 struct conference_s
 {
-    MOVABLE( true );
-
     enum column_e
     {
         C_PUBID = 1,
@@ -237,10 +245,11 @@ struct conference_s
     ts::str_c name;
     ts::str_c comment;
     ts::wstr_c keywords;
-    contact_key_s proto_key;
+    contact_id_s proto_key;
     ts::astrings_c tags;
     ts::flags32_s flags;
     int id = 0;
+    ts::uint16 proto_id;
 
     static const ts::flags32_s::BITS F_SUPPRESS_NOTIFICATIONS = SETBIT(0);
     static const ts::flags32_s::BITS F_MIC_ENABLED = SETBIT(1);
@@ -257,7 +266,7 @@ struct conference_s
 
     contact_key_s history_key() const
     {
-        return contact_key_s( TCT_CONFERENCE, id, proto_key.protoid );
+        return contact_key_s( TCT_CONFERENCE, id, proto_id );
     }
     bool update_name();
     bool update_comment();
@@ -270,11 +279,10 @@ struct conference_s
     bool is_hl_message( const ts::wsptr &message, const ts::wsptr &my_name ) const;
 };
 
+DECLARE_MOVABLE(conference_s, true)
 
 struct conference_member_s
 {
-    MOVABLE( true );
-
     enum column_e
     {
         C_PUBID = 1,
@@ -290,8 +298,9 @@ struct conference_member_s
 
     ts::str_c pubid;
     ts::str_c name;
-    contact_key_s proto_key;
+    contact_id_s proto_key;
     int id;
+    ts::uint16 proto_id;
 
     void set( int column, ts::data_value_s& v );
     void get( int column, ts::data_pair_s& v );
@@ -303,22 +312,26 @@ struct conference_member_s
 
     contact_key_s history_key() const
     {
-        return contact_key_s( TCT_UNKNOWN_MEMBER, id, proto_key.protoid );
+        return contact_key_s( TCT_UNKNOWN_MEMBER, id, proto_id );
     }
     bool update_name();
 };
+
+DECLARE_MOVABLE(conference_member_s, true)
 
 template<typename T> struct load_on_start { static const bool value = true; };
 template<> struct load_on_start<history_s> { static const bool value = false; };
 template<> struct load_on_start<backup_protocol_s> { static const bool value = false; };
 
+template<typename T> struct limit_id { static const int value = 0; };
+template<> struct limit_id<active_protocol_s> { static const int value = 65000; };
+
 template<typename T, profile_table_e tabi> struct tableview_t
 {
     typedef T ROWTYPE;
     static const profile_table_e tabt = tabi;
-    struct row_s
+    struct row_s : public ts::movable_flag< ts::is_movable<T>::value >
     {
-        MOVABLE( ts::is_movable<T>::value );
         DUMMY(row_s);
         row_s() {}
         int id = 0;
@@ -329,7 +342,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
         void changed() { st = s_changed; };
         bool deleted()
         {
-            if (st == s_deleted) 
+            if (st == s_deleted)
                 return false;
 
             if (st == s_new || st == s_temp)
@@ -442,8 +455,8 @@ template<typename T, profile_table_e tabi> struct tableview_t
         row_s *get() { return is_end() ? nullptr : (row_s *)&tab->rows.get(index); }
     public:
         int id() const { return is_end() ? 0 : tab->rows.get(index).id; }
-        operator typename row_s*() { return get(); }
-        typename row_s *operator->() { return get(); }
+        operator row_s*() { return get(); }
+        row_s *operator->() { return get(); }
         void operator++() { ++index; skipdel(); }
         bool operator!=(const iterator &it) const { return index != it.index || tab != it.tab; }
     };
@@ -500,11 +513,13 @@ enum profile_load_result_e
 
 class profile_c : public config_base_c
 {
+    typedef config_base_c super;
+
     #define TAB(tab) tableview_##tab##_s table_##tab;
     PROFILE_TABLES
     #undef TAB
 
-    GM_RECEIVER( profile_c, ISOGM_PROFILE_TABLE_SAVED );
+    GM_RECEIVER( profile_c, ISOGM_PROFILE_TABLE_SL );
     GM_RECEIVER( profile_c, ISOGM_MESSAGE );
     GM_RECEIVER( profile_c, ISOGM_CHANGED_SETTINGS );
 
@@ -571,93 +586,22 @@ public:
     bool delete_conference( int id );
 
     /// find conference by pubid
-    conference_s * find_conference( const ts::asptr &pubid, ts::uint16 apid )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-        
-        if ( pubid.l == 0 )
-            return nullptr;
-
-        get_table_conference().cleanup();
-
-        for ( auto &c : get_table_conference() )
-            if (c.other.proto_key.protoid == apid && c.other.pubid == pubid )
-                return &c.other;
-        return nullptr;
-    }
+    conference_s * find_conference(const ts::asptr &pubid, ts::uint16 apid);
 
     /// find conference by protocol key
-    conference_s * find_conference( const contact_key_s &ck )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-        ASSERT( ck.is_conference() && ck.temp_type == TCT_NONE );
+    conference_s * find_conference(contact_id_s ck, ts::uint16 protoid);
+    conference_s * find_conference_by_id(int id);
 
-        get_table_conference().cleanup();
+    conference_s * add_conference( const ts::str_c &pubid, contact_id_s protocol_key, ts::uint16 protoid );
 
-        for ( auto &c : get_table_conference() )
-            if ( c.other.proto_key == ck )
-                return &c.other;
-        return nullptr;
-    }
-
-    conference_s * find_conference_by_id( int id )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-
-        get_table_conference().cleanup();
-
-        for ( auto &c : get_table_conference() )
-            if ( c.other.id == id )
-                return &c.other;
-        return nullptr;
-    }
-
-    conference_s * add_conference( const ts::str_c &pubid, const contact_key_s &protocol_key );
-
-    conference_member_s * find_conference_member( const contact_key_s &member_protokey )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-        ASSERT( member_protokey.gid == 0 && member_protokey.temp_type == TCT_NONE ); // abstract conference member has no conference id (gid)
-
-        get_table_conference_member().cleanup();
-
-        for ( auto &cm : get_table_conference_member() )
-            if ( cm.other.proto_key == member_protokey )
-                return &cm.other;
-
-        return nullptr;
-    }
-
-    conference_member_s * find_conference_member( const ts::asptr &pubid, ts::uint16 apid )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-
-        get_table_conference_member().cleanup();
-
-        for ( auto &cm : get_table_conference_member() )
-            if (cm.other.proto_key.protoid == apid && cm.other.pubid == pubid )
-                return &cm.other;
-
-        return nullptr;
-    }
-
-    conference_member_s * find_conference_member_by_id( int id )
-    {
-        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
-
-        get_table_conference_member().cleanup();
-
-        for ( auto &cm : get_table_conference_member() )
-            if ( cm.other.id == id )
-                return &cm.other;
-
-        return nullptr;
-    }
+    conference_member_s * find_conference_member(contact_id_s member_protokey, ts::uint16 protoid);
+    conference_member_s * find_conference_member(const ts::asptr &pubid, ts::uint16 apid);
+    conference_member_s * find_conference_member_by_id(int id);
 
     bool delete_conference_member( int id );
-    conference_member_s * add_conference_member( const ts::str_c &pubid, const contact_key_s &proto_key );
+    conference_member_s * add_conference_member( const ts::str_c &pubid, contact_id_s protocol_key, ts::uint16 protoid );
     void make_contact_unknown_member( contact_c * c );
-    void make_contact_known( contact_c * c, const contact_key_s& proto_key );
+    void make_contact_known( contact_c * c, const contact_key_s &key);
     bool is_conference_member( const contact_key_s &ck );
 
     void flush_contacts();
@@ -694,8 +638,9 @@ public:
     active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
     bool is_any_active_ap(int required_features = -1) const
     {
+        int rin;
         for (const active_protocol_c *ap : protocols)
-            if (ap && !ap->is_dip() && ap->get_current_state() == CR_OK && (required_features == -1 || (ap->get_features() & required_features) == required_features))
+            if (ap && !ap->is_dip() && ap->get_current_state(rin) == CR_OK && (required_features == -1 || (ap->get_features() & required_features) == required_features))
                 return true;
         return false;
     }
@@ -708,6 +653,7 @@ public:
     void dirtycontact( const contact_key_s&k )
     {
         ASSERT( k.temp_type == TCT_NONE && !k.is_self );
+        ASSERT(k.contactid);
         dirtycontacts.set(k); changed();
     }
     void killcontact( const contact_key_s&k );
@@ -722,7 +668,7 @@ public:
     int  calc_history_before( const contact_key_s&historian, time_t time );
     int  calc_history_after( const contact_key_s&historian, time_t time, bool only_messages );
     int  calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 );
-    
+
     void unload_history( const contact_key_s&historian );
     void kill_history_item( uint64 utag );
     void kill_history(const contact_key_s&historian);
@@ -746,31 +692,10 @@ public:
 
     uint64 uniq_history_item_tag();
 
-    ts::flags32_s get_options()
-    {
-        if (!profile_flags.is(F_OPTIONS_VALID))
-        {
-            ts::flags32_s::BITS opts = msgopts();
-            ts::flags32_s::BITS optse = msgopts_edited();
-            current_options.setup( (opts & optse) | ( ~optse & DEFAULT_MSG_OPTIONS ) );
-            profile_flags.set(F_OPTIONS_VALID);
-        }
-        return current_options;
-    }
-    bool set_options( ts::flags32_s::BITS mo, ts::flags32_s::BITS mask )
-    {
-        ts::flags32_s::BITS cur = get_options().__bits;
-        ts::flags32_s::BITS curmod = cur & mask;
-        ts::flags32_s::BITS newbits = mo & mask;
-        ts::flags32_s::BITS edited = msgopts_edited();
-        edited |= (curmod ^ newbits);
-        msgopts_edited( edited );
-        cur = (cur & ~mask) | newbits;
-        current_options.setup(cur);
-        return msgopts( cur );
-    }
+    ts::flags32_s INLINE get_options();
+    bool set_options(ts::flags32_s::BITS mo, ts::flags32_s::BITS mask);
 
-    int min_history_load(bool for_button) { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? -1 : ( for_button ? add_history() : min_history() ); }
+    int min_history_load(bool for_button);
 
     ts::wstr_c get_disabled_dicts();
 
@@ -786,7 +711,7 @@ public:
     INTPAR( inactive_time, 5 )
     INTPAR( manual_cos, COS_ONLINE )
     INTPAR( dmn_duration, 5 )
-    
+
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
     TEXTWPAR( download_folder, "%CONFIG%\\download" )
@@ -843,6 +768,8 @@ public:
 };
 
 #undef TEXTPAR
+
+ts::flags32_s prf_options();
 
 //-V:prf():807
 extern ts::static_setup<profile_c> prf;

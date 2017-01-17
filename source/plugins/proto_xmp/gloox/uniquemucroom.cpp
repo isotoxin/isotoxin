@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -65,7 +65,7 @@ namespace gloox
     }
   }
 
-  void UniqueMUCRoom::join()
+  void UniqueMUCRoom::join(Presence::PresenceType type, const std::string& status, int priority)
   {
     if( !m_parent || m_joined )
       return;

@@ -1,5 +1,3 @@
-#pragma once
-
 /*
     (C) 2010-2015 ROTKAERMOTA
 */
@@ -12,7 +10,6 @@ static_assert( sizeof(ZSTRINGS_WIDECHAR) == 2, "bad size of ZSTRINGS_WIDECHAR" )
 ZSTRINGS_SIGNED  text_utf8_to_ansi(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 
 #ifndef ZSTRINGS_ALLOCATOR
-#pragma message ("malloc/free allocator used for strings")
 class DEFAULT_STRALLOCATOR
 {
 
@@ -341,18 +338,19 @@ template<typename TCHARACTER> struct mod_insert
     }
 };
 
-template<typename TCHARACTER> struct mod_insert_char
+template<typename TCHARACTER> struct mod_insert_chars
 {
-    ZSTRINGS_SIGNED idx;
+    ZSTRINGS_SIGNED idx, n;
     TCHARACTER c;
-    mod_insert_char(ZSTRINGS_SIGNED idx, TCHARACTER c) :idx(idx), c(c) {}
+    mod_insert_chars(ZSTRINGS_SIGNED idx, TCHARACTER c, ZSTRINGS_SIGNED n) :idx(idx), c(c), n(n) {}
     ZSTRINGS_SIGNED operator()(TCHARACTER *news, ZSTRINGS_SIGNED newl, TCHARACTER *olds, ZSTRINGS_SIGNED oldl) const
     {
-        ZSTRINGS_ASSERT(newl == (oldl + 1));
+        ZSTRINGS_ASSERT(newl == (oldl + n));
         if (news != olds && olds) blk_UNIT_copy_fwd<TCHARACTER>(news, olds, idx);
-        if (news == olds) blk_UNIT_copy_back<TCHARACTER>(news+idx+1,olds+idx,(oldl-idx));
-        news[idx] = c;
-        if (news != olds && olds) blk_UNIT_copy_fwd<TCHARACTER>(news+idx+1, olds+idx, oldl-idx);
+        if (news == olds) blk_UNIT_copy_back<TCHARACTER>(news+idx+n,olds+idx,(oldl-idx));
+        for(ZSTRINGS_SIGNED i = 0; i<n; ++i)
+            news[idx + i] = c;
+        if (news != olds && olds) blk_UNIT_copy_fwd<TCHARACTER>(news+idx+n, olds+idx, oldl-idx);
         return newl;
     }
 };
@@ -679,6 +677,15 @@ public:
 
 };
 
+ZSTRINGS_FORCEINLINE bool CHARz_equal_ignore_case( const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len )
+{
+    return ZSTRINGS_SYSCALL( text_iequalsw )(src1, src2, len);
+}
+ZSTRINGS_FORCEINLINE bool CHARz_equal_ignore_case( const ZSTRINGS_ANSICHAR *src1, const ZSTRINGS_ANSICHAR *src2, ZSTRINGS_SIGNED len )
+{
+    return ZSTRINGS_SYSCALL( text_iequalsa )(src1, src2, len);
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 #if defined _MSC_VER
@@ -708,14 +715,14 @@ public:
     ZSTRINGS_SIGNED ref() const { return core.ref(); }
 
     str_t() {}
-    explicit str_t(ZSTRINGS_SIGNED size, bool set0len):core( size ) { if (set0len) set_length(0); }
+    str_t(ZSTRINGS_SIGNED size, bool set0len):core( size ) { if (set0len) set_length(0); }
 
     explicit str_t(TCHARACTER c) :core(1)
     {
         core()[0] = c;
     };
 
-    str_t(const TCHARACTER * const s):core( CHARz_len<TCHARACTER>(s) )
+    explicit str_t(const TCHARACTER * const s):core( CHARz_len<TCHARACTER>(s) )
     {
 		blk_UNIT_copy_fwd<TCHARACTER>(core(),s,core.len());
     };
@@ -738,7 +745,7 @@ public:
         blk_UNIT_copy_fwd<TCHARACTER>(core(),s,l);
     };
 
-    str_t(const sptr<TCHARACTER> &s) :core(s)
+    explicit str_t(const sptr<TCHARACTER> &s) :core(s)
     {
     };
 
@@ -972,7 +979,7 @@ public:
 	ZSTRINGS_VEC3(int) as_ivec3() const { return as_vec<int, 3>(); }
 #endif
 
-    template <ZSTRINGS_UNSIGNED N> void hex2buf( ZSTRINGS_BYTE *out, ZSTRINGS_SIGNED index = 0 ) const
+    template <ZSTRINGS_SIGNED N> void hex2buf( ZSTRINGS_BYTE *out, ZSTRINGS_SIGNED index = 0 ) const
     {
         ZSTRINGS_SIGNED n = (get_length() - index) / 2; 
         if (n > N) n = N;
@@ -1162,6 +1169,11 @@ public:
         return *this;
     }
 
+    str_t make_clone()
+    {
+        str_t s; s.set( as_sptr() );
+        return s;
+    }
 
     str_t &  append_unicode_as_utf8(long n) // encode utf8 form int32 code
     {
@@ -1249,11 +1261,23 @@ public:
     {
         ZSTRINGS_SIGNED l = get_length();
         TCHARACTER temp;
-        while (l>0)
+        while (l > 0)
         {
             --l;
-            temp = *(core()+l);
-            if (CHARz_findn(cc.s,temp,cc.l)>=0) return l;
+            temp = *(core() + l);
+            if (CHARz_findn(cc.s, temp, cc.l) >= 0) return l;
+        }
+        return -1;
+    };
+
+    template<typename TCHARACTER2> ZSTRINGS_SIGNED     find_pos_not_of(ZSTRINGS_SIGNED index, const sptr<TCHARACTER> &cc) const
+    {
+        ZSTRINGS_SIGNED l = get_length();
+        while (index < l)
+        {
+            TCHARACTER2 temp = static_cast<TCHARACTER2>( *(core() + index) );
+            if (CHARz_findn<TCHARACTER2>(cc.s, temp, cc.l) < 0) return index;
+            ++index;
         }
         return -1;
     };
@@ -1263,7 +1287,7 @@ public:
         ZSTRINGS_SIGNED l = get_length();
         while (index<l)
         {
-            TCHARACTER2 temp = (TCHARACTER2)*(core()+index);
+            TCHARACTER2 temp = static_cast<TCHARACTER2>( *(core()+index) );
             if (CHARz_findn<TCHARACTER2>(cc.s,temp,cc.l)>=0) return index;
             ++index;
         }
@@ -1549,18 +1573,20 @@ public:
         return *this;
     }
 
-    str_t &  insert(const ZSTRINGS_SIGNED idx, TCHARACTER c)
+    str_t &  insert(const ZSTRINGS_SIGNED idx, TCHARACTER c, ZSTRINGS_SIGNED n = 1 )
     {
 		ZSTRINGS_SIGNED len = get_length();
 
         if (len == 0)
         {
 			ZSTRINGS_ASSERT( idx == 0 );
-			return set_as_char(c);
+            if (n == 1)
+			    return set_as_char(c);
+            else return fill(n, c);
         }
 
 		ZSTRINGS_ASSERT( idx <= len );
-		core.change( 1 + len, zstrings_internal::mod_insert_char<TCHARACTER>(idx, c) );
+		core.change( n + len, zstrings_internal::mod_insert_chars<TCHARACTER>(idx, c, n) );
 		return *this;
     }
 
@@ -1671,6 +1697,9 @@ public:
     str_t &  replace(ZSTRINGS_SIGNED idx, ZSTRINGS_SIGNED sz, const sptr<TCHARACTER> &s)
     {
 		ZSTRINGS_SIGNED len = core.len();
+
+        if (sz < 0)
+            return set_length( idx ).append(s);
         
         ZSTRINGS_ASSERT(len > 0 || (sz == 0 && idx == 0));
         ZSTRINGS_ASSERT( idx + sz <= len );
@@ -2713,16 +2742,6 @@ ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED skip_utf8_char(const asptr &utf8, ZSTRINGS_
     return i + 6;
 }
 
-inline bool CHARz_equal_ignore_case(const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len)
-{
-    return ZSTRINGS_SYSCALL(text_iequalsw)(src1,src2,len);
-}
-inline bool CHARz_equal_ignore_case(const ZSTRINGS_ANSICHAR *src1, const ZSTRINGS_ANSICHAR *src2, ZSTRINGS_SIGNED len)
-{
-    return ZSTRINGS_SYSCALL(text_iequalsa)(src1,src2,len);
-}
-
-
 template<typename NUMTYPE> wstr_c wmake( NUMTYPE u ) {return wstr_c().set_as_num<NUMTYPE>(u);}
 template<typename NUMTYPE> wstr_c wmake(const wsptr&prevt, NUMTYPE u) { return wstr_c(prevt).append_as_num<NUMTYPE>(u); }
 template<typename NUMTYPE> str_c amake( NUMTYPE u ) {return str_c().set_as_num<NUMTYPE>(u);}
@@ -2822,9 +2841,11 @@ typedef char ZSTRINGS_ANSICHAR;
 #if defined _MSC_VER
 #define WSPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::wsptr(L##x,y)
 #define CONSTSTR( tc, s ) ZSTRINGS_NAMESPACE::_to_char_or_not_to_char<tc>::get( s, L##s, sizeof(s)-1 )
+#define WIDE2(s) L##s
 #elif defined __GNUC__
 #define WSPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::wsptr(u##x,y)
 #define CONSTSTR( tc, s ) ZSTRINGS_NAMESPACE::_to_char_or_not_to_char<tc>::get( s, u##s, sizeof(s)-1 )
+#define WIDE2(s) u##s
 #endif
 
 

@@ -1,6 +1,8 @@
 #pragma once
 #include "stkwlk.h"
 
+#ifdef _WIN32
+
 namespace ts
 {
 typedef BOOL (WINAPI * MINIDUMPWRITEDUMP)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
@@ -38,3 +40,5 @@ public:
 #define SHOW_CALL_STACK() ts::exception_operator_c::show_callstack(GetCurrentThread(), "CallStack")
 
 }
+
+#endif

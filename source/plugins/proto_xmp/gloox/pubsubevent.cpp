@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2007-2015 by Jakob Schröter <js@camaya.net>
+  Copyright (c) 2007-2016 by Jakob Schröter <js@camaya.net>
   This file is part of the gloox library. http://camaya.net/gloox
 
   This software is distributed under a license. The full license
@@ -240,15 +240,16 @@ namespace gloox
       if( m_subscriptionIDs || !m_collection.empty() )
       {
         Tag* headers = new Tag( event, "headers", XMLNS, "http://jabber.org/protocol/shim" );
-        StringList::const_iterator it = m_subscriptionIDs->begin();
-        for( ; it != m_subscriptionIDs->end(); ++it )
+
+        if( m_subscriptionIDs )
         {
-          (new Tag( headers, "header", "name", "pubsub#subid" ))->setCData( (*it) );
+          StringList::const_iterator it = m_subscriptionIDs->begin();
+          for( ; it != m_subscriptionIDs->end(); ++it )
+            (new Tag( headers, "header", "name", "pubsub#subid" ))->setCData( (*it) );
         }
 
         if( !m_collection.empty() )
-          (new Tag( headers, "header", "name", "pubsub#collection" ) )
-            ->setCData( m_collection );
+          (new Tag( headers, "header", "name", "pubsub#collection" ))->setCData( m_collection );
       }
 
       return event;

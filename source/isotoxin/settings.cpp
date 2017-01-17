@@ -3,7 +3,12 @@
 #define _NTOS_
 #undef ERROR
 
+#ifdef _WIN32
 #include "curl/include/curl/curl.h"
+#endif
+#ifdef _NIX
+#include <curl/curl.h>
+#endif // _NIX
 
 //-V:dm:807
 
@@ -57,14 +62,28 @@ int curl_execute_download(CURL *curl, int id);
 
 namespace
 {
+    class dialog_dictionaries_c;
+
+}
+
+    template<> struct MAKE_ROOT<dialog_dictionaries_c> : public _PROOT(dialog_dictionaries_c)
+    {
+        dialog_settings_c *setts;
+        ts::wstrings_c dar;
+        MAKE_ROOT(bool mainparent, dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( rect_sys_e( RS_NORMAL | (mainparent ? RS_MAINPARENT : 0) ) ); }
+        ~MAKE_ROOT() {}
+    };
+
+namespace
+{
     struct enum_video_devices_s : public ts::task_c
     {
         vsb_list_t video_devices;
         ts::safe_ptr<dialog_settings_c> dlg;
-        
+
         enum_video_devices_s( dialog_settings_c *dlg ):dlg(dlg) {}
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -74,12 +93,11 @@ namespace
             if (!canceled && dlg)
                 dlg->set_video_devices( std::move(video_devices) );
 
-            __super::done(canceled);
+            ts::task_c::done(canceled);
         }
 
     };
 
-    class dialog_dictionaries_c;
     struct load_spelling_list_s : public ts::task_c
     {
         ts::safe_ptr<dialog_dictionaries_c> dlg;
@@ -95,7 +113,7 @@ namespace
             proxy_addr = cfg().proxy_addr();
         }
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             ts::buf_c d;
             CURL *curl = curl_easy_init();
@@ -127,7 +145,7 @@ namespace
                     }
                     dicts.add(ss);
                 }
-            
+
             curl_easy_cleanup(curl);
 
             return R_DONE;
@@ -155,7 +173,7 @@ namespace
             path = ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling"));
         }
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             ts::buf_c d;
             CURL *curl = curl_easy_init();
@@ -199,9 +217,8 @@ namespace
         ts::wstrings_c dar;
         bool stopjob = false;
 
-        struct dict_rec_s
+        struct dict_rec_s : public ts::movable_flag<true>
         {
-            MOVABLE( true );
             DUMMY(dict_rec_s);
             dict_rec_s() {};
             ts::wstr_c name;
@@ -222,7 +239,7 @@ namespace
             return true;
         }
 
-        /*virtual*/ int iterate() override
+        /*virtual*/ int iterate(ts::task_executor_c *) override
         {
             if (stopjob) return R_DONE;
             if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
@@ -282,18 +299,9 @@ namespace
 
     };
 
-
-    template<> struct MAKE_ROOT<dialog_dictionaries_c> : public _PROOT(dialog_dictionaries_c)
-    {
-        dialog_settings_c *setts;
-        ts::wstrings_c dar;
-        MAKE_ROOT(bool mainparent, dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( rect_sys_e( RS_NORMAL | (mainparent ? RS_MAINPARENT : 0) ) ); }
-        ~MAKE_ROOT() {}
-    };
-
-
     class dialog_dictionaries_c : public gui_isodialog_c
     {
+        typedef gui_isodialog_c super;
         friend struct load_local_spelling_list_s;
         ts::wstrings_c dar;
         ts::wstrings_c dicts;
@@ -334,9 +342,8 @@ namespace
             return 0;
         }
 
-        struct list_item_s
+        struct list_item_s : public ts::movable_flag<true>
         {
-            MOVABLE( true );
             mutable ts::bmpcore_exbody_s img;
 
             uint id;
@@ -351,9 +358,6 @@ namespace
             bool downloading = false;
             bool active = false;
 
-            list_item_s()
-            {
-            }
             bool is_ood() const
             {
                 return local && remote && !ts::blk_cmp( hash_local, hash_remote, BLAKE2B_HASH_SIZE_SMALL );
@@ -368,7 +372,7 @@ namespace
                 REMOTE,
                 DOWNLOADING,
             };
-            
+
             mutable st imgstatus = BAD_STATUS;
 
             st get_status() const
@@ -487,12 +491,12 @@ namespace
             g_app->add_task( TSNEW(load_local_spelling_list_s, this) );
 
             set_theme_rect(CONSTASTR("dictlst"), false);
-            __super::created();
+            super::created();
             tabsel(CONSTASTR("1"));
         }
         /*virtual*/ void getbutton(bcreate_s &bcr) override
         {
-            __super::getbutton(bcr);
+            super::getbutton(bcr);
         }
         /*virtual*/ int additions(ts::irect & ) override
         {
@@ -531,7 +535,7 @@ namespace
                 g_app->resetup_spelling();
             }
             need2rewarn = false;
-            __super::on_confirm();
+            super::on_confirm();
         }
 
         bool mustdie(RID, GUIPARAM)
@@ -704,7 +708,7 @@ namespace
         /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(400, 515); }
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
         {
-            return __super::sq_evt(qp, rid, data);
+            return super::sq_evt(qp, rid, data);
         }
 
         void downloaded(uint id)
@@ -816,7 +820,7 @@ namespace
     {
         if (!canceled && dlg)
             dlg->set_list(dicts, failed);
-        __super::done(canceled);
+        ts::task_c::done(canceled);
     }
     load_local_spelling_list_s::load_local_spelling_list_s(dialog_dictionaries_c *dlg) :dlg(dlg)
     {
@@ -833,7 +837,7 @@ namespace
                 dlg->set_item(dr.name, dr.path, dr.hash, false, dar.find(dr.name) < 0 );
             dlg->resort();
         }
-        __super::done(canceled);
+        ts::task_c::done(canceled);
     }
     /*virtual*/ void download_dictionary_s::done(bool canceled)
     {
@@ -845,7 +849,7 @@ namespace
                 g_app->resetup_spelling();
         }
 
-        __super::done(canceled);
+        ts::task_c::done(canceled);
     }
 
 }
@@ -858,9 +862,8 @@ bool choose_dicts_load(RID, GUIPARAM)
 
 namespace
 {
-    struct preset_s
+    struct preset_s : public ts::movable_flag<true>
     {
-        MOVABLE( true );
         ts::wstr_c fn;
         ts::wstr_c name;
     };
@@ -1070,7 +1073,7 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, save_and_close));
         gui->delete_event(DELEGATE(this, addlistsound));
         gui->delete_event(DELEGATE(this, chat_options));
-        
+
 
         gui->unregister_kbd_callback( __kbd_chop );
 
@@ -1109,7 +1112,7 @@ void dialog_settings_c::set_startopts()
 /*virtual*/ ts::wstr_c dialog_settings_c::get_name() const
 {
     MEMT( MEMT_GUI_COMMON );
-    return __super::get_name().append(CONSTWSTR(" / ")).append(gui_dialog_c::get_name());
+    return super::get_name().append(CONSTWSTR(" / ")).append(gui_dialog_c::get_name());
 }
 
 /*virtual*/ ts::ivec2 dialog_settings_c::get_min_size() const
@@ -1121,12 +1124,12 @@ void dialog_settings_c::set_startopts()
 /*virtual*/ void dialog_settings_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
-    __super::created();
+    super::created();
 }
 
 void dialog_settings_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
     if (bcr.tag == 1)
     {
         bcr.btext = TTT("Save",61);
@@ -1284,7 +1287,7 @@ bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
         INITFLAG(hist_opts, 2, ip == -1);
         ctlenable( CONSTASTR( "loadcount" ), ip == -2 );
         ctlenable( CONSTASTR( "loadcounta" ), ip == -2 );
-        
+
     } else
         hist_opts = (ip & ~2) | (hist_opts & 2);
 
@@ -1301,7 +1304,7 @@ bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v, bool )
     if (load_history_count < 10)
     {
         load_history_count = 10;
-        set_edit_value(CONSTASTR("loadcount"), CONSTWSTR("10"));
+        set_edit_value(CONSTASTR("loadcount"), ts::wstr_c(CONSTWSTR("10")));
     }
     mod();
     return true;
@@ -1313,7 +1316,7 @@ bool dialog_settings_c::load_history_count_a_handler( const ts::wstr_c &v, bool 
     if ( load_history_count_addition < 10 )
     {
         load_history_count_addition = 10;
-        set_edit_value( CONSTASTR( "loadcounta" ), CONSTWSTR( "10" ) );
+        set_edit_value(CONSTASTR("loadcounta"), ts::wstr_c(CONSTWSTR("10")));
     }
     mod();
     return true;
@@ -1350,7 +1353,7 @@ bool dialog_settings_c::password_not_entered( RID, GUIPARAM p )
     return true;
 }
 
-static ts::wstr_c forgot()
+static ts::wsptr forgot()
 {
     return TTT("Forgot password? Still not a problem. Just toggle [i]Encrypted profile[/i] checkbox and enter password again.", 382);
 }
@@ -1439,7 +1442,7 @@ bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
             RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
                 UD_ENTERPASSWORD,
                 gui_isodialog_c::title(title_enter_password),
-                TTT("Please enter current password to remove encryption",31),
+                ts::wstr_c(TTT("Please enter current password to remove encryption",31)),
                 ts::wstr_c(),
                 ts::str_c(),
                 DELEGATE(this, password_entered_to_decrypt),
@@ -1465,7 +1468,7 @@ bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
         RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
             UD_ENTERPASSWORD,
             gui_isodialog_c::title(title_enter_password),
-            TTT("ATTENTION! Your profile is about to be encrypted with password. The only one way to open password-encrypted profile - enter correct password. If you forget password, you will lose your profile!",383),
+            ts::wstr_c(TTT("ATTENTION! Your profile is about to be encrypted with password. The only one way to open password-encrypted profile - enter correct password. If you forget password, you will lose your profile!",383)),
             ts::wstr_c(),
             ts::str_c(),
             DELEGATE(this, password_entered),
@@ -1652,7 +1655,7 @@ void dialog_settings_c::select_theme(const ts::str_c& prm)
     for( theme_info_s &ti : m_themes )
         ti.current = ti.folder.equals(selfo);
     set_combik_menu(CONSTASTR("themes"), list_themes());
-    
+
     ++force_change; mod();
 }
 
@@ -1667,7 +1670,7 @@ menu_c dialog_settings_c::list_themes()
 void dialog_settings_c::mod()
 {
     bool ch = false;
-    for (value_watch_s *vw : watch_array)
+    for (settings::value_watch_s *vw : watch_array)
         if (vw->changed())
         {
             ch = true;
@@ -1700,7 +1703,7 @@ void dialog_settings_c::mod()
 
         PREPARE( ctl2send, (enter_key_options_s)prf().ctl_to_send() );
 
-        PREPARE( msgopts_current, prf().get_options().__bits );
+        PREPARE( msgopts_current, prf_options().__bits );
         msgopts_original = msgopts_current;
 
         for (bits_edit_s &b : bgroups)
@@ -1739,6 +1742,7 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_CONFERENCE].add(COPT_MUTE_MIC_ON_INVITE);
         bgroups[BGROUP_CONFERENCE].add(COPT_MUTE_SPEAKER_ON_INVITE);
+        bgroups[BGROUP_CONFERENCE].add(COPT_MUTE_MINIMIZED);
 
         bgroups[BGROUP_CHAT].add(MSGOP_SPELL_CHECK);
 
@@ -1751,7 +1755,7 @@ void dialog_settings_c::mod()
 
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
-        
+
         bgroups[BGROUP_TYPING_NOTIFY].add(UIOPT_SHOW_TYPING_CONTACT);
         bgroups[BGROUP_TYPING_NOTIFY].add(UIOPT_SHOW_TYPING_MSGLIST);
 
@@ -1759,7 +1763,7 @@ void dialog_settings_c::mod()
 
         bgroups[ BGROUP_INCOMING_NOTIFY ].add( UIOPT_INTRUSIVE_BEHAVIOUR );
         bgroups[ BGROUP_INCOMING_NOTIFY ].add( UIOPT_SHOW_INCOMING_MSG_PNL );
-        
+
         bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_AWAY );
         bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_DND );
 
@@ -1803,18 +1807,28 @@ void dialog_settings_c::mod()
     PREPARE(tools_bits, cfg().allow_tools());
 
     PREPARE( startopt, detect_startopts() );
-    
-    int bo = cfg().misc_flags();
-    bo = ( MISCF_DONT_BACKUP_PROFILE & bo ) ? 0 : 1;
+
+    PREPARE(misc_flags, cfg().misc_flags());
+
+    int bo = 0;
+    bo = ( MISCF_DONT_BACKUP_PROFILE & misc_flags) ? 0 : 1;
+    bo |= (MISCF_DONT_LIM_BACKUP_DAYS & misc_flags) ? 0 : 2;
+    bo |= (MISCF_DONT_LIM_BACKUP_SIZE & misc_flags) ? 0 : 4;
+    bo |= (MISCF_DONT_LIM_BACKUP_COUNT & misc_flags) ? 0 : 8;
+
     PREPARE( backupopt, bo );
     PREPARE( backuppath, cfg().folder_backup() );
+    PREPARE(backup_clean_days, cfg().lim_backup_days());
+    PREPARE(backup_clean_size, cfg().lim_backup_size());
+    PREPARE(backup_clean_count, cfg().lim_backup_count());
+
 
     PREPARE( curlang, cfg().language() );
     PREPARE( autoupdate, cfg().autoupdate() );
     oautoupdate = autoupdate;
     PREPARE( proxy, cfg().proxy() );
     PREPARE( proxy_addr, cfg().proxy_addr() );
-    
+
     if (profile_selected)
     {
         PREPARE(useproxyfor, prf().useproxyfor());
@@ -1851,8 +1865,6 @@ void dialog_settings_c::mod()
         return d;
     };
     PREPARE(debug, std::move(getdebug()));
-    PREPARE( misc_flags, cfg().misc_flags() );
-    misc_flags_store = misc_flags;
 
     int textrectid = 0;
 
@@ -1877,7 +1889,7 @@ void dialog_settings_c::mod()
         .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS))
         .add(TTT("Video",347), 0, TABSELMI(MASK_APPLICATION_VIDEO));
 
-    if ( profile_selected && prf().get_options().is(OPTOPT_POWER_USER) )
+    if ( profile_selected && prf_options().is(OPTOPT_POWER_USER) )
     m.add_sub(TTT("Advanced",394))
         .add(TTT("Video calls",397), 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
         .add(TTT("Tools",432), 0, TABSELMI(MASK_ADVANCED_TOOLS))
@@ -1888,7 +1900,7 @@ void dialog_settings_c::mod()
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
 
     dm().page_caption(TTT("General application settings",108));
-    dm().combik(TTT("Language",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
+    dm().combik(loc_text(loc_language)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
     dm().vspace(10);
     dm().combik(TTT("GUI theme",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
     dm().vspace();
@@ -1933,6 +1945,18 @@ void dialog_settings_c::mod()
     );
     dm().path( TTT("Backup path",497), backuppath, DELEGATE( this, backuppath_handler ) );
 
+    ts::wstr_c blm1, blm2, blm3;
+    dm().textfield(ts::wstr_c(), ts::wmake(backup_clean_days), DELEGATE(this, backup_clean_days_handler)).setname(CONSTASTR("backup_clean_days")).width(50).subctl(textrectid++, blm1);
+    dm().textfield(ts::wstr_c(), ts::wmake(backup_clean_size), DELEGATE(this, backup_clean_size_handler)).setname(CONSTASTR("backup_clean_size")).width(50).subctl(textrectid++, blm2);
+    dm().textfield(ts::wstr_c(), ts::wmake(backup_clean_count), DELEGATE(this, backup_clean_count_handler)).setname(CONSTASTR("backup_clean_count")).width(50).subctl(textrectid++, blm3);
+
+    dm().checkb(ts::wstr_c(), DELEGATE(this, backupopt_handler), backupopt).setmenu(
+        menu_c().add(TTT("Delete backup files older than $ days",526) / blm1, 0, MENUHANDLER(), CONSTASTR("2"))
+                .add(TTT("Limit size of backup files by $ Mb",527) / blm2, 0, MENUHANDLER(), CONSTASTR("4"))
+                .add(TTT("Keep only $ backup files",528) / blm3, 0, MENUHANDLER(), CONSTASTR("8"))
+    ).setname(CONSTASTR("awayflags"));
+
+
     dm().vspace();
     dm().radio(TTT("Minimize to notification area",118), DELEGATE(this, collapse_beh_handler), collapse_beh).setmenu(
         menu_c()
@@ -1964,7 +1988,7 @@ void dialog_settings_c::mod()
     dm().combik(HGROUP_MEMBER).setmenu( list_talk_devices() ).setname( CONSTASTR("talk") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Test speakers",131));
     dm().vspace();
-    dm().hslider(L"", talk_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, talkvolset));
+    dm().hslider(ts::wsptr(), talk_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, talkvolset));
     dm().vspace(3);
     dm().checkb(ts::wsptr(), DELEGATE(this, dspf_handler), dsp_flags).setmenu(
         menu_c().add(TTT("Noise filter of incoming peer voice",291), 0, MENUHANDLER(), ts::amake<int>(DSP_SPEAKERS_NOISE))
@@ -1975,13 +1999,13 @@ void dialog_settings_c::mod()
     dm().combik(HGROUP_MEMBER).setmenu( list_signal_devices() ).setname( CONSTASTR("signal") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_signal_device) ).sethint(TTT("Test ringtone",132));
     dm().vspace();
-    dm().hslider(L"", signal_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, signalvolset));
+    dm().hslider(ts::wsptr(), signal_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, signalvolset));
     dm().vspace(10);
-    dm().label(L"").setname( CONSTASTR( "soundhint" ) );
+    dm().label(ts::wsptr()).setname( CONSTASTR( "soundhint" ) );
 
     dm << MASK_APPLICATION_SOUNDS; //______________________________________________________________________________________________//
     dm().page_caption(TTT("Sounds",294));
-    dm().list(TTT("Sounds list",295), L"", -300).setname(CONSTASTR("soundslist"));
+    dm().list(TTT("Sounds list",295), ts::wsptr(), -300).setname(CONSTASTR("soundslist"));
     dm().vspace();
     dm().hgroup(TTT("Presets",298));
     dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_sound_presets()).setname(CONSTASTR("availablepresets"));
@@ -2020,11 +2044,11 @@ void dialog_settings_c::mod()
     {
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
         dm().page_caption( TTT("General profile settings",38) );
-        
+
         dm().checkb(ts::wstr_c(), DELEGATE(this, encrypt_handler), enc_val()).setname(CONSTASTR("encrypt")).setmenu(
             menu_c().add( TTT( "Encrypted profile", 52 ), 0, MENUHANDLER(), CONSTASTR("1"))
             );
-        
+
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
             menu_c().add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -2073,7 +2097,7 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Allow insistent notification of incoming call",403), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
-        
+
 
         dm().vspace();
 
@@ -2104,7 +2128,7 @@ void dialog_settings_c::mod()
 
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
-            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1")) 
+            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
         ts::wstr_c seldictctl;
@@ -2125,6 +2149,7 @@ void dialog_settings_c::mod()
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_CONFERENCE, handler), bgroups[BGROUP_CONFERENCE].current).setmenu(
             menu_c().add(TTT("Mute microphone on audio conference invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(TTT("Mute speakers on audio conference invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
+                    .add(TTT("Mute speakers when minimzed",529), 0, MENUHANDLER(), CONSTASTR("4"))
             );
 
         dm << MASK_PROFILE_MSGSNHIST; //____________________________________________________________________________________________________//
@@ -2153,7 +2178,7 @@ void dialog_settings_c::mod()
             .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("32"))
             ).setname(CONSTASTR("msgopts"));
 
-        
+
         font_size_slider(conv_text);
 
         dm().vspace();
@@ -2198,7 +2223,7 @@ void dialog_settings_c::mod()
         dm().page_caption(loc_text(loc_networks));
         dm().page_header(TTT("[appname] supports simultaneous connections to multiple networks.",130));
         dm().vspace(10);
-        dm().list(TTT("Active network connections",54), L"", -270).setname(CONSTASTR("protoactlist"));
+        dm().list(TTT("Active network connections",54), ts::wsptr(), -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
         dm().button(HGROUP_MEMBER, TTT("Add new network connection",58), DELEGATE(this, addnetwork)).height(35).setname(CONSTASTR("addnet"));
     }
@@ -2212,14 +2237,12 @@ void dialog_settings_c::mod()
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
     dopts |= debug.get(CONSTASTR("contactids")).as_int() ? 4 : 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_TELEMETRY)).as_int() ? 8 : 0;
-    dopts |= debug.get( CONSTASTR( "lostcontacts" ) ).as_int() ? 16 : 0;
 
     dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
         menu_c().add(CONSTWSTR("Create full memory dump on crash"), 0, MENUHANDLER(), CONSTASTR("1"))
                 .add(CONSTWSTR("Enable logging"), 0, MENUHANDLER(), CONSTASTR("2"))
                 .add( CONSTWSTR("Enable telemetry"), 0, MENUHANDLER(), CONSTASTR( "8" ))
                 .add(CONSTWSTR("Show contacts id's"), 0, MENUHANDLER(), CONSTASTR("4"))
-                .add( CONSTWSTR("Show lost contacts"), 0, MENUHANDLER(), CONSTASTR( "16" ) )
         );
 
     dm().vspace();
@@ -2266,7 +2289,7 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().textfield(TTT("Video bitrate (0 - auto)",407), ts::wmake(video_bitrate), DELEGATE(this, set_bitrate));
         dm().vspace(10);
-        dm().list(TTT("Codecs",404), L"", -100).setname(CONSTASTR("protocodeclist"));
+        dm().list(TTT("Codecs",404), ts::wsptr(), -100).setname(CONSTASTR("protocodeclist"));
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2314,11 +2337,6 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
     else
         debug.set( CONSTASTR( DEBUG_OPT_TELEMETRY ) ) = CONSTASTR( "-1" );
 
-    if ( 0 == ( opts & 16 ) )
-        debug.unset( CONSTASTR( "lostcontacts" ) );
-    else
-        debug.set( CONSTASTR( "lostcontacts" ) ) = CONSTASTR( "1" );
-
     mod();
     return true;
 }
@@ -2359,7 +2377,7 @@ bool dialog_settings_c::pmiscf_handler( RID, GUIPARAM p )
 bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
 {
     startopt = as_int(p);
-   
+
     ctlenable( CONSTASTR("start2"), 0 != (startopt & 1) );
 
     mod();
@@ -2369,6 +2387,11 @@ bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
 bool dialog_settings_c::backupopt_handler( RID, GUIPARAM p )
 {
     backupopt = as_int( p );
+
+    ctlenable(CONSTASTR("backup_clean_days"), 0 != (backupopt & 2));
+    ctlenable(CONSTASTR("backup_clean_size"), 0 != (backupopt & 4));
+    ctlenable(CONSTASTR("backup_clean_count"), 0 != (backupopt & 8));
+
     mod();
     return true;
 }
@@ -2376,6 +2399,42 @@ bool dialog_settings_c::backupopt_handler( RID, GUIPARAM p )
 bool dialog_settings_c::backuppath_handler( const ts::wstr_c &p, bool )
 {
     backuppath = p;
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::backup_clean_days_handler(const ts::wstr_c &n, bool)
+{
+    backup_clean_days = n.as_int();
+
+    if (backup_clean_days < 0)
+    {
+        backup_clean_days = 0;
+        set_edit_value(CONSTASTR("backup_clean_days"), ts::wmake(backup_clean_days));
+    }
+    mod();
+    return true;
+}
+bool dialog_settings_c::backup_clean_size_handler(const ts::wstr_c &n, bool)
+{
+    backup_clean_size = n.as_int();
+
+    if (backup_clean_size < 0)
+    {
+        backup_clean_size = 0;
+        set_edit_value(CONSTASTR("backup_clean_days"), ts::wmake(backup_clean_size));
+    }
+    mod();
+    return true;
+}
+bool dialog_settings_c::backup_clean_count_handler(const ts::wstr_c &n, bool)
+{
+    backup_clean_count = n.as_int();
+    if (backup_clean_count < 0)
+    {
+        backup_clean_count = 0;
+        set_edit_value(CONSTASTR("backup_clean_days"), ts::wmake(backup_clean_count));
+    }
     mod();
     return true;
 }
@@ -2529,7 +2588,7 @@ menu_c dialog_settings_c::get_list_avaialble_sound_presets()
     for(int i=0;i<cnt;++i)
     {
         const sound_preset_s &preset = presets.get(i);
-        
+
         if (!sep) m.add_separator();
         sep = true;
         m.add(preset.name, i == selected_preset ? MIF_MARKED : 0, DELEGATE(this, soundpresetselected), ts::amake(i) );
@@ -2607,7 +2666,7 @@ const protocol_description_s * dialog_settings_c::describe_network(ts::wstr_c&de
 
 void dialog_settings_c::networks_tab_selected()
 {
-    set_list_emptymessage(CONSTASTR("protoactlist"), TTT("Empty list. Please add networks",278));
+    set_list_emptymessage(CONSTASTR("protoactlist"), ts::wstr_c(TTT("Empty list. Please add networks",278)));
     if (RID lst = find(CONSTASTR("protoactlist")))
     {
         for (auto &row : table_active_protocol_underedit)
@@ -2648,7 +2707,7 @@ void dialog_settings_c::networks_tab_selected()
         } else
         {
             ctlenable(CONSTASTR("addnet"), false);
-            set_list_emptymessage(CONSTASTR("protoactlist"), loc_text(loc_loading));
+            set_list_emptymessage(CONSTASTR("protoactlist"), ts::wstr_c(loc_text(loc_loading)));
             ASSERT( prf().is_loaded() );
             available_prots.load();
         }
@@ -2675,7 +2734,7 @@ void dialog_settings_c::networks_tab_selected()
     {
         DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current);
         ctlenable(CONSTASTR("awayflags4"), 0 != (bgroups[BGROUP_COMMON2].current & 3));
-        if (g_app->F_READONLY_MODE)
+        if (g_app->F_READONLY_MODE())
             ctlenable( CONSTASTR("encrypt1"), false );
         else
             DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, encrypt_handler), as_param(enc_val()));
@@ -2689,7 +2748,7 @@ void dialog_settings_c::networks_tab_selected()
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
-        
+
         useproxy_handler(RID(), as_param(useproxyfor));
         proxy_handler(ts::amake(proxy));
         if (RID r = find(CONSTASTR("proxyaddr")))
@@ -2705,6 +2764,8 @@ void dialog_settings_c::networks_tab_selected()
         bool allow_edit_autostart = 0 == (startopt & 4);
         ctlenable( CONSTASTR("start1"), allow_edit_autostart );
         ctlenable( CONSTASTR("start2"), allow_edit_autostart && 0 != (startopt & 1) );
+
+        DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, backupopt_handler), backupopt);
     }
 
     if (mask & MASK_APPLICATION_SETSOUND)
@@ -2735,7 +2796,7 @@ void dialog_settings_c::networks_tab_selected()
         }
         else
         {
-            set_list_emptymessage(CONSTASTR("protocodeclist"), loc_text(loc_loading));
+            set_list_emptymessage(CONSTASTR("protocodeclist"), ts::wstr_c(loc_text(loc_loading)));
             ASSERT(prf().is_loaded());
             available_prots.load();
         }
@@ -3015,7 +3076,7 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
         ++t;
         if (activation)
             contextmenuhandler( ts::str_c(CONSTASTR("props/"),*t) );
-        else 
+        else
         {
             m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/"),*t));
             m.add(TTT("Delete",59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/"),*t));
@@ -3047,7 +3108,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     case SQ_DRAW:
         if (rid == getrid())
         {
-            __super::sq_evt(qp, rid, data);
+            super::sq_evt(qp, rid, data);
             if ( rekey )
                 if (RID b = find(CONSTASTR("dialog_button_1")))
                 {
@@ -3066,7 +3127,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
                     }
 
                     ts::wstr_c infostr( CONSTWSTR("<p=r><font=default><l>"), maketag_color<ts::wchar>( gui->imptextcolor ) );
-                    infostr.append( infot ).append( L" <img=right,-1>" );
+                    infostr.append( infot ).append( CONSTWSTR(" <img=right,-1>") );
 
                     cri_s inf;
                     children_repos_info(inf);
@@ -3090,14 +3151,14 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         return false;
     }
 
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     return false;
 }
 
 /*virtual*/ void dialog_settings_c::on_confirm()
 {
-    if (!g_app->F_READONLY_MODE)
+    if (!g_app->F_READONLY_MODE())
     {
         if (REKEY_ENCRYPT == rekey || REKEY_REENCRYPT == rekey)
         {
@@ -3106,7 +3167,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
                 UD_ENTERPASSWORD,
                 gui_isodialog_c::title(title_reenter_password),
-                TTT("Please re-enter password to confirm encrypt",387),
+                ts::wstr_c(TTT("Please re-enter password to confirm encrypt",387)),
                 ts::wstr_c(),
                 ts::str_c(),
                 DELEGATE(this, re_password_entered),
@@ -3180,8 +3241,11 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
     cfg().temp_folder_sendimg( tempfolder_sendimg );
     cfg().temp_folder_handlemsg( tempfolder_handlemsg );
-    
+
     cfg().folder_backup( backuppath );
+    cfg().lim_backup_days(backup_clean_days);
+    cfg().lim_backup_size(backup_clean_size);
+    cfg().lim_backup_count(backup_clean_count);
 
     if (is_changed(startopt))
         set_startopts();
@@ -3195,7 +3259,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     cfg().proxy(proxy);
     cfg().proxy_addr(proxy_addr);
     if (oautoupdate != autoupdate && autoupdate > 0)
-        g_app->autoupdate_next = now() + 10;
+        g_app->autoupdate_next = ts::now() + 10;
 
 
     cfg().collapse_beh(collapse_beh);
@@ -3232,11 +3296,15 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     cfg().sounds_flags( mute_all_sounds ? 1 : 0 );
         //gmsg<ISOGM_CHANGED_SETTINGS>( 0, CFG_DSPFLAGS ).send();
 
-    misc_flags = ( misc_flags & 3 ) | ( misc_flags_store & ~3 );
-    INITFLAG( misc_flags, MISCF_DONT_BACKUP_PROFILE, 0 == (backupopt & 1) );
+    misc_flags = ( misc_flags & 7 ) | ( misc_flags_store & ~7 );
+    INITFLAG(misc_flags, MISCF_DONT_BACKUP_PROFILE, 0 == (backupopt & 1));
+    INITFLAG(misc_flags, MISCF_DONT_LIM_BACKUP_DAYS, 0 == (backupopt & 2));
+    INITFLAG(misc_flags, MISCF_DONT_LIM_BACKUP_SIZE, 0 == (backupopt & 4));
+    INITFLAG(misc_flags, MISCF_DONT_LIM_BACKUP_COUNT, 0 == (backupopt & 8));
+
     cfg().misc_flags( misc_flags );
     gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
-    
+
 
 #define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
     SOUNDS
@@ -3273,17 +3341,17 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         need2rewarn = false;
     }
 
-    __super::on_confirm();
+    super::on_confirm();
     return true;
 }
 
 
-BOOL __stdcall dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext)
+bool S3CALL dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext)
 {
     ((dialog_settings_c *)lpContext)->enum_capture_devices(device, lpcstrDescription, lpcstrModule);
-    return TRUE;
+    return true;
 }
-void dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t * /*lpcstrModule*/)
+void dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar * /*lpcstrModule*/)
 {
     sound_device_s &sd = record_devices.add();
     sd.deviceid = device ? *device : s3::DEFAULT_DEVICE;
@@ -3316,13 +3384,12 @@ menu_c dialog_settings_c::list_audio_capture_devices()
     return m;
 }
 
-BOOL __stdcall dialog_settings_c::enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext)
+bool S3CALL dialog_settings_c::enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext)
 {
     ((dialog_settings_c *)lpContext)->enum_play_devices(device, lpcstrDescription, lpcstrModule);
-    return TRUE;
-
+    return true;
 }
-void dialog_settings_c::enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule)
+void dialog_settings_c::enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule)
 {
     sound_device_s &sd = play_devices.add();
     sd.deviceid = device ? *device : s3::DEFAULT_DEVICE;
@@ -3416,7 +3483,7 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
                 buf->append_buf(data, size);
             }
         } ss { &testrec, current_mic_level };
-        
+
         cvtmic.ofmt = recfmt;
         cvtmic.acceptor = DELEGATE(&ss, addb);
         cvtmic.cvt( capturefmt, data, size );
@@ -3659,7 +3726,7 @@ void dialog_settings_c::set_video_devices( vsb_list_t &&_video_devices )
     set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
     set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
     setup_video_device();
-   
+
 }
 
 void dialog_settings_c::setup_video_device()
@@ -3830,13 +3897,13 @@ bool dialog_setup_network_c::lost_contact(RID, GUIPARAM p)
 /*virtual*/ void dialog_setup_network_c::created()
 {
     set_theme_rect(CONSTASTR("setupnetw"), false);
-    __super::created();
+    super::created();
     tabsel(CONSTASTR("1"));
 }
 
 void dialog_setup_network_c::getbutton(bcreate_s &bcr)
 {
-    __super::getbutton(bcr);
+    super::getbutton(bcr);
 }
 
 void dialog_setup_network_c::available_network_selected(const ts::str_c&tag)
@@ -3946,21 +4013,27 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         addh += 30;
     }
 
-    if (0 != (params.proto_desc.connection_features & CF_IPv6_OPTION))
+    ts::wsptr opnames[auto_co_count] =
     {
-        ASSERT(params.configurable.initialized);
-        addh += 30;
-        dm().checkb(ts::wstr_c(), DELEGATE(this, network_ipv6), params.configurable.ipv6_enable ? 1 : 0).setmenu(
-            menu_c().add(TTT("Allow IPv6",361), 0, MENUHANDLER(), CONSTASTR("1")));
-    }
+        TTT("Allow IPv6",361),
+        TTT("Allow UDP",264),
+        TTT("Allow hole punching",534),
+        TTT("Allow local discovery",535),
+        TTT("Allow only encrypted connection",523),
+        TTT("Allow only trusted connection",524),
+    };
 
-    if (0 != (params.proto_desc.connection_features & CF_UDP_OPTION))
-    {
-        ASSERT(params.configurable.initialized);
-        addh += 30;
-        dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
-            menu_c().add(TTT("Allow UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
+    TS_STATIC_CHECK(auto_co_count == 6, "Please describe new options");
+
+#define COPDEF( nnn, dv ) if (0 != (params.proto_desc.connection_features & CF_##nnn)) \
+    { \
+        ASSERT(params.configurable.initialized); \
+        addh += 30; \
+        dm().checkb(ts::wstr_c(), DELEGATE(this, network_##nnn), params.configurable.nnn ? 1 : 0).setmenu( \
+        menu_c().add(opnames[auto_co_##nnn], 0, MENUHANDLER(), CONSTASTR("1"))); \
     }
+    CONN_OPTIONS
+#undef COPDEF
 
     if (0 != (params.proto_desc.connection_features & CF_SERVER_OPTION))
     {
@@ -4053,7 +4126,7 @@ bool dialog_setup_network_c::password_edit( const ts::wstr_c &t, bool )
 
 /*virtual*/ bool dialog_setup_network_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
     //{
@@ -4082,9 +4155,9 @@ bool dialog_setup_network_c::password_edit( const ts::wstr_c &t, bool )
             if (params.configurable.initialized)
                 ap->set_configurable(params.configurable);
         }
-    } 
+    }
 
-    __super::on_confirm();
+    super::on_confirm();
 }
 
 /*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
@@ -4116,19 +4189,12 @@ bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t, bool )
     return true;
 }
 
-bool dialog_setup_network_c::network_ipv6(RID, GUIPARAM p)
-{
-    params.configurable.initialized = true;
-    params.configurable.ipv6_enable = p != nullptr;
-    return true;
+#define COPDEF( nnn, dv ) bool dialog_setup_network_c::network_##nnn(RID, GUIPARAM p) \
+{ \
+    params.configurable.initialized = true;  params.configurable.nnn = p != nullptr; return true; \
 }
-
-bool dialog_setup_network_c::network_udp(RID, GUIPARAM p)
-{
-    params.configurable.initialized = true;
-    params.configurable.udp_enable = p != nullptr;
-    return true;
-}
+CONN_OPTIONS
+#undef COPDEF
 
 bool dialog_setup_network_c::network_connect(RID, GUIPARAM p)
 {
