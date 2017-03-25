@@ -373,6 +373,156 @@ static DWORD WINAPI thread_stub( void *p )
     return ts::wstr_c( ts::wsptr( x, 2 ) );
 }
 
+static DWORD WINAPI spy_folder(LPVOID par)
+{
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+
+    DWORD id = GetCurrentThreadId();
+
+    const wchar *path = NULL;
+    master_internal_stuff_s::spystate_s::maintenance_s *mm = nullptr;
+
+    // starting
+    for (;;)
+    {
+        Sleep(0);
+        auto s = istuff.fspystate.lock_write();
+        mm = s().find(id);
+        if (mm)
+        {
+            path = (const wchar *)par;
+            mm->started = true;
+            break;
+        }
+        s.unlock();
+    }
+
+    SLASSERT(path);
+
+    // working
+
+    HANDLE changesHandle = FindFirstChangeNotificationW(path, TRUE, FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_FILE_NAME);
+
+    for (;;)
+    {
+        DWORD waitstatus = WaitForSingleObject(changesHandle, 200);
+
+        if (mm->stop || mm->h.expired())
+        {
+            istuff.folder_spy_evt = true;
+            break;
+        }
+
+        if (WAIT_TIMEOUT != waitstatus && master().mainwindow)
+        {
+            mm->energized = true;
+            istuff.folder_spy_evt = true;
+        }
+
+
+        FindNextChangeNotification(changesHandle);
+    }
+
+    FindCloseChangeNotification(changesHandle);
+
+    // finishing
+    mm->finished = true;
+    return 0;
+}
+
+
+/*virtual*/ uint32 sys_master_win32_c::folder_spy(const ts::wstr_c &path, folder_spy_handler_s *handler)
+{
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    master_internal_stuff_s::spystate_s::maintenance_s &m = istuff.fspystate.lock_write()().threads.add();
+    m.h = handler;
+    CloseHandle(CreateThread(NULL, 0, spy_folder, (LPVOID)path.cstr(), 0, &m.threadid));
+
+    for (;;)
+    {
+        Sleep(0);
+        if (m.started) break;
+    }
+
+    return m.threadid;
+
+}
+
+void master_internal_stuff_s::spystate_s::stop(DWORD threadid)
+{
+    int cnt = threads.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        maintenance_s &m = threads.get(i);
+        if (threadid == 0 || threadid == m.threadid)
+            m.stop = true;
+    }
+}
+
+const master_internal_stuff_s::spystate_s::maintenance_s *master_internal_stuff_s::spystate_s::find(DWORD threadid) const
+{
+    int cnt = threads.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        const maintenance_s &m = threads.get(i);
+        if (m.threadid == threadid) return &m;
+    }
+    return nullptr;
+}
+
+master_internal_stuff_s::spystate_s::maintenance_s *master_internal_stuff_s::spystate_s::find(DWORD threadid)
+{
+    int cnt = threads.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        maintenance_s &m = threads.get(i);
+        if (m.threadid == threadid) return &m;
+    }
+    return nullptr;
+}
+
+
+/*virtual*/ void sys_master_win32_c::folder_spy_stop(uint32 spyid)
+{
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    auto s = istuff.fspystate.lock_write();
+    s().stop(spyid);
+    s.unlock();
+
+    for (;;)
+    {
+        Sleep(0);
+
+        {
+            auto sr = istuff.fspystate.lock_read();
+
+            bool wait_again = false;
+            int cnt = sr().threads.size();
+            for (int i = 0; i < cnt; ++i)
+            {
+                const auto & _m = sr().threads.get(i);
+                if (spyid != 0 && spyid != _m.threadid)
+                    continue;
+                if (!_m.finished)
+                    wait_again = true;
+            }
+
+            if (wait_again) continue;
+        }
+
+        break;
+    }
+
+    if (spyid == 0)
+    {
+        auto ss = istuff.fspystate.lock_write();
+        ss().threads.clear();
+        ss.unlock();
+    }
+
+}
+
+
 namespace
 {
     enum enm_reg_e
@@ -677,6 +827,7 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
         istuff.popup_event = nullptr;
         if ( h ) SetEvent( h );
     }
+    folder_spy_stop(0);
 }
 
 /*virtual*/ void sys_master_win32_c::sys_loop()
@@ -702,6 +853,31 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                 MSG msgm;
                 while ( PeekMessage( &msgm, nullptr, WM_LOOPER_TICK, WM_LOOPER_TICK, PM_REMOVE ) )
                     --istuff.cnttick;
+            }
+
+            if (istuff.folder_spy_evt)
+            {
+                auto w = istuff.fspystate.lock_write();
+                int cnt = w().threads.size();
+                for (int i = 0; i < cnt; ++i)
+                {
+                    auto &m = w().threads.get(i);
+                    if (m.energized)
+                    {
+                        m.energized = false;
+                        if (!m.h.expired())
+                        {
+                            auto *h = m.h.get();
+                            w.unlock();
+                            h->change_event(m.threadid);
+                        }
+                        else
+                        {
+                            w().threads.remove_fast(i);
+                        }
+                        break;
+                    }
+                }
             }
 
             if ( master().on_loop )
@@ -1000,14 +1176,14 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
     static NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
     nd.hWnd = wnd2hwnd( mainwindow );
     nd.uID = ( int ) (0xffffffff & (size_t)mainwindow.get()); //-V205
-    nd.uCallbackMessage = WM_USER + 7213;
+    nd.uCallbackMessage = WM_NOTIFICATION_ICON_CALLBACK;
     //nd.hIcon = gui->app_icon(true);
 
     size_t copylen = ts::tmin( sizeof( nd.szTip ) - sizeof( ts::wchar ), text.l * sizeof( ts::wchar ) );
     memcpy( nd.szTip, text.s, copylen );
     nd.szTip[ copylen / sizeof( ts::wchar ) ] = 0;
 
-    PostMessageW( nd.hWnd, WM_USER + 7214, 0, (LPARAM)&nd );
+    PostMessageW( nd.hWnd, WM_NOTIFICATION_ICON_EVENT, 0, (LPARAM)&nd );
 }
 
 namespace

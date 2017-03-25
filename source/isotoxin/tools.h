@@ -260,6 +260,8 @@ enum isogmsg_e
     ISOGM_UPDATE_MESSAGE_NOTIFICATION,
     ISOGM_SUMMON_NOPROFILE_UI,
     ISOGM_GRABDESKTOPEVENT,
+    ISOGM_FOLDER_SHARE,
+    ISOGM_FOLDER_SHARE_UPDATE,
 
     ISOGM_ON_EXIT,
 
@@ -429,7 +431,7 @@ bool check_profile_name(const ts::wstr_c &, bool );
 
 bool check_netaddr( const ts::asptr & );
 
-void path_expand_env(ts::wstr_c &path, const ts::wstr_c &contactid);
+void path_expand_env(ts::wstr_c &path, const contact_root_c *r);
 
 void install_to(const ts::wstr_c &path, bool acquire_admin_if_need);
 bool elevate();
@@ -460,19 +462,22 @@ enum loctext_e
     loc_space2takeimage,
     loc_dropimagehere,
     loc_loadimagefromfile,
-    loc_pasteimagefromclipboard,
     loc_capturecamera,
     loc_qrcode,
     loc_moveup,
     loc_movedn,
-    loc_language,
 
     loc_connection_name,
-    loc_module,
-    loc_state,
 };
 
 ts::wsptr loc_text(loctext_e);
+
+#define LOC_CONNECTION_NAME TTT("Connection name", 102)
+#define LOC_MODULE TTT("Module", 105)
+#define LOC_STATE TTT("State", 104)
+#define LOC_IDLE TTT("Idle", 544)
+#define LOC_PASTEIMAGEFROMCLIPBOARD (TTT("Paste image from clipboard ($)", 211) / CONSTWSTR("Ctrl+V"))
+#define LOC_LANGUAGE TTT("Language", 107)
 
 ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only = false );
 ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1);
@@ -678,6 +683,17 @@ struct leech_dock_bottom_center_s : public autoparam_i
     leech_dock_bottom_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
     void update_ctl_pos();
     /*virtual*/ bool i_leeched( guirect_c &to ) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+struct leech_dock_bottom_s : public autoparam_i
+{
+    int height;
+    int x_space;
+    int y_space;
+    leech_dock_bottom_s(int height, int x_space = 0, int y_space = 0) :height(height), x_space(x_space), y_space(y_space) {}
+    void update_ctl_pos();
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (autoparam_i::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

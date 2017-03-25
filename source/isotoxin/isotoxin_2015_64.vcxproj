@@ -63,7 +63,7 @@
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>isotoxin.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell;$(ProjectDir)..\libs-external\libogg\include;$(ProjectDir)..\libs-external\opus\include</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
@@ -82,7 +82,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell;$(ProjectDir)..\libs-external\libogg\include;$(ProjectDir)..\libs-external\opus\include</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4530</DisableSpecificWarnings>
     </ClCompile>
     <Link>
@@ -99,7 +99,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell;$(ProjectDir)..\libs-external\libogg\include;$(ProjectDir)..\libs-external\opus\include</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>isotoxin.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
@@ -124,8 +124,10 @@
     <ClCompile Include="contactprops.cpp" />
     <ClCompile Include="conversation.cpp" />
     <ClCompile Include="emoticons.cpp" />
+    <ClCompile Include="filetransfer.cpp" />
     <ClCompile Include="filterbar.cpp" />
     <ClCompile Include="firstrun.cpp" />
+    <ClCompile Include="foldershare.cpp" />
     <ClCompile Include="fullscreenvideo.cpp" />
     <ClCompile Include="images.cpp" />
     <ClCompile Include="isodialog.cpp" />
@@ -136,6 +138,7 @@
     </ClCompile>
     <ClCompile Include="mainrect.cpp" />
     <ClCompile Include="metacontact.cpp" />
+    <ClCompile Include="opus.cpp" />
     <ClCompile Include="simpledlg.cpp" />
     <ClCompile Include="prepareimage.cpp" />
     <ClCompile Include="profile.cpp" />
@@ -161,8 +164,10 @@
     <ClInclude Include="contactlist.h" />
     <ClInclude Include="conversation.h" />
     <ClInclude Include="emoticons.h" />
+    <ClInclude Include="filetransfer.h" />
     <ClInclude Include="filterbar.h" />
     <ClInclude Include="firstrun.h" />
+    <ClInclude Include="foldershare.h" />
     <ClInclude Include="fullscreenvideo.h" />
     <ClInclude Include="images.h" />
     <ClInclude Include="isodialog.h" />

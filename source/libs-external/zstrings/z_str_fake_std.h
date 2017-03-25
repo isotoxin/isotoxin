@@ -206,6 +206,13 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
             return r;
         }
 
+        size_t find(const TCH* s, size_t pos, size_t n) const
+        {
+            int r = super::find_pos(static_cast<int>(pos), sptr<TCH>(s, static_cast<int>(n)));
+            if (r < 0) return npos;
+            return r;
+        }
+
         size_t find( TCH c ) const
         {
             int r = super::find_pos( c );
@@ -323,13 +330,13 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
             {
                 iterator x;
                 x.p = super::p + d;
-                return x;
+                return x; //-V614
             }
             iterator operator-( size_t d ) const
             {
                 iterator x;
                 x.p = super::p - d;
-                return x;
+                return x; //-V614
             }
             iterator &operator++()
             {
@@ -342,7 +349,7 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
                 iterator x;
                 x.p = super::p;
                 ++super::p;
-                return x;
+                return x; //-V614
             }
 
             TCH & operator*() { return *super::p; }
@@ -363,24 +370,21 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
 
             TCH *p;
 
+            reverse_iterator(TCH *p) :p(p) {}
+
             reverse_iterator &operator++()
             {
                 --p;
                 return *this;
             }
-            reverse_iterator operator-( size_t d ) const
+            reverse_iterator operator-(size_t d) const
             {
-                reverse_iterator x;
-                x.p = p + d;
-                return x;
+                return reverse_iterator(p + d);
             }
-            reverse_iterator operator+( size_t d ) const
+            reverse_iterator operator+(size_t d) const
             {
-                reverse_iterator x;
-                x.p = p - d;
-                return x;
+                return reverse_iterator(p - d);
             }
-
 
             TCH & operator*() { return *(p - 1); }
             bool operator!=( const reverse_iterator&o ) const { return p != o.p; }
@@ -435,12 +439,12 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
         typedef size_t size_type;
 
         const_iterator begin() const { const_iterator i( super::cstr() ); return i; }
-        iterator begin() { iterator i; i.p = super::str(); return i; }
+        iterator begin() { iterator i; i.p = super::str(); return i; } //-V614
         const_iterator end() const { const_iterator i( super::cstr() + super::get_length() ); return i; }
-        iterator end() { iterator i; i.p = super::str() + super::get_length(); return i; }
+        iterator end() { iterator i; i.p = super::str() + super::get_length(); return i; } //-V614
 
-        reverse_iterator rbegin() { reverse_iterator i; i.p = super::str() + super::get_length(); return i; }
-        reverse_iterator rend() { reverse_iterator i; i.p = super::str(); return i; }
+        reverse_iterator rbegin() { return reverse_iterator (super::str() + super::get_length()); }
+        reverse_iterator rend() { return reverse_iterator (super::str()); }
 
         string_t &append(const sptr<TCH> &s)
         {

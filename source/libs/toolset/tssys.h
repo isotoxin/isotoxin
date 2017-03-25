@@ -10,6 +10,12 @@ namespace ts
 
 enum key_scan_e : unsigned char;
 
+struct folder_spy_handler_s : public safe_object
+{
+    virtual ~folder_spy_handler_s() {}
+    virtual void change_event( uint32 spyid) = 0;
+};
+
 struct process_handle_s
 {
     static const int datasize = 8;
@@ -123,12 +129,15 @@ public:
     virtual int get_system_info( sysinf_e ) = 0;
 
     virtual bool is_key_pressed( key_scan_e ) = 0;
+
+    virtual uint32 folder_spy(const ts::wstr_c &path, folder_spy_handler_s *handler) = 0;
+    virtual void folder_spy_stop(uint32 spyid) = 0;
 };
 
 #define MAX_PATH_LENGTH 4096
 
 #ifdef _WIN32
-#define MASTERCLASS_INTERNAL_STUFF_SIZE (ARCHBITS * 2)
+#define MASTERCLASS_INTERNAL_STUFF_SIZE (ARCHBITS / 32 * 128)
 class sys_master_win32_c : public sys_master_c
 #define MASTER_CLASS sys_master_win32_c
 #endif
@@ -182,6 +191,9 @@ public:
 
     /*virtual*/ int get_system_info( sysinf_e ) override;
     /*virtual*/ bool is_key_pressed( key_scan_e ) override;
+
+    /*virtual*/ uint32 folder_spy(const ts::wstr_c &path, folder_spy_handler_s *handler) override;
+    /*virtual*/ void folder_spy_stop(uint32 spyid) override;
 };
 
 extern static_setup<MASTER_CLASS, 0> master;

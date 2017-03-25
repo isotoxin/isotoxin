@@ -381,6 +381,7 @@ private:
     ts::wstr_c manual_download_masks;
     ts::wstr_c downloadfolder;
     ts::wstr_c downloadfolder_images;
+    ts::wstr_c downloadfolder_fshare;
     int fileconfirm = 0;
 
     int fontsz_conv_text = 1000, fontsz_msg_edit = 1000;
@@ -418,6 +419,7 @@ private:
     bool fileconfirm_manual_masks_handler(const ts::wstr_c &v, bool );
     bool downloadfolder_edit_handler(const ts::wstr_c &v, bool );
     bool downloadfolder_images_edit_handler(const ts::wstr_c &v, bool );
+    bool downloadfolder_fshare_edit_handler(const ts::wstr_c &v, bool);
     bool date_msg_tmpl_edit_handler(const ts::wstr_c &v, bool );
     bool date_sep_tmpl_edit_handler(const ts::wstr_c &v, bool);
     bool ctl2send_handler( RID, GUIPARAM );
@@ -483,13 +485,13 @@ private:
     bool test_talk_device( RID, GUIPARAM );
     bool test_signal_device( RID, GUIPARAM );
 
-    static bool S3CALL enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext);
-    void enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule);
+    static bool S3CALL enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, void *lpContext);
+    void enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription);
     void select_audio_capture_device( const ts::str_c& prm );
     menu_c list_audio_capture_devices();
 
-    static bool S3CALL enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext);
-    void enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule);
+    static bool S3CALL enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, void *lpContext);
+    void enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription);
     menu_c list_talk_devices();
     menu_c list_signal_devices();
 

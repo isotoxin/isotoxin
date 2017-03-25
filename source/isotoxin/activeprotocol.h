@@ -147,6 +147,8 @@ struct avatar_restrictions_s
     static const ts::flags32_s::BITS O_ALLOW_ANIMATED_GIF = 1;
 };
 
+class folder_share_send_c;
+
 class active_protocol_c : public ts::safe_object
 {
     GM_RECEIVER(active_protocol_c, ISOGM_PROFILE_TABLE_SL);
@@ -319,6 +321,9 @@ public:
 
     void del_message( uint64 utag );
 
+    void signal(contact_id_s cid, signal_e s);
+    void signal(signal_e s);
+
     void join_conference(contact_id_s gid, contact_id_s cid);
     void rename_conference(contact_id_s gid, const ts::str_c &confaname);
     void create_conference( const ts::str_c &confaname, const ts::str_c &o );
@@ -329,18 +334,14 @@ public:
     void add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id ); // without authorization
     void del_contact(const contact_key_s &ck);
-    void accept(contact_id_s cid);
-    void reject(contact_id_s cid);
     void send_proto_data(contact_id_s cid, const ts::blob_c &pdata);
 
     void refresh_details( const contact_key_s &ck );
 
     void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
-    void accept_call(contact_id_s cid);
     void send_video_frame(contact_id_s cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );
     void send_audio(contact_id_s cid, const void *data, int size, uint64 timestamp );
     void call(contact_id_s cid, int seconds, bool videocall);
-    void stop_call(contact_id_s cid);
     void set_stream_options(contact_id_s cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recommended video resolution (if I see video in 320x240, why you send 640x480?)
 
     void file_accept( uint64 utag, uint64 offset);
@@ -348,11 +349,12 @@ public:
     void send_file(contact_id_s cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
     bool file_portion(uint64 utag, uint64 offset, const void *data, ts::aint sz);
 
-    void avatar_data_request(contact_id_s cid);
+    void send_folder_share_toc(contact_id_s cid, int ver, const folder_share_send_c &fsh);
+    void send_folder_share_ctl(uint64 utag, folder_share_control_e ctl);
+    void query_folder_share_file(uint64 utag, const ts::asptr &filedn, const ts::asptr &fakefn);
 
     void typing( const contact_key_s &ck );
 
-    void export_data();
     void reset_data();
     void change_data( const ts::blob_c &b, bool is_native );
 

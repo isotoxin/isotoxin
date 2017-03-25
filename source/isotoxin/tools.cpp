@@ -33,13 +33,15 @@ bool check_netaddr(const ts::asptr & netaddr)
     return true;
 }
 
-void path_expand_env(ts::wstr_c &path, const ts::wstr_c &contactid)
+
+void path_expand_env(ts::wstr_c &path, const contact_root_c *r)
 {
     ts::parse_env(path);
     //ts::wstr_c cfgfolder = cfg().get_path();
-    path.replace_all(CONSTWSTR("%CONFIG%"), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
-    path.replace_all(CONSTWSTR("%CONTACTID%"), contactid);
-
+    path.replace_all(CONSTWSTR("{ConfigPath}"), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
+    path.replace_all_lazy(CONSTWSTR("{DownloadPath}"), [r]() { return prf().download_folder_prepared(r); });
+    path.replace_all_lazy(CONSTWSTR("{ContactId}"), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("0")); return ts::wmake<uint>(r->getkey().contactid); });
+    path.replace_all_lazy(CONSTWSTR("{ContactName}"), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("unknown")); return fn_fix_path(r->showname(), FNO_MAKECORRECTNAME); });
 }
 
 
@@ -179,7 +181,42 @@ void leech_dock_bottom_center_s::update_ctl_pos()
     {
         HOLD r(owner->getparent());
         ts::ivec2 szmin( width * num + x_space * 2, height + y_space );
-        ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
+        ts::ivec2 szmax = r().get_max_size();
+        r().calc_min_max_by_client_area(szmin, szmax);
+        fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
+        return false;
+    }
+
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_ctl_pos();
+        return false;
+    }
+
+    return false;
+}
+
+void leech_dock_bottom_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    cr.lt.x += x_space;
+    cr.rb.x -= x_space;
+    cr.rb.y -= y_space;
+
+    MODIFY(*owner).pos(cr.lt.x, cr.rb.y - height).size(cr.width(), height);
+}
+
+/*virtual*/ bool leech_dock_bottom_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (!ASSERT(owner)) return false;
+    if (owner->getrid() != rid) return false;
+
+    if (qp == SQ_PARENT_RECT_CHANGING)
+    {
+        HOLD r(owner->getparent());
+        ts::ivec2 szmin = r().get_min_size();
+        ts::ivec2 szmax = r().get_max_size();
         r().calc_min_max_by_client_area(szmin, szmax);
         fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
         return false;
@@ -1376,8 +1413,6 @@ ts::wsptr loc_text(loctext_e lt)
             return TTT("Drop [i]image[/i] here",222);
         case loc_loadimagefromfile:
             return TTT("Load image from file", 210);
-        case loc_pasteimagefromclipboard:
-            return TTT("Paste image from clipboard ($)", 211) / CONSTWSTR("Ctrl+V");
         case loc_capturecamera:
             return TTT("Capture camera", 212);
         case loc_qrcode:
@@ -1387,16 +1422,6 @@ ts::wsptr loc_text(loctext_e lt)
             return TTT( "Move up", 77 );
         case loc_movedn:
             return TTT( "Move down", 78 );
-
-        case loc_language:
-            return TTT("Language", 107);
-
-        case loc_connection_name:
-            return TTT("Connection name", 102);
-        case loc_module:
-            return TTT("Module", 105);
-        case loc_state:
-            return TTT("State", 104);
 
     }
     return ts::wsptr();
@@ -1709,7 +1734,12 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h, menu_c *mp)
             {
                 ++t;
                 ts::wstr_c ln(*t); ln.trim();
-                l.name = ln;
+                if (!l.name.equals(ln))
+                {
+                    ln.append(CONSTWSTR(" (")).append(l.name).append_char(')');
+                    l.name = ln;
+                }
+
                 break;
             }
     }
@@ -1730,10 +1760,10 @@ ts::wstr_c make_proto_desc( const ts::wsptr&idname, int mask )
     ts::wstr_c r(1024,true);
     if (0 != (mask & MPD_UNAME))    r.append(TTT("Your name",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
     if (0 != (mask & MPD_USTATUS))  r.append(TTT("Your status",260)).append(CONSTWSTR(": <l>{ustatus}</l><br>"));
-    if (0 != (mask & MPD_NAME))     r.append(loc_text(loc_connection_name)).append(CONSTWSTR(": <l>{name}</l><br>"));
-    if (0 != (mask & MPD_MODULE))   r.append(loc_text(loc_module)).append(CONSTWSTR(": <l>{module}</l><br>"));
+    if (0 != (mask & MPD_NAME))     r.append(LOC_CONNECTION_NAME).append(CONSTWSTR(": <l>{name}</l><br>"));
+    if (0 != (mask & MPD_MODULE))   r.append(LOC_MODULE).append(CONSTWSTR(": <l>{module}</l><br>"));
     if (0 != (mask & MPD_ID))       r.append( idname ).append(CONSTWSTR(": <l>{id}</l><br>"));
-    if (0 != (mask & MPD_STATE))    r.append(loc_text(loc_state)).append(CONSTWSTR(": <l>{state}</l><br>"));
+    if (0 != (mask & MPD_STATE))    r.append(LOC_STATE).append(CONSTWSTR(": <l>{state}</l><br>"));
 
     if (r.ends(CONSTWSTR("<br>"))) r.trunc_length(4);
     return r;
@@ -1914,7 +1944,7 @@ static void ChuckNorrisCopy(const ts::wstr_c &copyto)
 
 void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
 {
-    if (!ts::dir_present(path))
+    if (!ts::is_dir_exists(path))
         if (!make_path(path, 0))
         {
             if (acquire_admin_if_need)

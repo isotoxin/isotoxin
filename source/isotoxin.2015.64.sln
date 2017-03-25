@@ -76,6 +76,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_xmp", "plugins\proto_
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shared", "shared\shared_2015_64.vcxproj", "{72CB3188-254C-4866-ABF0-15DE785DD067}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_xxx", "plugins\proto_template\proto_xxx_2015_64.vcxproj", "{F485E7B4-A87A-4CEF-A50B-D456B60D0713}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug Optimized|x64 = Debug Optimized|x64
@@ -221,6 +223,15 @@ Global
 		{72CB3188-254C-4866-ABF0-15DE785DD067}.Final|x64.ActiveCfg = Final|x64
 		{72CB3188-254C-4866-ABF0-15DE785DD067}.Final|x64.Build.0 = Final|x64
 		{72CB3188-254C-4866-ABF0-15DE785DD067}.Final|x86.ActiveCfg = Final|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug Optimized|x64.ActiveCfg = Debug Optimized|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug Optimized|x64.Build.0 = Debug Optimized|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug Optimized|x86.ActiveCfg = Debug Optimized|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug|x64.ActiveCfg = Debug|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug|x64.Build.0 = Debug|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Debug|x86.ActiveCfg = Debug|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Final|x64.ActiveCfg = Final|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Final|x64.Build.0 = Final|x64
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713}.Final|x86.ActiveCfg = Final|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -238,5 +249,6 @@ Global
 		{FFF52519-38BB-4155-851D-4209EC67ACA7} = {57E327E9-45BC-46B9-A79F-0C16560B765F}
 		{01DD796D-046A-45ED-B5B8-1ACE90A08F71} = {57E327E9-45BC-46B9-A79F-0C16560B765F}
 		{62EFD590-07D2-4079-8E94-DD61CC65C57E} = {82937923-9940-4302-A205-03B689C894B9}
+		{F485E7B4-A87A-4CEF-A50B-D456B60D0713} = {82937923-9940-4302-A205-03B689C894B9}
 	EndGlobalSection
 EndGlobal

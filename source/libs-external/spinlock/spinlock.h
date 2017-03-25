@@ -473,9 +473,8 @@ template <typename VARTYPE> class syncvar
     {
         const VARTYPE *var;
         const syncvar *host;
-        bool locked;
         friend class syncvar;
-        read_c( const VARTYPE & _var, const syncvar *_host ): var(&_var), host(_host), locked(true)
+        read_c( const VARTYPE & _var, const syncvar *_host ): var(&_var), host(_host)
         {
         }
         read_c & operator = (const read_c &);
@@ -483,37 +482,41 @@ template <typename VARTYPE> class syncvar
     public:
         read_c( read_c &&r ): var(r.var), host(r.host), locked(r.locked)
         {
-            r.locked = false;
+            r.var = nullptr;
+            r.host = nullptr;
         }
         ~read_c()
         {
-            if (locked)
-            {
+            if (host)
                 host->unlock_read();
-            }
         }
-        read_c & operator = ( read_c &&r )
+        read_c & operator = (read_c &&r)
         {
-            if (locked)
-            {
+            if (host)
                 host->unlock_read();
-            }
             var = r.var;
             host = r.host;
-            locked = r.locked;
-            r.locked = false;
+            r.var = nullptr;
+            r.host = nullptr;
             return *this;
         }
+
+        bool is_locked() const
+        {
+            return host != nullptr;
+        }
+
         void unlock()
         {
-            SLASSERT ( locked );
+            SLASSERT (host != nullptr);
             host->unlock_read();
-            locked = false;
+            var = nullptr;
+            host = nullptr;
         }
 
         const VARTYPE &operator()()
         {
-            SLASSERT( locked );
+            SLASSERT(var != nullptr && host != nullptr);
             return *var;
         }
     };
@@ -522,49 +525,48 @@ template <typename VARTYPE> class syncvar
     {
         VARTYPE * var;
         const syncvar *host;
-        bool locked;
         friend class syncvar;
-        write_c( VARTYPE * _var, const syncvar *_host ): var(_var), host(_host), locked(true)
+        write_c( VARTYPE * _var, const syncvar *_host ): var(_var), host(_host)
         {
         }
         write_c & operator = (const write_c &r);
         write_c(const write_c &r);
     public:
-        write_c(): var(nullptr), host(nullptr), locked(false) {}
-        write_c( write_c &&r ): var(r.var), host(r.host), locked(r.locked)
+        write_c(): var(nullptr), host(nullptr) {}
+        write_c( write_c &&r ): var(r.var), host(r.host)
         {
-            r.locked = false;
+            r.var = nullptr;
+            r.host = nullptr;
         }
         write_c & operator = ( write_c &&r )
         {
-            if (locked)
-            {
+            if (host != nullptr)
                 host->unlock_write();
-            }
             var = r.var;
             host = r.host;
-            locked = r.locked;
-            r.locked = false;
+            r.var = nullptr;
+            r.host = nullptr;
             return *this;
         }
         ~write_c()
         {
-            if (locked)
+            if (host != nullptr)
                 host->unlock_write();
         }
-        bool is_locked() const {return locked;}
+        bool is_locked() const {return host != nullptr;}
         operator bool() const { return is_locked(); }
         void unlock()
         {
-            SLASSERT( locked );
+            SLASSERT(host != nullptr);
             host->unlock_write();
-            locked = false;
+            var = nullptr;
+            host = nullptr;
         }
 
 
         VARTYPE &operator()()
         {
-            SLASSERT( locked );
+            SLASSERT(var != nullptr && host != nullptr);
             return *var;
         }
     };

@@ -37,8 +37,10 @@ EXPORTS
 	crypto_scalarmult_curve25519_base
 
 	;zlib
+	uncompress
 	deflate
 	deflateEnd
+	compress2
 	inflate
 	inflateEnd
 	deflateInit_

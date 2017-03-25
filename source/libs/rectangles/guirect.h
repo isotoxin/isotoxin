@@ -1430,7 +1430,13 @@ protected:
     ts::smart_int visible_from;
     ts::smart_int visible_to;
 
-    virtual void on_manual_scroll()
+    enum manual_scroll_e
+    {
+        MS_BY_MOUSE,
+        MS_OTHER,
+    };
+
+    virtual void on_manual_scroll(manual_scroll_e)
     {
         scroll_target = nullptr;
         flags.clear( F_SCROLL_TO_END );

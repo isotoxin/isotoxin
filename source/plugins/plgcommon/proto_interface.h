@@ -91,23 +91,18 @@ struct contact_data_s
     int status_message_len;
     int details_len;
     int avatar_tag;
-    int members_count;
-    int data_size;
-    int conference_permissions;
+    int members_count = 0;
+    int data_size = 0;
+    int conference_permissions = 0;
+    int caps = 0;
 
-    contact_state_e state;
-    contact_online_state_e ostate;
-    contact_gender_e gender;
+    contact_state_e state = CS_ROTTEN;
+    contact_online_state_e ostate = COS_ONLINE;
+    contact_gender_e gender = CSEX_UNKNOWN;
 
-#ifdef __cplusplus
     contact_data_s(contact_id_s id, int mask):id(id), mask(mask)
     {
-        state = CS_ROTTEN;
-        ostate = COS_ONLINE;
-        gender = CSEX_UNKNOWN;
-        conference_permissions = 0;
     }
-#endif
 };
 
 struct message_s
@@ -118,7 +113,7 @@ struct message_s
     int             message_len;
 };
 
-struct call_info_s
+struct call_prm_s
 {
     enum { VOICE_CALL, VIDEO_CALL } call_type = VOICE_CALL;
     int duration = 60; // seconds
@@ -142,7 +137,7 @@ struct stream_options_s
     int view_w = 0, view_h = 0; // valid only with SO_RECEIVING_VIDEO // 0,0 means any size
 };
 
-struct file_send_info_s
+struct file_send_info_prm_s
 {
     u64             utag;
     u64             filesize;
@@ -150,11 +145,28 @@ struct file_send_info_s
     int             filename_len;
 };
 
-struct file_portion_s
+struct file_portion_prm_s
 {
     u64 offset;
     const void *data;
     int size;
+};
+
+struct folder_share_prm_s
+{
+    const void *data;
+    const char *name; // zero terminated name of share
+    u64 utag; // unique 64 bit hash of name and send/recv flag
+    i32 ver;
+    int size; // size of data (toc)
+};
+
+struct folder_share_query_prm_s
+{
+    const char *tocname; // utf8
+    int tocname_len;
+    const char *fakename;
+    int fakename_len;
 };
 
 enum long_operation_e
@@ -278,6 +290,18 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     */
     void(PROTOCALL *file_control)(u64 utag, file_control_e fctl);
 
+
+    /*
+        plugin sends to Isotoxin toc of folder share
+        utag - unique tag
+        toc - share content
+    */
+    void(PROTOCALL *folder_share)(u64 utag, const void *toc, int tocsize);
+
+    void(PROTOCALL *folder_share_ctl)(u64 utag, folder_share_control_e ctl);
+
+    void(PROTOCALL *folder_share_query)(u64 utag, const char *tocname, int tocname_len, const char *fakename, int fakename_len);
+
     /*
         plugin should call this function 1 per second for every typing client
 
@@ -313,33 +337,29 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC2( void, set_avatar,        const void*, int ) \
     FUNC1( void, set_ostate,        int ) \
     FUNC1( void, set_gender,        int ) \
-    FUNC1( void, app_signal,        app_signal_e ) \
+    FUNC2( void, signal,            contact_id_s, signal_e ) \
     FUNC1( void, save_config,       void * ) \
     FUNC1( void, contact,           const contact_data_s * ) \
     FUNC2( int,  add_contact,       const char*, const char* ) \
     FUNC2( int,  resend_request,    contact_id_s, const char* ) \
-    FUNC1( void, del_contact,       contact_id_s ) \
-    FUNC2( void, request,           contact_id_s, request_entity_e ) \
     FUNC2( void, send_message,      contact_id_s, const message_s * ) \
     FUNC1( void, del_message,       u64 ) \
-    FUNC1( void, accept,            contact_id_s ) \
-    FUNC1( void, reject,            contact_id_s ) \
-    FUNC2( void, call,              contact_id_s, const call_info_s * ) \
-    FUNC1( void, stop_call,         contact_id_s ) \
-    FUNC1( void, accept_call,       contact_id_s ) \
-    FUNC2( int,  send_av,           contact_id_s, const call_info_s * ) \
+    FUNC2( void, call,              contact_id_s, const call_prm_s * ) \
+    FUNC2( int,  send_av,           contact_id_s, const call_prm_s * ) \
     FUNC2( void, stream_options,    contact_id_s, const stream_options_s * ) \
-    FUNC2( void, file_send,         contact_id_s, const file_send_info_s *) \
+    FUNC2( void, file_send,         contact_id_s, const file_send_info_prm_s *) \
     FUNC2( void, file_accept,       u64, u64) \
     FUNC2( void, file_control,      u64, file_control_e) \
-    FUNC2( bool, file_portion,      u64, const file_portion_s *) \
+    FUNC2( bool, file_portion,      u64, const file_portion_prm_s *) \
+    FUNC2( void, folder_share_toc,  contact_id_s, const folder_share_prm_s *) \
+    FUNC2( void, folder_share_ctl,  u64, folder_share_control_e) \
+    FUNC2( void, folder_share_query, u64, const folder_share_query_prm_s *) \
     FUNC2( void, create_conference, const char *, const char * ) \
     FUNC2( void, ren_conference,    contact_id_s, const char * ) \
     FUNC2( void, join_conference,   contact_id_s, contact_id_s ) \
     FUNC1( void, del_conference,    const char * ) \
     FUNC1( void, enter_conference,  const char * ) \
     FUNC2( void, leave_conference,  contact_id_s, int ) \
-    FUNC1( void, typing,            contact_id_s ) \
     FUNC1( void, logging_flags,     unsigned int ) \
     FUNC1( void, telemetry_flags,   unsigned int ) \
     

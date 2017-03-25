@@ -103,10 +103,10 @@ namespace gloox
       m_parser( this ), m_seFactory( 0 ), m_authError( AuthErrorUndefined ),
       m_streamError( StreamErrorUndefined ), m_streamErrorAppCondition( 0 ),
       m_selectedSaslMech( SaslMechNone ), m_customConnection( false ),
-      m_uniqueBaseId( (unsigned int)( ( (unsigned long long)time( 0 ) & 0xFFFF ) << 16 ) | ( ( (unsigned long long) & m_nextId ) & 0xFFFF ) ),
       m_smSent( 0 )
   {
-    init();
+        m_uniqueBaseId = ((unsigned int)(((unsigned long long)time(0) & 0xFFFF) << 16) | (((unsigned long long) & m_nextId) & 0xFFFF));
+        init();
   }
 
   ClientBase::ClientBase( const std::string& ns, const std::string& password,
@@ -123,10 +123,10 @@ namespace gloox
       m_parser( this ), m_seFactory( 0 ), m_authError( AuthErrorUndefined ),
       m_streamError( StreamErrorUndefined ), m_streamErrorAppCondition( 0 ),
       m_selectedSaslMech( SaslMechNone ), m_customConnection( false ),
-      m_uniqueBaseId( (unsigned int)( ( (unsigned long long)time( 0 ) & 0xFFFF ) << 16 ) | ( ( (unsigned long long) & m_nextId ) & 0xFFFF ) ),
       m_smSent( 0 )
   {
-    init();
+        m_uniqueBaseId = ((unsigned int)(((unsigned long long)time(0) & 0xFFFF) << 16) | (((unsigned long long) & m_nextId) & 0xFFFF));
+        init();
   }
 
   void ClientBase::init()

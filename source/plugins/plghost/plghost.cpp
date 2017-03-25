@@ -60,6 +60,9 @@ static void PROTOCALL avatar_data(contact_id_s cid, int tag, const void *avatar_
 static void PROTOCALL incoming_file(contact_id_s cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 static bool PROTOCALL file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void PROTOCALL file_control(u64 utag, file_control_e fctl);
+static void PROTOCALL folder_share(u64 utag, const void *toc, int tocsize);
+static void PROTOCALL folder_share_ctl(u64 utag, folder_share_control_e ctl);
+static void PROTOCALL folder_share_query(u64 utag, const char *tocname, int tocname_len, const char *fakename, int fakename_len);
 static void PROTOCALL typing(contact_id_s gid, contact_id_s cid);
 static void PROTOCALL telemetry( telemetry_e k, const void *data, int datasize );
 
@@ -119,7 +122,7 @@ struct protolib_s
     {
         if (protolib)
         {
-            functions->app_signal(APPS_GOODBYE);
+            functions->signal(contact_id_s(), APPS_GOODBYE);
             FreeLibrary(protolib);
         }
     }
@@ -143,6 +146,9 @@ struct protolib_s
         incoming_file,
         file_portion,
         file_control,
+        folder_share,
+        folder_share_ctl,
+        folder_share_query,
         typing,
         telemetry,
         find_free_id,
@@ -740,8 +746,9 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            app_signal_e s = static_cast<app_signal_e>(r.get<i32>());
-            protolib.functions->app_signal(s);
+            contact_id_s cid = r.get<contact_id_s>();
+            signal_e s = static_cast<signal_e>(r.get<i32>());
+            protolib.functions->signal(cid, s);
         }
         break;
     case AQ_OSTATE:
@@ -836,22 +843,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             IPCW(HA_CMD_STATUS) << static_cast<i32>(AQ_ADD_CONTACT) << rslt;
         }
         break;
-    case AQ_DEL_CONTACT:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->del_contact(id);
-        }
-        break;
-    case AQ_REFRESH_DETAILS:
-        if (LIBLOADED())
-        {
-            ipcr r( d->get_reader() );
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->request( id, RE_DETAILS );
-        }
-        break;
     case AQ_MESSAGE:
         if (LIBLOADED())
         {
@@ -885,44 +876,12 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             else IPCW(HA_CMD_STATUS) << (int)AQ_SAVE_CONFIG << (int)CR_FUNCTION_NOT_FOUND;
         }
         break;
-    case AQ_ACCEPT:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->accept(id);
-        }
-        break;
-    case AQ_REJECT:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->reject(id);
-        }
-        break;
-    case AQ_STOP_CALL:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->stop_call(id);
-        }
-        break;
-    case AQ_ACCEPT_CALL:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->accept_call(id);
-        }
-        break;
     case AQ_SEND_AUDIO:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
             contact_id_s id = r.get<contact_id_s>();
-            call_info_s cinf;
+            call_prm_s cinf;
             cinf.audio_data = r.get_data(cinf.audio_data_size);
             cinf.ms_monotonic = r.get<u64>();
             protolib.functions->send_av(id, &cinf);
@@ -945,9 +904,9 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             contact_id_s id = r.get<contact_id_s>();
-            call_info_s cinf;
+            call_prm_s cinf;
             cinf.duration = r.get<int>();
-            cinf.call_type = r.get<i32>() != 0 ? call_info_s::VIDEO_CALL : call_info_s::VOICE_CALL;
+            cinf.call_type = r.get<i32>() != 0 ? call_prm_s::VIDEO_CALL : call_prm_s::VOICE_CALL;
             protolib.functions->call(id, &cinf);
         }
         break;
@@ -955,7 +914,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            file_send_info_s fi;
+            file_send_info_prm_s fi;
             contact_id_s id = r.get<contact_id_s>();
             fi.utag = r.get<u64>();
             fi.filename = r.readastr(fi.filename_len);
@@ -972,7 +931,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->file_accept( utag, offset );
         }
         break;
-    case AQ_CONTROL_FILE:
+    case XX_CONTROL_FILE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
@@ -1001,7 +960,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
             fd_s *fd = (fd_s *)(d + 1);
 
-            file_portion_s fp;
+            file_portion_prm_s fp;
             fp.offset = fd->offset;
             fp.data = fd+1;
             fp.size = fd->sz;
@@ -1009,12 +968,49 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 return flags;
         }
         break;
-    case AQ_GET_AVATAR_DATA:
+    case XX_FOLDER_SHARE_CONTROL:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->request(id, RE_AVATAR);
+            u64 utag = r.get<u64>();
+            folder_share_control_e ctl = static_cast<folder_share_control_e>(r.get<i32>());
+            protolib.functions->folder_share_ctl(utag, ctl);
+
+        }
+        break;
+    case AQ_FOLDER_SHARE_ANNOUNCE:
+        if (LIBLOADED())
+        {
+            struct hdr_s // AQ_SHARE_FOLDER_ANONCE
+            {
+                u64 utag;
+                contact_id_s id;
+                i32 ver;
+                i32 sz;
+                char name[64];
+            };
+
+            hdr_s *hdr = (hdr_s *)(d + 1);
+
+            folder_share_prm_s sf;
+            sf.ver = hdr->ver;
+            sf.name = hdr->name;
+            sf.data = hdr + 1;
+            sf.size = hdr->sz;
+            sf.utag = hdr->utag;
+            protolib.functions->folder_share_toc(hdr->id, &sf);
+        }
+        break;
+    case XX_FOLDER_SHARE_QUERY:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            u64 utag = r.get<u64>();
+            folder_share_query_prm_s qpm;
+            qpm.tocname = r.readastr(qpm.tocname_len);
+            qpm.fakename = r.readastr(qpm.fakename_len);
+            protolib.functions->folder_share_query(utag, &qpm);
+
         }
         break;
     case AQ_DEL_MESSAGE:
@@ -1023,14 +1019,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ipcr r(d->get_reader());
             u64 utag = r.get<u64>();
             protolib.functions->del_message(utag);
-        }
-        break;
-    case AQ_TYPING:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            contact_id_s id = r.get<contact_id_s>();
-            protolib.functions->typing(id);
         }
         break;
     case XX_PING:
@@ -1055,7 +1043,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             static_assert( sizeof( inf_s ) == VIDEO_FRAME_HEADER_SIZE, "size!" );
 
             inf_s *inf = (inf_s *)(d + 1);
-            call_info_s ci;
+            call_prm_s ci;
             ci.video_data = inf + 1;
             ci.w = inf->w;
             ci.h = inf->h;
@@ -1074,9 +1062,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             return flags; // do not delete big data packet due it will be reused
         break;
 
-    case AQ_EXPORT_DATA:
-        protolib.functions->request(contact_id_s(), RE_EXPORT_DATA);
-        break;
     case AQ_DEBUG_SETTINGS:
         {
             g_logging_flags = 0;
@@ -1160,7 +1145,7 @@ static void PROTOCALL update_contact(const contact_data_s *cd)
         << ((0 != (mask & CDM_PUBID)) ? std::asptr(cd->public_id, cd->public_id_len) : std::asptr())
         << ((0 != (mask & CDM_NAME)) ? std::asptr(cd->name, cd->name_len) : std::asptr())
         << ((0 != (mask & CDM_STATUSMSG)) ? std::asptr(cd->status_message, cd->status_message_len) : std::asptr())
-        << cd->avatar_tag << static_cast<int>(cd->state) << static_cast<int>(cd->ostate) << static_cast<int>(cd->gender) << cd->conference_permissions;
+        << cd->avatar_tag << static_cast<i32>(cd->state) << static_cast<i32>(cd->ostate) << static_cast<i32>(cd->gender) << static_cast<i32>(cd->conference_permissions) << static_cast<i32>(cd->caps);
     
     if ( 0 != (cd->mask & CDM_MEMBERS) )
     {
@@ -1345,7 +1330,7 @@ static void PROTOCALL file_control(u64 utag, file_control_e fctl)
     case FIC_DISCONNECT:
         break;
     }
-    IPCW(AQ_CONTROL_FILE) << utag << (int)fctl;
+    IPCW(XX_CONTROL_FILE) << utag << (int)fctl;
 }
 
 static bool PROTOCALL file_portion(u64 utag, u64 offset, const void *portion, int portion_size)
@@ -1391,6 +1376,39 @@ static bool PROTOCALL file_portion(u64 utag, u64 offset, const void *portion, in
     memcpy( d + 1, portion, portion_size);
     ipcj->unlock_send_buffer( dh, bsize );
     return true;
+}
+
+static void PROTOCALL folder_share(u64 utag, const void *toc, int tocsize)
+{
+    struct fsd_s // HA_FOLDER_SHARE_TOC
+    {
+        u64 utag;
+        int size;
+    };
+
+    int bsize = tocsize + sizeof(data_header_s) + sizeof(fsd_s);
+
+    data_header_s *dh = (data_header_s *)ipcj->lock_buffer(bsize);
+    if (!dh) return; // TODO resend
+    int todo_resend;
+
+    dh->cmd = HA_FOLDER_SHARE_TOC;
+    fsd_s *d = (fsd_s *)(dh + 1);
+    d->utag = utag;
+    d->size = tocsize;
+    memcpy( d + 1, toc, tocsize );
+
+    ipcj->unlock_send_buffer(dh, bsize);
+}
+
+static void PROTOCALL folder_share_ctl(u64 utag, folder_share_control_e ctl)
+{
+    IPCW(XX_FOLDER_SHARE_CONTROL) << utag << static_cast<i32>(ctl);
+}
+
+static void PROTOCALL folder_share_query(u64 utag, const char *tocname, int tocname_len, const char *fakename, int fakename_len)
+{
+    IPCW(XX_FOLDER_SHARE_QUERY) << utag << std::asptr(tocname, tocname_len) << std::asptr(fakename, fakename_len);
 }
 
 static void PROTOCALL typing(contact_id_s gid, contact_id_s cid)

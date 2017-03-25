@@ -90,7 +90,7 @@ public:
     static dialog_msgbox_params_s mb_qrcode(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_avatar( const ts::wstr_c &text, const ts::bitmap_c &bmp );
 
-    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(500, height); }
+    /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

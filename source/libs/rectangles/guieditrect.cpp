@@ -579,6 +579,20 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 
                     res = true;
                     break;
+                case ts::SSK_ENTER:
+
+                    if (!is_multiline())
+                    {
+                        evt_data_s d;
+                        d.kbd.scan = scan;
+                        d.kbd.charcode = 0;
+                        d.kbd.casw = casw;
+
+                        return HOLD(getparent())().sq_evt(SQ_KEYDOWN, getparent(), d);
+                    }
+
+                    res = true;
+                    break;
                 default:
 				    def=true; // do not clear selection
 				    break;
@@ -597,7 +611,9 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		switch (charcode)
 		{
         case '\r':
-            do_enter_key:
+        do_enter_key:
+            if (!is_multiline())
+                break;
 			charcode='\n';
             _undo.push(text.array(), get_caret_char_index(), start_sel, CH_ADDSPECIAL );
 
@@ -641,7 +657,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
             return curh >= rb_margin_from ? margins_rb.x : 0;
         };
 
-		if (text[i]==L'\n') // build new line
+		if (text[i]=='\n') // build new line
 		{
 			lines.add(ts::ivec2(linestart,i));
 			linestart=i+1;

@@ -23,6 +23,11 @@
 #define PROTO_ICON_SIZE 32
 
 
+#define AM_VIDEO_CALLS TTT("Video calls", 397)
+#define AM_TOOLS TTT("Tools", 432)
+#define AM_MISC TTT("Misc", 435)
+#define AM_DEBUG TTT("Debug", 395)
+
 
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
@@ -1174,6 +1179,13 @@ bool dialog_settings_c::downloadfolder_images_edit_handler(const ts::wstr_c &v, 
     return true;
 }
 
+bool dialog_settings_c::downloadfolder_fshare_edit_handler(const ts::wstr_c &v, bool)
+{
+    downloadfolder_fshare = v;
+    mod();
+    return true;
+}
+
 bool dialog_settings_c::tempfolder_sendimg_edit_handler( const ts::wstr_c &v, bool )
 {
     tempfolder_sendimg = v;
@@ -1776,10 +1788,11 @@ void dialog_settings_c::mod()
         PREPARE(font_scale_conv_text, prf().fontscale_conv_text() );
         PREPARE(font_scale_msg_edit, prf().fontscale_msg_edit());
 
-        PREPARE( date_msg_tmpl, prf().date_msg_template() );
-        PREPARE( date_sep_tmpl, prf().date_sep_template() );
-        PREPARE( downloadfolder, prf().download_folder() );
-        PREPARE( downloadfolder_images, prf().download_folder_images() );
+        PREPARE(date_msg_tmpl, prf().date_msg_template());
+        PREPARE(date_sep_tmpl, prf().date_sep_template());
+        PREPARE(downloadfolder, prf().download_folder());
+        PREPARE(downloadfolder_images, prf().download_folder_images());
+        PREPARE(downloadfolder_fshare, prf().download_folder_fshare());
         PREPARE( fileconfirm, prf().fileconfirm() );
         PREPARE( auto_download_masks, prf().auto_confirm_masks() );
         PREPARE( manual_download_masks, prf().manual_confirm_masks() );
@@ -1891,16 +1904,16 @@ void dialog_settings_c::mod()
 
     if ( profile_selected && prf_options().is(OPTOPT_POWER_USER) )
     m.add_sub(TTT("Advanced",394))
-        .add(TTT("Video calls",397), 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
-        .add(TTT("Tools",432), 0, TABSELMI(MASK_ADVANCED_TOOLS))
-        .add( TTT("Misc",435), 0, TABSELMI( MASK_ADVANCED_MISC ) )
-        .add(TTT("Debug", 395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
+        .add(AM_VIDEO_CALLS, 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
+        .add(AM_TOOLS, 0, TABSELMI(MASK_ADVANCED_TOOLS))
+        .add(AM_MISC, 0, TABSELMI(MASK_ADVANCED_MISC))
+        .add(AM_DEBUG, 0, TABSELMI(MASK_ADVANCED_DEBUG));
 
     descmaker dm(this);
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
 
     dm().page_caption(TTT("General application settings",108));
-    dm().combik(loc_text(loc_language)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
+    dm().combik(LOC_LANGUAGE).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
     dm().vspace(10);
     dm().combik(TTT("GUI theme",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
     dm().vspace();
@@ -2218,6 +2231,10 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().textfield(TTT("These files require confirmation to start downloading",242), manual_download_masks, DELEGATE(this, fileconfirm_manual_masks_handler)).setname(CONSTASTR("confirmmanual"));
 
+        dm().vspace();
+        dm().path(TTT("Default folder for shares",540), downloadfolder_fshare, DELEGATE(this, downloadfolder_fshare_edit_handler));
+        dm().vspace();
+
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
         dm().page_caption(loc_text(loc_networks));
@@ -2230,6 +2247,8 @@ void dialog_settings_c::mod()
 
 
     dm << MASK_ADVANCED_DEBUG;
+
+    dm().page_caption(AM_DEBUG);
 
     dm().vspace();
     int dopts = 0;
@@ -2258,12 +2277,15 @@ void dialog_settings_c::mod()
         );
 
     dm << MASK_ADVANCED_TOOLS;
+    dm().page_caption(AM_TOOLS);
+
     dm().checkb(ts::wstr_c(), DELEGATE(this, advt_handler), tools_bits).setmenu(
         menu_c().add(TTT("Color editor",433), 0, MENUHANDLER(), CONSTASTR("1"))
             .add( TTT("Command line generator",489), 0, MENUHANDLER(), CONSTASTR( "2" ) )
         );
 
     dm << MASK_ADVANCED_MISC;
+    dm().page_caption(AM_MISC);
     dm().path( TTT("Temp folder for sending images",441), tempfolder_sendimg, DELEGATE( this, tempfolder_sendimg_edit_handler ) );
     dm().vspace();
     dm().path( TTT("Temp folder for message handler",442), tempfolder_handlemsg, DELEGATE( this, tempfolder_handlemsg_edit_handler ) );
@@ -2281,6 +2303,7 @@ void dialog_settings_c::mod()
     if (profile_selected)
     {
         dm << MASK_ADVANCED_VIDEOCALLS;
+        dm().page_caption(AM_VIDEO_CALLS);
         dm().checkb(ts::wstr_c(), DELEGATE(this, advv_handler), disable_video_ex ? 1 : 0).setmenu(
             menu_c().add(TTT("Disable extended video support",406), 0, MENUHANDLER(), CONSTASTR("1"))
             );
@@ -2778,7 +2801,9 @@ void dialog_settings_c::networks_tab_selected()
     if (mask & MASK_APPLICATION_VIDEO)
     {
         is_video_tab_selected = true;
-        ctlenable( CONSTASTR("camera"), video_devices.size() != 0 );
+        ts::wstr_c cid = camera.set(CONSTWSTR("id"));
+        ctlenable(CONSTASTR("camera"), video_devices.size() != 0 );
+        ctlenable(CONSTASTR("camerares"), video_devices.size() != 0 && !cid.equals(CONSTWSTR("off")));
     }
 
     if (mask & MASK_APPLICATION_SOUNDS)
@@ -2813,6 +2838,7 @@ bool dialog_settings_c::addlistsound( RID, GUIPARAM p )
         TTT("Incoming message", 1000),
         TTT("Incoming message (current conversation)", 1010),
         TTT("Incoming file", 1001),
+        TTT("Incoming folder share", 1014), // max
         TTT("File receiving started", 1002),
         TTT("File received", 1011),
         TTT("Contact online", 1012),
@@ -2830,6 +2856,7 @@ bool dialog_settings_c::addlistsound( RID, GUIPARAM p )
         snd_incoming_message,
         snd_incoming_message2,
         snd_incoming_file,
+        snd_folder_share,
         snd_start_recv_file,
         snd_file_received,
         snd_friend_online,
@@ -3218,6 +3245,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
         prf().download_folder(downloadfolder);
         prf().download_folder_images(downloadfolder_images);
+        prf().download_folder_fshare(downloadfolder_fshare);
         prf().auto_confirm_masks( auto_download_masks );
         prf().manual_confirm_masks( manual_download_masks );
         prf().fileconfirm( fileconfirm );
@@ -3346,12 +3374,12 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 }
 
 
-bool S3CALL dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext)
+bool S3CALL dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, void *lpContext)
 {
-    ((dialog_settings_c *)lpContext)->enum_capture_devices(device, lpcstrDescription, lpcstrModule);
+    ((dialog_settings_c *)lpContext)->enum_capture_devices(device, lpcstrDescription);
     return true;
 }
-void dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar * /*lpcstrModule*/)
+void dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription)
 {
     sound_device_s &sd = record_devices.add();
     sd.deviceid = device ? *device : s3::DEFAULT_DEVICE;
@@ -3384,12 +3412,12 @@ menu_c dialog_settings_c::list_audio_capture_devices()
     return m;
 }
 
-bool S3CALL dialog_settings_c::enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, const s3::wchar *lpcstrModule, void *lpContext)
+bool S3CALL dialog_settings_c::enum_play_devices(s3::DEVICE *device, const s3::wchar *lpcstrDescription, void *lpContext)
 {
-    ((dialog_settings_c *)lpContext)->enum_play_devices(device, lpcstrDescription, lpcstrModule);
+    ((dialog_settings_c *)lpContext)->enum_play_devices(device, lpcstrDescription);
     return true;
 }
-void dialog_settings_c::enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription, const ts::wchar *lpcstrModule)
+void dialog_settings_c::enum_play_devices(s3::DEVICE *device, const ts::wchar *lpcstrDescription)
 {
     sound_device_s &sd = play_devices.add();
     sd.deviceid = device ? *device : s3::DEFAULT_DEVICE;
@@ -3439,7 +3467,7 @@ bool dialog_settings_c::test_talk_device(RID, GUIPARAM)
         if (0 != (dsp_flags & DSP_SPEAKERS_NOISE)) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
         if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
 
-        media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol, dspf);
+        media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol, dspf, recfmt.bytesToMSec(testrec.size()));
     } else
         media.test_talk( talk_vol );
     return true;
@@ -3641,6 +3669,7 @@ void dialog_settings_c::select_video_capture_device( const ts::str_c& prm )
     camera.set(CONSTWSTR("res")) = fix_camera_res(camera.get(CONSTWSTR("res")));
     set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
     set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
+    ctlenable(CONSTASTR("camerares"), !prm.equals(CONSTASTR("off")));
     mod();
 
     setup_video_device();
@@ -3665,7 +3694,11 @@ menu_c dialog_settings_c::list_video_capture_devices()
         return m;
     }
 
-    ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    ts::wstr_c cid = camera.set(CONSTWSTR("id"));
+
+    m.add(TTT("Disable video capture",114), cid.equals(CONSTWSTR("off")) ? MIF_MARKED : 0, DELEGATE(this, select_video_capture_device), CONSTASTR("off"));
+    m.add_separator();
+
     for (const vsb_descriptor_s &vd : video_devices)
     {
         ts::uint32 f = 0;
@@ -3707,7 +3740,8 @@ void dialog_settings_c::set_video_devices( vsb_list_t &&_video_devices )
         ctlenable(CONSTASTR("camera"), video_devices.size() != 0);
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
-    bool camok = false;
+    bool camok = cid.equals(CONSTWSTR("off"));
+    if (!camok)
     for (const vsb_descriptor_s &d : video_devices)
     {
         if (d.id == cid)
@@ -3725,6 +3759,7 @@ void dialog_settings_c::set_video_devices( vsb_list_t &&_video_devices )
 
     set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
     set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
+    ctlenable(CONSTASTR("camerares"), !cid.equals(CONSTWSTR("off")));
     setup_video_device();
 
 }
@@ -3751,6 +3786,11 @@ void dialog_settings_c::setup_video_device()
     } end(this);
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    if (cid.equals(CONSTWSTR("off")))
+    {
+        getengine().redraw();
+        return;
+    }
     ts::wstrmap_c camdesc( camera );
     if (cid.begins(CONSTWSTR("desktop"))) camdesc.set( CONSTWSTR("res") ).clear();
     const vsb_descriptor_s *dd = nullptr;
@@ -4040,7 +4080,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         ASSERT(params.configurable.initialized);
         dm().vspace(5);
         addh += 45;
-        dm().textfield(TTT("Server port. If 0, the server is disabled.",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
+        dm().textfield(TTT("Listen port (0 - don't listen)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
     }
 
     if (0 != (params.proto_desc.connection_features & CF_PROXY_MASK))

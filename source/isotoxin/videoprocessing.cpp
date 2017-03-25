@@ -55,7 +55,7 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
 
         ts::aint cnt = d.resolutions.count();
         for ( ts::aint i = 1; i < cnt; ++i)
-            if (d.resolutions.get(i).x < 640)
+            if (d.resolutions.get(i).x < 160)
             {
                 d.resolutions.set_count(i, true);
                 break;

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "decoder.h"
+#include "fmt_wav.h"
 
 /*
 #pragma comment(lib, "libFLAC_static")
@@ -140,17 +141,17 @@ bool Decoder::init(ReadFunc *readFunc_, void *userPtr_)
 	{
 		struct
 		{
-			DWORD fsize, WAVESIG, fmt_SIG, fmtSize;
-			PCMWAVEFORMAT fmt;
+			uint32 fsize, WAVESIG, fmt_SIG, fmtSize;
+			fmt::PCMWAVEFORMAT fmt;
 		} s;
 		if ((*readFunc)((char*)&s, sizeof(s), userPtr) != sizeof(s)) return false;
 		if (s.WAVESIG != MAKEFOURCC('W','A','V','E') || s.fmt_SIG != MAKEFOURCC('f','m','t',' ')) return false;
-		if (s.fmtSize != sizeof(PCMWAVEFORMAT) || s.fmt.wf.wFormatTag != WAVE_FORMAT_PCM) return false;
+		if (s.fmtSize != sizeof(fmt::PCMWAVEFORMAT) || s.fmt.wf.wFormatTag != WAVE_FORMAT_PCM) return false;
 		if (s.fmt.wBitsPerSample != 8 && s.fmt.wBitsPerSample != 16) return false;
 		if (s.fmt.wf.nChannels != 1 && s.fmt.wf.nChannels != 2) return false;
 		for (;;)
 		{
-			struct {DWORD id, size;} block;
+			struct { uint32 id, size;} block;
 			if ((*readFunc)((char*)&block, sizeof(block), userPtr) != sizeof(block)) return false;
 			if (block.id == MAKEFOURCC('d','a','t','a'))
 			{
@@ -163,7 +164,7 @@ bool Decoder::init(ReadFunc *readFunc_, void *userPtr_)
 			}
 			for (char temp[1024]; block.size > 0;)//эмуляция seek :)
 			{
-				int sz = std::min((DWORD)sizeof(temp), block.size);
+				int sz = std::min(static_cast<uint32>(sizeof(temp)), block.size);
 				if ((*readFunc)(temp, sz, userPtr) != sz) return false;
 				block.size -= sz;
 			}

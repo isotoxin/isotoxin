@@ -19,16 +19,6 @@
 #define VIDEO_CODEC_ENCODER_INTERFACE_VP9 (vpx_codec_vp9_cx())
 #define MAX_ENCODE_TIME_US (1000000 / 5)
 
-template<typename checker> u64 random64( const checker &ch )
-{
-    u64 v;
-    do
-    {
-        randombytes_buf( &v, sizeof( v ) );
-    } while ( v == 0 || ch(v) );
-    return v;
-}
-
 namespace
 {
     struct av_sender_state_s
@@ -1233,7 +1223,7 @@ void lan_engine::contact_s::fill_data(contact_data_s &cd, savebuffer *protodata)
     data_changed = false;
 
     cd.id = id;
-    cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG;
+    cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG | CDM_CAPS;
     cd.public_id = public_id.cstr();
     cd.public_id_len = (int)public_id.get_length();
     cd.name = name.cstr();
@@ -1241,6 +1231,7 @@ void lan_engine::contact_s::fill_data(contact_data_s &cd, savebuffer *protodata)
     cd.status_message = statusmsg.cstr();
     cd.status_message_len = static_cast<int>(statusmsg.get_length());
     cd.avatar_tag = 0;
+    cd.caps = CCAPS_SUPPORT_BBCODES | CCAPS_SUPPORT_SHARE_FOLDER;
     switch (state)
     {
     case lan_engine::contact_s::SEARCH:
@@ -1989,7 +1980,7 @@ void lan_engine::stop_encoder()
 
 }
 
-void lan_engine::app_signal(app_signal_e s)
+void lan_engine::signal(contact_id_s id, signal_e s)
 {
     switch (s)
     {
@@ -2060,6 +2051,70 @@ void lan_engine::app_signal(app_signal_e s)
         delete this;
         engine = nullptr;
         break;
+
+    case CONS_ACCEPT_INVITE:
+        if (contact_s *c = find(id))
+            if (c->state == contact_s::INVITE_RECV)
+            {
+                c->state = contact_s::ACCEPT;
+                c->key_sent = false;
+                c->invitemessage.clear();
+                hf->save();
+            }
+
+        break;
+    case CONS_REJECT_INVITE:
+        if (contact_s *c = find(id))
+            if (c->state == contact_s::INVITE_RECV)
+            {
+                c->state = contact_s::REJECT;
+                c->nextactiontime = time_ms();
+            }
+        break;
+    case CONS_ACCEPT_CALL:
+        if (contact_s *c = find(id))
+            if (c->state == contact_s::ONLINE && contact_s::IN_CALL == c->call_status)
+            {
+                c->send_block(BT_CALL_ACCEPT, 0);
+                c->start_media();
+            }
+
+        break;
+    case CONS_STOP_CALL:
+        if (contact_s *c = find(id))
+            if (c->state == contact_s::ONLINE && contact_s::CALL_OFF != c->call_status)
+            {
+                c->send_block(BT_CALL_CANCEL, 0);
+                c->stop_call_activity(false);
+
+            }
+        break;
+    case CONS_DELETE:
+
+        if (!id.is_self())
+            if (contact_s *c = find(id))
+                if (c->state != contact_s::ROTTEN && c->state != contact_s::ALMOST_ROTTEN && c->state != contact_s::REJECT)
+                {
+                    c->state = contact_s::ROTTEN;
+                    c->data_changed = false; // no need to send data to host
+                }
+
+        break;
+    case CONS_TYPING:
+        if (contact_s *c = find(id))
+            c->send_block(BT_TYPING, 0);
+
+        break;
+
+    case REQS_DETAILS:
+        break;
+    case REQS_AVATAR:
+        if (contact_s *c = find(id))
+            c->send_block(BT_GETAVATAR, 0);
+        break;
+    case REQS_EXPORT_DATA:
+        break;
+
     }
 }
 
@@ -2141,7 +2196,7 @@ bool lan_engine::load_contact(contact_id_s cid, loader &l)
         {
             contact_id_s id = as_contactid(lc.get_u32());
             ASSERT(cid.is_empty() || cid == id);
-            hf->use_id(c->id.id);
+            hf->use_id(id.id);
 
             if (int pksz = lc(chunk_contact_public_key))
             {
@@ -2370,34 +2425,6 @@ int lan_engine::add_contact(const char* public_id, const char* invite_message_ut
     return CR_OK;
 }
 
-void lan_engine::request(contact_id_s id, request_entity_e re)
-{
-    switch (re)
-    {
-    case RE_DETAILS:
-        break;
-    case RE_AVATAR:
-        if (contact_s *c = find(id))
-            c->send_block(BT_GETAVATAR, 0);
-        break;
-    case RE_EXPORT_DATA:
-        break;
-    }
-}
-
-void lan_engine::del_contact(contact_id_s id)
-{
-    if (!id.is_self())
-        if (contact_s *c = find(id))
-            if (c->state != contact_s::ROTTEN && c->state != contact_s::ALMOST_ROTTEN && c->state != contact_s::REJECT)
-            {
-                c->state = contact_s::ROTTEN;
-                c->data_changed = false; // no need to send data to host
-            }
-
-}
-
-
 lan_engine::contact_s *lan_engine::find_by_pk(const byte *public_key)
 {
     for (contact_s *i = first->next; i; i = i->next)
@@ -2451,57 +2478,14 @@ void lan_engine::del_message( u64 utag )
         }
 }
 
-void lan_engine::accept(contact_id_s id)
-{
-    if (contact_s *c = find(id))
-        if (c->state == contact_s::INVITE_RECV)
-        {
-            c->state = contact_s::ACCEPT;
-            c->key_sent = false;
-            c->invitemessage.clear();
-            hf->save();
-        }
-}
-
-void lan_engine::reject(contact_id_s id)
-{
-    if (contact_s *c = find(id))
-        if (c->state == contact_s::INVITE_RECV)
-        {
-            c->state = contact_s::REJECT;
-            c->nextactiontime = time_ms();
-        }
-}
-
-void lan_engine::call(contact_id_s id, const call_info_s *callinf)
+void lan_engine::call(contact_id_s id, const call_prm_s *callinf)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && c->call_status == contact_s::CALL_OFF)
         {
-            c->send_block( BT_CALL /*callinf->call_type ==  call_info_s::VOICE_CALL ? BT_VOICE_CALL : BT_VIDEO_CALL*/, 0);
+            c->send_block( BT_CALL /*callinf->call_type ==  call_prm_s::VOICE_CALL ? BT_VOICE_CALL : BT_VIDEO_CALL*/, 0);
             c->call_status = contact_s::OUT_CALL;
             c->call_stop_time = time_ms() + (callinf->duration * 1000);
-        }
-}
-
-void lan_engine::stop_call(contact_id_s id)
-{
-    if (contact_s *c = find(id))
-        if (c->state == contact_s::ONLINE && contact_s::CALL_OFF != c->call_status)
-        {
-            c->send_block(BT_CALL_CANCEL, 0);
-            c->stop_call_activity(false);
-            
-        }
-}
-
-void lan_engine::accept_call(contact_id_s id)
-{
-    if (contact_s *c = find(id))
-        if (c->state == contact_s::ONLINE && contact_s::IN_CALL == c->call_status)
-        {
-            c->send_block(BT_CALL_ACCEPT, 0);
-            c->start_media();
         }
 }
 
@@ -2540,7 +2524,7 @@ void lan_engine::stream_options(contact_id_s id, const stream_options_s *so )
         }
 }
 
-int lan_engine::send_av(contact_id_s id, const call_info_s * ci)
+int lan_engine::send_av(contact_id_s id, const call_prm_s * ci)
 {
     contact_s *c = nullptr;
     if ( ci->audio_data )
@@ -2594,6 +2578,7 @@ bool decrypt( byte *outbuf, const byte* inbuf, int inbufsz, const byte *tmpkey )
 void lan_engine::contact_s::to_offline(int ct)
 {
     state = contact_s::OFFLINE;
+    sfs.clear();
     data_changed = true;
     waiting_keepalive_answer = false;
     engine->nexthallo = ct + min(500, abs(engine->nexthallo - ct));
@@ -2815,7 +2800,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 fill_data(cd,&sb);
                 engine->hf->update_contact(&cd);
                 if (sendrq)
-                    engine->hf->message(MT_FRIEND_REQUEST, contact_id_s(), id, now(), invitemessage.cstr(), (int)invitemessage.get_length());
+                    engine->hf->message(MT_FRIEND_REQUEST, contact_id_s(), id, now(), invitemessage.cstr(), static_cast<int>(invitemessage.get_length()));
             }
         }
         break;
@@ -2962,213 +2947,293 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     //pstr_c rstr; rstr.set(asptr((const char *)dd.buf.data(), dd.buf.size()));
                     switch (bt)
                     {
-                        case BT_CHANGED_NAME:
-                            name.set((const char *)dd.buf.data(), (int)dd.buf.size());
+                    case BT_CHANGED_NAME:
+                        name.set((const char *)dd.buf.data(), (int)dd.buf.size());
+                        data_changed = true;
+                        break;
+                    case BT_CHANGED_STATUSMSG:
+                        statusmsg.set((const char *)dd.buf.data(), (int)dd.buf.size());
+                        data_changed = true;
+                        break;
+                    case BT_OSTATE:
+                        if (dd.buf.size() == sizeof(int))
+                        {
+                            ostate = (contact_online_state_e)ntohl(*(int *)dd.buf.data());
                             data_changed = true;
-                            break;
-                        case BT_CHANGED_STATUSMSG:
-                            statusmsg.set((const char *)dd.buf.data(), (int)dd.buf.size());
+                        }
+                        break;
+                    case BT_GENDER:
+                        if (dd.buf.size() == sizeof(int))
+                        {
+                            gender = (contact_gender_e)ntohl(*(int *)dd.buf.data());
                             data_changed = true;
-                            break;
-                        case BT_OSTATE:
-                            if (dd.buf.size() == sizeof(int))
-                            {
-                                ostate = (contact_online_state_e)ntohl(*(int *)dd.buf.data());
-                                data_changed = true;
-                            }
-                            break;
-                        case BT_GENDER:
-                            if (dd.buf.size() == sizeof(int))
-                            {
-                                gender = (contact_gender_e)ntohl(*(int *)dd.buf.data());
-                                data_changed = true;
-                            }
-                            break;
-                        case BT_CALL:
-                        //case BT_VOICE_CALL:
-                        //case BT_VIDEO_CALL:
-                            if (CALL_OFF == call_status)
-                            {
-                                engine->hf->message(MT_INCOMING_CALL, contact_id_s(), id, now(), /*BT_VOICE_CALL != bt ? "video" :*/ "audio", 5);
-                                call_status = IN_CALL;
-                            }
-                            break;
-                        case BT_CALL_CANCEL:
-                            if (CALL_OFF != call_status)
-                                stop_call_activity();
-                            break;
-                        case BT_CALL_ACCEPT:
-                            if (OUT_CALL == call_status)
-                            {
-                                engine->hf->message(MT_CALL_ACCEPTED, contact_id_s(), id, now(), nullptr, 0);
-                                start_media();
-                            }
-                            break;
-                        case BT_STREAM_OPTIONS:
-                            if ( dd.buf.size() == sizeof(stream_options_s) )
-                            {
-                                if ( media == nullptr )
-                                    media = new media_stuff_s( this );
-                                const stream_options_s *sos = (stream_options_s *)dd.buf.data();
-                                media->remote_so.options = ntohl(sos->options);
-                                media->remote_so.view_w = ntohl( sos->view_w );
-                                media->remote_so.view_h = ntohl( sos->view_h );
+                        }
+                        break;
+                    case BT_CALL:
+                    //case BT_VOICE_CALL:
+                    //case BT_VIDEO_CALL:
+                        if (CALL_OFF == call_status)
+                        {
+                            engine->hf->message(MT_INCOMING_CALL, contact_id_s(), id, now(), /*BT_VOICE_CALL != bt ? "video" :*/ "audio", 5);
+                            call_status = IN_CALL;
+                        }
+                        break;
+                    case BT_CALL_CANCEL:
+                        if (CALL_OFF != call_status)
+                            stop_call_activity();
+                        break;
+                    case BT_CALL_ACCEPT:
+                        if (OUT_CALL == call_status)
+                        {
+                            engine->hf->message(MT_CALL_ACCEPTED, contact_id_s(), id, now(), nullptr, 0);
+                            start_media();
+                        }
+                        break;
+                    case BT_STREAM_OPTIONS:
+                        if ( dd.buf.size() == sizeof(stream_options_s) )
+                        {
+                            if ( media == nullptr )
+                                media = new media_stuff_s( this );
+                            const stream_options_s *sos = (stream_options_s *)dd.buf.data();
+                            media->remote_so.options = ntohl(sos->options);
+                            media->remote_so.view_w = ntohl( sos->view_w );
+                            media->remote_so.view_h = ntohl( sos->view_h );
 
-                                engine->hf->av_stream_options(contact_id_s(), id, &media->remote_so );
-                            }
-                            break;
-                        case BT_INITDECODER:
-                            if ( dd.buf.size() == sizeof( i32 ) * 3 )
+                            engine->hf->av_stream_options(contact_id_s(), id, &media->remote_so );
+                        }
+                        break;
+                    case BT_INITDECODER:
+                        if ( dd.buf.size() == sizeof( i32 ) * 3 )
+                        {
+                            if ( media )
                             {
-                                if ( media )
+                                if ( media->decoder )
                                 {
-                                    if ( media->decoder )
-                                    {
-                                        vpx_codec_destroy( &media->v_decoder );
-                                        media->decoder = false;
-                                    }
-                                    media->cfg_dec.w = ntohl( *(i32 *)dd.buf.data() );
-                                    media->cfg_dec.h = ntohl( *( ( (i32 *)dd.buf.data() ) + 1 ) );
-                                    media->vdecodec = (video_codec_e)ntohl( *( ( (i32 *)dd.buf.data() ) + 2 ) );
+                                    vpx_codec_destroy( &media->v_decoder );
+                                    media->decoder = false;
                                 }
+                                media->cfg_dec.w = ntohl( *(i32 *)dd.buf.data() );
+                                media->cfg_dec.h = ntohl( *( ( (i32 *)dd.buf.data() ) + 1 ) );
+                                media->vdecodec = (video_codec_e)ntohl( *( ( (i32 *)dd.buf.data() ) + 2 ) );
                             }
-                            break;
-                        case BT_VIDEO_FRAME:
-                            if (media)
-                                if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
-                                {
-                                    const framehead_s *fh = (const framehead_s *)dd.buf.data();
-                                    media->video_frame( my_ntohll( fh->msmonotonic ), ntohl( fh->frame ), dd.buf.data() + sizeof( framehead_s ), static_cast<int>( dd.buf.size() - sizeof( framehead_s ) ) );
-                                }
-
-                            if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
+                        }
+                        break;
+                    case BT_VIDEO_FRAME:
+                        if (media)
+                            if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
                             {
-                                tlm_data_s d1 = { static_cast<u64>( id.id ), dd.buf.size() };
-                                engine->hf->telemetry( TLM_VIDEO_RECV_BYTES, &d1, sizeof( d1 ) );
+                                const framehead_s *fh = (const framehead_s *)dd.buf.data();
+                                media->video_frame( my_ntohll( fh->msmonotonic ), ntohl( fh->frame ), dd.buf.data() + sizeof( framehead_s ), static_cast<int>( dd.buf.size() - sizeof( framehead_s ) ) );
                             }
 
-                            break;
-                        case BT_AUDIO_FRAME:
-                            break;
-                        case BT_GETAVATAR:
-                            send_block(BT_AVATARDATA, 0, engine->avatar.data(), engine->avatar.size());
-                            break;
-                        case BT_AVATARHASH:
-                            if (dd.buf.size() == AVATAR_HASH_SIZE && 0!=memcmp(avatar_hash,dd.buf.data(), AVATAR_HASH_SIZE ))
-                            {
-                                memcpy(avatar_hash, dd.buf.data(), AVATAR_HASH_SIZE );
-                                if (0 == *(int *)avatar_hash && 0 == *(int *)(avatar_hash+4) && 0 == *(int *)(avatar_hash+8) && 0 == *(int *)(avatar_hash+12))
-                                    avatar_tag = 0;
-                                else
-                                    avatar_tag++;
+                        if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
+                        {
+                            tlm_data_s d1 = { static_cast<u64>( id.id ), dd.buf.size() };
+                            engine->hf->telemetry( TLM_VIDEO_RECV_BYTES, &d1, sizeof( d1 ) );
+                        }
 
-                                contact_data_s cd(id, CDM_AVATAR_TAG);
-                                cd.avatar_tag = avatar_tag;
-                                engine->hf->update_contact(&cd);
-                                engine->hf->save();
+                        break;
+                    case BT_AUDIO_FRAME:
+                        break;
+                    case BT_GETAVATAR:
+                        send_block(BT_AVATARDATA, 0, engine->avatar.data(), engine->avatar.size());
+                        break;
+                    case BT_AVATARHASH:
+                        if (dd.buf.size() == AVATAR_HASH_SIZE && 0!=memcmp(avatar_hash,dd.buf.data(), AVATAR_HASH_SIZE ))
+                        {
+                            memcpy(avatar_hash, dd.buf.data(), AVATAR_HASH_SIZE );
+                            if (0 == *(int *)avatar_hash && 0 == *(int *)(avatar_hash+4) && 0 == *(int *)(avatar_hash+8) && 0 == *(int *)(avatar_hash+12))
+                                avatar_tag = 0;
+                            else
+                                avatar_tag++;
+
+                            contact_data_s cd(id, CDM_AVATAR_TAG);
+                            cd.avatar_tag = avatar_tag;
+                            engine->hf->update_contact(&cd);
+                            engine->hf->save();
+                        }
+                        break;
+                    case BT_AVATARDATA:
+                        {
+                            byte hash[AVATAR_HASH_SIZE];
+                            crypto_generichash( hash, sizeof( hash ), (const byte *)dd.buf.data(), dd.buf.size(), nullptr, 0 );
+
+                            if (0 != memcmp( hash, avatar_hash, sizeof( hash ) ))
+                            {
+                                memcpy(avatar_hash, hash, sizeof( hash ) );
+                                ++avatar_tag; // new avatar version
                             }
-                            break;
-                        case BT_AVATARDATA:
-                            {
-                                byte hash[AVATAR_HASH_SIZE];
-                                crypto_generichash( hash, sizeof( hash ), (const byte *)dd.buf.data(), dd.buf.size(), nullptr, 0 );
-
-                                if (0 != memcmp( hash, avatar_hash, sizeof( hash ) ))
-                                {
-                                    memcpy(avatar_hash, hash, sizeof( hash ) );
-                                    ++avatar_tag; // new avatar version
-                                }
                                 
-                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), static_cast<int>(dd.buf.size()));
-                            }
-                            break;
-                        case BT_SENDFILE:
-                            if (dd.buf.size() > 16)
-                            {
-                                const u64 *d = (u64 *)dd.buf.data();
-                                u64 sid = my_ntohll(d[0]);
-                                u64 fsz = my_ntohll(d[1]);
-                                new incoming_file_s(id, sid, fsz, std::string((const char *)dd.buf.data() + 16, dd.buf.size() - 16));
-                            }
-                            break;
-                        case BT_FILE_BREAK:
-                            if (dd.buf.size() == sizeof(u64))
-                            {
-                                const u64 *d = (u64 *)dd.buf.data();
-                                u64 sid = my_ntohll(d[0]);
-                                if(file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->kill(false);
-                            }
-                            break;
-                        case BT_FILE_ACCEPT:
-                            if (dd.buf.size() == sizeof(u64) * 2)
-                            {
-                                const u64 *d = (u64 *)dd.buf.data();
-                                u64 sid = my_ntohll(d[0]);
-                                u64 offset = my_ntohll(d[1]);
-                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->accepted(offset);
-                            }
-                            break;
-                        case BT_FILE_DONE:
-                            logfn("filetr.log", "BT_FILE_DONE buffsize %u", dd.buf.size());
-                            if (dd.buf.size() == sizeof(u64))
-                            {
-                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
+                            engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), static_cast<int>(dd.buf.size()));
+                        }
+                        break;
+                    case BT_SENDFILE:
+                        if (dd.buf.size() > 16)
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 sid = my_ntohll(d[0]);
+                            u64 fsz = my_ntohll(d[1]);
+                            new incoming_file_s(id, sid, fsz, std::string((const char *)dd.buf.data() + 16, dd.buf.size() - 16));
+                        }
+                        break;
+                    case BT_FILE_BREAK:
+                        if (dd.buf.size() == sizeof(u64))
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 sid = my_ntohll(d[0]);
+                            if(file_transfer_s *f = engine->find_ftr_by_sid(sid))
+                                f->kill(false);
+                        }
+                        break;
+                    case BT_FILE_ACCEPT:
+                        if (dd.buf.size() == sizeof(u64) * 2)
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 sid = my_ntohll(d[0]);
+                            u64 offset = my_ntohll(d[1]);
+                            if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
+                                f->accepted(offset);
+                        }
+                        break;
+                    case BT_FILE_DONE:
+                        logfn("filetr.log", "BT_FILE_DONE buffsize %u", dd.buf.size());
+                        if (dd.buf.size() == sizeof(u64))
+                        {
+                            u64 sid = my_ntohll(*(u64 *)dd.buf.data());
 
-                                logfn("filetr.log", "BT_FILE_CHUNK done %llu", sid);
+                            logfn("filetr.log", "BT_FILE_CHUNK done %llu", sid);
 
-                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->finished(false);
-                            }
-                            break;
-                        case BT_FILE_PAUSE:
-                            if (dd.buf.size() == sizeof(u64))
-                            {
-                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
-                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->pause(false);
-                            }
-                            break;
-                        case BT_FILE_UNPAUSE:
-                            if (dd.buf.size() == sizeof(u64))
-                            {
-                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
-                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->unpause(false);
-                            }
-                            break;
-                        case BT_FILE_CHUNK:
-                            {
-                                const u64 *d = (u64 *)dd.buf.data();
-                                u64 sid = my_ntohll(d[0]);
-                                u64 offset = my_ntohll(d[1]);
+                            if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
+                                f->finished(false);
+                        }
+                        break;
+                    case BT_FILE_PAUSE:
+                        if (dd.buf.size() == sizeof(u64))
+                        {
+                            u64 sid = my_ntohll(*(u64 *)dd.buf.data());
+                            if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
+                                f->pause(false);
+                        }
+                        break;
+                    case BT_FILE_UNPAUSE:
+                        if (dd.buf.size() == sizeof(u64))
+                        {
+                            u64 sid = my_ntohll(*(u64 *)dd.buf.data());
+                            if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
+                                f->unpause(false);
+                        }
+                        break;
+                    case BT_FILE_CHUNK:
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 sid = my_ntohll(d[0]);
+                            u64 offset = my_ntohll(d[1]);
 
-                                logfn("filetr.log", "BT_FILE_CHUNK %llu %llu", sid, offset);
+                            logfn("filetr.log", "BT_FILE_CHUNK %llu %llu", sid, offset);
 
-                                if ( file_transfer_s *f = engine->find_ftr_by_sid( sid ) )
+                            if ( file_transfer_s *f = engine->find_ftr_by_sid( sid ) )
+                            {
+                                f->chunk_received( offset, d + 2, dd.buf.size() - sizeof( u64 ) * 2 );
+
+                                if ( IS_TLM( TLM_FILE_RECV_BYTES ) )
                                 {
-                                    f->chunk_received( offset, d + 2, dd.buf.size() - sizeof( u64 ) * 2 );
+                                    tlm_data_s d2 = { f->utag, dd.buf.size() };
+                                    engine->hf->telemetry( TLM_FILE_RECV_BYTES, &d2, sizeof( d2 ) );
+                                }
 
-                                    if ( IS_TLM( TLM_FILE_RECV_BYTES ) )
-                                    {
-                                        tlm_data_s d2 = { f->utag, dd.buf.size() };
-                                        engine->hf->telemetry( TLM_FILE_RECV_BYTES, &d2, sizeof( d2 ) );
-                                    }
+                            }
+                        }
+                        break;
+                    case BT_TYPING:
+                        engine->hf->typing(contact_id_s(), id );
+                        break;
+                    case BT_FOLDERSHARE_ANNOUNCE:
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 utag = my_ntohll(d[0]);
 
+                            if (contact_s::fsh_s *fsh = find_fsh(utag))
+                            {
+                                // if fsh already present, it already announced
+                                // no need to do it again
+                            }
+                            else
+                            {
+                                const char *shname = (const char *)(d + 1);
+                                int l = static_cast<int>(dd.buf.size() - sizeof(u64));
+                                engine->hf->message(MT_FOLDER_SHARE_ANNOUNCE, contact_id_s(), id, utag, shname, l);
+                                sfs.emplace_back(utag, id, std::asptr(shname, l));
+                            }
+
+                        }
+                        break;
+                    case BT_FOLDERSHARE_TOC:
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 fsutag = my_ntohll(d[0]);
+
+                            for (contact_s::fsh_ptr_s &sf : sfs)
+                            {
+                                if (sf.sf->utag == fsutag)
+                                {
+                                    engine->hf->folder_share(fsutag, d + 1, static_cast<int>(dd.buf.size() - sizeof(u64))); // toc
+                                    break;
                                 }
                             }
-                            break;
-                        case BT_TYPING:
-                            engine->hf->typing(contact_id_s(), id );
-                            break;
-                        default:
-                            if (bt < __bt_service)
+
+                        }
+                        break;
+                    case BT_FOLDERSHARE_CTL:
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 fsutag = my_ntohll(d[0]);
+                            folder_share_control_e ctl = static_cast<folder_share_control_e>( *(byte *)(d + 1) );
+                            size_t cnt = sfs.size();
+                            for (size_t i = 0; i < cnt; ++i)
                             {
-                                u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
-                                engine->hf->message((message_type_e)bt, contact_id_s(), id, crtime, (const char *)dd.buf.data() + sizeof(u64), (int)dd.buf.size() - sizeof(u64));
+                                contact_s::fsh_ptr_s &sf = sfs[i];
+                                if (sf.sf->utag == fsutag)
+                                {
+                                    switch (ctl)
+                                    {
+                                    case FSC_ACCEPT:
+                                        // send toc
+                                        if (sf.sf->toc_size > 0)
+                                        {
+                                            send_block(BT_FOLDERSHARE_TOC, 0, d, sizeof(u64), sf.sf->to_data(), sf.sf->toc_size);
+                                            sf.clear_toc(); // no need to after send on accept
+                                        }
+
+                                        break;
+                                    case FSC_REJECT:
+                                        removeFast(sfs, i);
+                                        break;
+                                    }
+                                    engine->hf->folder_share_ctl(sf.sf->utag, ctl);
+                                    break;
+                                }
                             }
-                            break;
+                        }
+                        break;
+                    case BT_FOLDERSHARE_QUERY:
+                        {
+                            const u64 *d = (u64 *)dd.buf.data();
+                            u64 fsutag = my_ntohll(d[0]);
+                            std::asptr tocname, fakename;
+                            tocname.l = ntohs( *(uint16_t *)(d + 1) );
+                            fakename.l = ntohs(*(((uint16_t *)(d + 1)) + 1));
+                            tocname.s = (const char *)(((uint16_t *)(d + 1)) + 2);
+                            fakename.s = tocname.s + tocname.l;
+                            engine->hf->folder_share_query(fsutag, tocname.s, tocname.l, fakename.s, fakename.l);
+                        }
+                        break;
+                    default:
+                        if (bt < __bt_service)
+                        {
+                            u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
+                            engine->hf->message((message_type_e)bt, contact_id_s(), id, crtime, (const char *)dd.buf.data() + sizeof(u64), static_cast<int>(dd.buf.size() - sizeof(u64)));
+                        }
+                        break;
                     }
                 }
             }
@@ -3429,7 +3494,7 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
 
 DELTA_TIME_PROFILER(xxx, 1024);
 
-bool lan_engine::transmitting_file_s::ready_chunk_s::set(const file_portion_s *fp)
+bool lan_engine::transmitting_file_s::ready_chunk_s::set(const file_portion_prm_s *fp)
 {
     if (nullptr == buf && fp->offset == offset)
     {
@@ -3481,7 +3546,7 @@ void lan_engine::transmitting_file_s::send_block(contact_s *c)
     }
 }
 
-bool lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *fp)
+bool lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_prm_s *fp)
 {
     logfn("filetr.log", "fresh_file_portion fp %llu (%llu)", utag, fp->offset);
 
@@ -3587,7 +3652,7 @@ void lan_engine::tick_ftr(int ct)
 }
 
 
-void lan_engine::file_send(contact_id_s id, const file_send_info_s *finfo)
+void lan_engine::file_send(contact_id_s id, const file_send_info_prm_s *finfo)
 {
     bool ok = false;
     if (contact_s *c = find(id))
@@ -3694,13 +3759,134 @@ void lan_engine::file_control(u64 utag, file_control_e ctl)
 
 }
 
-bool lan_engine::file_portion(u64 utag, const file_portion_s *fp)
+bool lan_engine::file_portion(u64 utag, const file_portion_prm_s *fp)
 {
     if (transmitting_file_s *f = find_transmitting_ftr(utag))
         if (f->fresh_file_portion(fp))
             return true;
 
     return false;
+}
+
+void lan_engine::folder_share_ctl(u64 utag, const folder_share_control_e ctl)
+{
+    if (contact_s::fsh_s *fsh = find_fsh(utag))
+    {
+        if (contact_s *c = engine->find(fsh->cid))
+        {
+            struct ctls
+            {
+                u64 utag;
+                byte ctl;
+            } x;
+            x.utag = my_htonll(fsh->utag);
+            x.ctl = static_cast<byte>(ctl);
+            c->send_block(BT_FOLDERSHARE_CTL, 0, &x, 1 + sizeof(u64));
+        }
+
+
+        switch (ctl)
+        {
+        case FSC_ACCEPT:
+            break;
+
+        case FSC_REJECT:
+            fsh->die();
+            return;
+        }
+    }
+}
+
+void lan_engine::contact_s::fsh_s::enlist()
+{
+    LIST_ADD(this, engine->first_fsh, engine->last_fsh, prev, next);
+}
+void lan_engine::contact_s::fsh_s::unlist()
+{
+    LIST_DEL(this, engine->first_fsh, engine->last_fsh, prev, next);
+}
+void lan_engine::contact_s::fsh_s::die()
+{
+    if (contact_s *c = engine->find(cid))
+    {
+        size_t cnt = c->sfs.size();
+        for (size_t i=0;i<cnt;++i)
+        {
+            contact_s::fsh_ptr_s &sf = c->sfs[i];
+            if (sf.sf == this)
+            {
+                removeFast(c->sfs, i);
+                break;
+            }
+        }
+
+    }
+}
+
+
+void lan_engine::folder_share_toc(contact_id_s cid, const folder_share_prm_s *sfd)
+{
+
+    if (contact_s *c = find(cid))
+    {
+        auto send_announce = [&]()
+        {
+            std::asptr n(sfd->name);
+            c->sfs.emplace_back(sfd->utag, c->id, n, sfd->ver, sfd->data, sfd->size);
+
+            u64 utag = my_htonll(sfd->utag);
+            c->send_block(BT_FOLDERSHARE_ANNOUNCE, 0, &utag, sizeof(utag), n.s, n.l);
+
+        };
+
+        if (c->state == contact_s::ONLINE)
+        {
+            for (contact_s::fsh_ptr_s &sf : c->sfs)
+            {
+                if (sf.sf->utag == sfd->utag)
+                {
+                    if (sf.sf->toc_size > 0)
+                    {
+                        // not yet confirm
+                        // just update toc
+                        sf.update_toc(sfd->data, sfd->size);
+                        send_announce();
+                        return;
+                    }
+
+                    if (sf.sf->toc_ver < sfd->ver)
+                    {
+                        sf.sf->toc_ver = sfd->ver;
+                        u64 utag = my_htonll(sfd->utag);
+                        c->send_block(BT_FOLDERSHARE_TOC, 0, &utag, sizeof(utag), sfd->data, sfd->size);
+                        return;
+                    }
+                }
+            }
+
+        }
+    }
+
+}
+
+void  lan_engine::folder_share_query(u64 utag, const folder_share_query_prm_s *prm)
+{
+    if (contact_s::fsh_s *fsh = find_fsh(utag))
+    {
+        if (contact_s *c = engine->find(fsh->cid))
+        {
+            int len = sizeof(u64) + sizeof(uint16_t) * 2 + prm->tocname_len + prm->fakename_len;
+            byte *b = (byte *)_alloca(len);
+            *(u64 *)b = my_htonll(utag);
+            *(uint16_t *)(b + sizeof(u64)) = htons(static_cast<uint16_t>(prm->tocname_len));
+            *(uint16_t *)(b + sizeof(u64) + sizeof(uint16_t)) = htons(static_cast<uint16_t>(prm->fakename_len));
+            memcpy(b + sizeof(u64) + sizeof(uint16_t) * 2, prm->tocname, prm->tocname_len);
+            memcpy(b + sizeof(u64) + sizeof(uint16_t) * 2 + prm->tocname_len, prm->fakename, prm->fakename_len);
+
+            c->send_block(BT_FOLDERSHARE_QUERY, 0, b, len);
+        }
+    }
+
 }
 
 void lan_engine::create_conference(const char * /*confaname*/, const char * /*options*/)
@@ -3737,13 +3923,6 @@ void lan_engine::contact(const contact_data_s * cdata)
             hf->update_contact(&cd);
         }
     }
-}
-
-
-void lan_engine::typing(contact_id_s id)
-{
-    if (contact_s *c = find(id))
-        c->send_block(BT_TYPING, 0);
 }
 
 void lan_engine::logging_flags(unsigned int f)

@@ -207,10 +207,6 @@ public:
         if ( bits64 ) v.trunc_length(3);
         return v;
     }
-    ts::str_c autoupdate_newver()
-    {
-        return get( CONSTASTR( "autoupdate_newver" ), CONSTASTR( "0" ) );
-    }
 
     INTPAR(proxy, 0)
     TEXTAPAR(proxy_addr, DEFAULT_PROXY)
@@ -231,10 +227,10 @@ public:
     INTPAR(allow_tools, 0)
     INTPAR( misc_flags, 0 )
 
-    TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
-    TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )
+    TEXTWPAR( temp_folder_sendimg, "%TEMP%" NATIVE_SLASH_S "$$$isotoxin" NATIVE_SLASH_S "sendimg" )
+    TEXTWPAR( temp_folder_handlemsg, "%TEMP%" NATIVE_SLASH_S "$$$isotoxin" NATIVE_SLASH_S "handlemsg" )
 
-    TEXTWPAR( folder_backup, "%TEMP%\\$$$isotoxin\\backup\\" )
+    TEXTWPAR( folder_backup, "%TEMP%" NATIVE_SLASH_S "$$$isotoxin" NATIVE_SLASH_S "backup" )
     INTPAR(lim_backup_days, 30)
     INTPAR(lim_backup_size, 100)
     INTPAR(lim_backup_count, 30)

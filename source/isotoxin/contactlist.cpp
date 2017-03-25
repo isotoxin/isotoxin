@@ -254,12 +254,13 @@ void gui_contact_item_c::update_text()
 {
     MEMT( MEMT_CONTACT_ITEM_TEXT );
 
-    ts::str_c newtext;
+    ts::wstr_c ctext;
+
     if (contact)
     {
         if (contact->getkey().is_self)
         {
-            newtext = prf().username();
+            ts::str_c newtext(prf().username());
             text_adapt_user_input(newtext);
             ts::str_c t2(prf().userstatus());
             text_adapt_user_input(t2);
@@ -279,8 +280,10 @@ void gui_contact_item_c::update_text()
             {
                 newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
             }
+            ctext = ts::from_utf8(newtext);
         } else if (CIR_METACREATE == role && contact->subcount() > 1)
         {
+            ts::str_c newtext;
             contact->subiterate([&](contact_c *c) {
                 newtext.append(CONSTASTR("<nl>"));
                 ts::str_c n = c->get_name(false);
@@ -289,12 +292,11 @@ void gui_contact_item_c::update_text()
                 if (active_protocol_c *ap = prf().ap( c->getkey().protoid ))
                     newtext.append(CONSTASTR(" (")).append(ap->get_name()).append(CONSTASTR(")"));
             });
+            ctext = ts::from_utf8(newtext);
 
         } else if (contact->getkey().is_conference())
         {
-            newtext = contact->get_customname();
-            if (newtext.is_empty()) newtext = contact->get_name();
-            text_adapt_user_input(newtext);
+            ctext = contact->showname();
 
             if ( contact->get_state() == CS_ONLINE )
             {
@@ -303,23 +305,23 @@ void gui_contact_item_c::update_text()
                     if (contact->get_conference_permissions() & CP_CHANGE_NAME)
                     {
                         ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
-                        newtext.append( CONSTASTR( " <rect=0," ) );
-                        newtext.append_as_uint( sz.x ).append_char( ',' ).append_as_int( -sz.y ).append( CONSTASTR( ",2>" ) );
+                        ctext.append( CONSTWSTR( " <rect=0," ) );
+                        ctext.append_as_uint( sz.x ).append_char( ',' ).append_as_int( -sz.y ).append( CONSTWSTR( ",2>" ) );
                     }
                 }
                 else
                 {
-                    newtext.append( CONSTASTR( "<br>(" ) ).append_as_num( contact->subonlinecount() + 1 ).append_char( '/' );
-                    if (auto uc = contact->subunknowncount()) newtext.append_as_num( uc ).append_char( '/' );
-                    newtext.append_as_num( contact->subcount() + 1 ).append_char( ')' );
+                    ctext.append( CONSTWSTR( "<br>(" ) ).append_as_num( contact->subonlinecount() + 1 ).append_char( '/' );
+                    if (auto uc = contact->subunknowncount()) ctext.append_as_num( uc ).append_char( '/' );
+                    ctext.append_as_num( contact->subcount() + 1 ).append_char( ')' );
                     if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
-                        newtext.append( CONSTASTR( " <l>" ) ).append( ap->get_name() ).append( CONSTASTR( "</l>" ) );
+                        ctext.append(CONSTWSTR(" <l>")).append(ts::from_utf8(ap->get_name())).append(CONSTWSTR("</l>"));
                 }
 
-                if ( contact->get_pubid().is_empty() )
-                    newtext.append( CONSTASTR( "<br>" ) ).append( to_utf8( TTT( "temporary conference", 256 ) ) );
+                if (contact->get_pubid().is_empty())
+                    ctext.append(CONSTWSTR("<br>")).append(TTT("temporary conference", 256));
             } else
-                newtext.append( CONSTASTR( "<br>" ) ).append(to_utf8(TTT( "inactive conference", 501 )));
+                ctext.append(CONSTWSTR("<br>")).append(TTT("inactive conference", 501));
 
         } else if (contact->is_meta())
         {
@@ -342,36 +344,32 @@ void gui_contact_item_c::update_text()
 
                 DEFERRED_EXECUTION_BLOCK_END( gui->temp_store<contact_key_s>(contact->getkey()) )
             } else if (rej > 0)
-                newtext = colorize( to_utf8(TTT("Rejected",79)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL) );
+                ctext = colorize(TTT("Rejected", 79), get_default_text_color(COLOR_TEXT_SPECIAL));
             else if (invsend > 0)
             {
-                newtext = contact->get_customname();
-                if (newtext.is_empty()) newtext = contact->get_name();
-                text_adapt_user_input(newtext);
-                if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                newtext.append( colorize(to_utf8(TTT("Authorization request has been sent",88)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)) );
+                ctext = contact->showname();
+                if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                ctext.append( colorize(TTT("Authorization request has been sent",88), get_default_text_color(COLOR_TEXT_SPECIAL)) );
             }
             else {
-                newtext = contact->get_customname();
-                if (newtext.is_empty()) newtext = contact->get_name();
-                text_adapt_user_input(newtext);
+                ctext = contact->showname();
                 ts::str_c t2(contact->get_statusmsg());
                 text_adapt_user_input(t2);
 
                 if (CIR_CONVERSATION_HEAD == role)
                 {
                     ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
-                    newtext.append(CONSTASTR(" <rect=0,"));
-                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
+                    ctext.append(CONSTWSTR(" <rect=0,"));
+                    ctext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
                     t2.trim();
-                    if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
+                    if (!t2.is_empty()) ctext.append(CONSTWSTR("<br><l>")).append(ts::from_utf8(t2)).append(CONSTWSTR("</l>"));
 
                 } else
                 {
                     if (invrcv)
                     {
-                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append( colorize( to_utf8(TTT("Please, accept or reject",153)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL) ) );
+                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                        ctext.append( colorize( TTT("Please, accept or reject",153), get_default_text_color(COLOR_TEXT_SPECIAL) ) );
                         t2.clear();
 
                         g_app->new_blink_reason(contact->getkey()).friend_invite();
@@ -379,10 +377,10 @@ void gui_contact_item_c::update_text()
 
                     if (wait)
                     {
-                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append(colorize(to_utf8(TTT("Waiting...",154)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)));
+                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                        ctext.append(colorize(TTT("Waiting...",154), get_default_text_color(COLOR_TEXT_SPECIAL)));
                         t2.clear();
-                    } else if (contact->is_full_search_result() && g_app->found_items)
+                    } else if (contact->flag_full_search_result && g_app->found_items)
                     {
                         // Simple linear iteration... not so fast, yeah.
                         // But I hope number of found items is not so huge
@@ -397,10 +395,10 @@ void gui_contact_item_c::update_text()
                         if (cntitems > 0)
                         {
 
-                            if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                            newtext.append(CONSTASTR("<l>")).
-                                append(colorize(to_utf8(TTT("Found: $",338)/ts::wmake(cntitems)).as_sptr(), get_default_text_color(COLOR_TEXT_FOUND))).
-                                append(CONSTASTR("</l>"));
+                            if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                            ctext.append(CONSTWSTR("<l>")).
+                                append(colorize<ts::wchar>(TTT("Found: $",338)/ts::wmake(cntitems), get_default_text_color(COLOR_TEXT_FOUND))).
+                                append(CONSTWSTR("</l>"));
                             t2.clear();
                         }
 
@@ -411,9 +409,9 @@ void gui_contact_item_c::update_text()
                         ts::wstr_c ins(CONSTWSTR("<fullheight><i>"));
                         t = text_typing( t, b, ins );
                         typing_buf.set(t).append_char('\1').append(b);
-                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
 
-                        newtext.append(colorize(to_utf8(t).as_sptr(), get_default_text_color(COLOR_TEXT_TYPING)));
+                        ctext.append(colorize(t.as_sptr(), get_default_text_color(COLOR_TEXT_TYPING)));
                         t2.clear();
                     }
 
@@ -422,25 +420,25 @@ void gui_contact_item_c::update_text()
                         t2.clear();
                     }
                     t2.trim();
-                    if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
+                    if (!t2.is_empty()) ctext.append(CONSTWSTR("<br><l>")).append(ts::from_utf8(t2)).append(CONSTWSTR("</l>"));
 
                     if (g_app->F_SHOW_CONTACTS_IDS())
                     {
-                        ts::str_c ids; ids.set_as_char('[').append_as_int(contact->getkey().contactid).append(CONSTASTR("] "));
-                        newtext.insert(0, ids);
+                        ts::wstr_c ids; ids.set_as_char('[').append_as_int(contact->getkey().contactid).append(CONSTWSTR("] "));
+                        ctext.insert(0, ids);
                     }
                 }
             }
 
         } else
-            newtext.set( CONSTASTR("<error>") );
+            ctext.set( CONSTWSTR("<error>") );
 
 
     } else
     {
-        newtext.clear();
+        ctext.clear();
     }
-    textrect.set_text_only(from_utf8(newtext), false);
+    textrect.set_text_only(ctext, false);
 
     getengine().redraw();
 
@@ -513,7 +511,7 @@ bool gui_contact_item_c::allow_drag() const
 
 bool gui_contact_item_c::allow_drop() const
 {
-    if ( contact->get_options().is( contact_c::F_SYSTEM_USER ) )
+    if ( contact->is_system_user )
         return false;
 
     if (contact->getkey().is_conference() && contact->get_state() == CS_OFFLINE)
@@ -619,7 +617,7 @@ bool gui_contact_item_c::allow_drop() const
 
             m_engine->begin_draw();
 
-            if ( !contact->get_options().is( contact_c::F_SYSTEM_USER ) && role != CIR_CONVERSATION_HEAD )
+            if ( !contact->is_system_user && role != CIR_CONVERSATION_HEAD )
             {
                 if ( !force_state_icon && ( prf_options().is( UIOPT_PROTOICONS ) || contact->fully_unknown() ) )
                     state_icon = nullptr;
@@ -656,7 +654,7 @@ bool gui_contact_item_c::allow_drop() const
                 }
             }
 
-            if ( contact->is_av() && !contact->is_full_search_result() && CIR_CONVERSATION_HEAD != role )
+            if ( contact->flag_is_av && !contact->flag_full_search_result && CIR_CONVERSATION_HEAD != role )
             {
                 if ( const av_contact_s *avc = g_app->avcontacts().find_inprogress_any( contact ) )
                 {
@@ -948,13 +946,13 @@ bool gui_contact_item_c::allow_drop() const
                 if ( fdone )
                     return;
 
-                if ( c->get_options().is( contact_c::F_AVA_DEFAULT ) && c->get_avatar() )
+                if ( c->is_ava_default && c->get_avatar() )
                 {
                     ck = c->getkey();
                     fdone = true;
                     return;
                 }
-                if ( c->get_avatar() && ( c->get_options().is( contact_c::F_DEFALUT ) || ck.is_empty() ) )
+                if ( c->get_avatar() && ( c->is_default || ck.is_empty() ) )
                     ck = c->getkey();
             } );
 
@@ -1130,8 +1128,7 @@ bool gui_contact_item_c::allow_drop() const
                     {
                         if (c->gui_item)
                         {
-                            ts::wstr_c downf = prf().download_folder();
-                            path_expand_env(downf, c->contactidfolder());
+                            ts::wstr_c downf = prf().download_folder_prepared(c);
                             ts::make_path(downf, 0);
 
                             ts::wstr_c n = from_utf8(c->get_name());
@@ -1197,7 +1194,7 @@ bool gui_contact_item_c::allow_drop() const
                 menu_c m;
 
                 contact->subiterate( [&]( const contact_c *c ) {
-                    if (c->get_options().is(contact_c::F_ALLOW_INVITE) && c->get_state() == CS_UNKNOWN)
+                    if (c->is_allow_invite && c->get_state() == CS_UNKNOWN)
                     {
                         m.add( TTT("Send authorization request: $",453) / ts::wstr_c(CONSTWSTR("<b>"), ts::from_utf8(c->get_pubid_desc()), CONSTWSTR("</b>")), 0, handlers::m_invite, c->getkey().as_str() );
                     }
@@ -1626,9 +1623,9 @@ void gui_conversation_header_c::set_default_proto( const ts::str_c&cks )
     contact->subiterate( [&]( contact_c *c ) {
         if ( ck == c->getkey() )
         {
-            if ( !c->get_options().is( contact_c::F_DEFALUT ) )
+            if ( !c->is_default )
             {
-                c->options().set( contact_c::F_DEFALUT );
+                c->is_default = true;
                 prf().dirtycontact( c->getkey() );
                 regen_prots = true;
 
@@ -1636,9 +1633,9 @@ void gui_conversation_header_c::set_default_proto( const ts::str_c&cks )
         }
         else
         {
-            if ( c->get_options().is( contact_c::F_DEFALUT ) )
+            if ( c->is_default )
             {
-                c->options().clear( contact_c::F_DEFALUT );
+                c->is_default = false;
                 prf().dirtycontact( c->getkey() );
                 regen_prots = true;
             }
@@ -1762,7 +1759,7 @@ bool gui_conversation_header_c::createvcallnow(RID, GUIPARAM prm)
                 int f = ap->get_features();
                 features |= f;
                 if (c->get_state() == CS_ONLINE) features_online |= f;
-                if (c->is_av() || c->is_ringtone() || c->is_calltone()) now_disabled = true;
+                if (c->flag_is_av || c->flag_is_ringtone || c->flag_is_calltone) now_disabled = true;
             }
         });
 
@@ -1779,6 +1776,9 @@ bool gui_conversation_header_c::createvcallnow(RID, GUIPARAM prm)
 
             b_vcall.leech(TSNEW(leech_at_left_animated_s, acall_button, 0, 500, as_int(prm) == 2));
             b_vcall.leech(TSNEW(leech_inout_handler_s, DELEGATE(this, avbinout)));
+
+            if (ts::wstrmap_c(cfg().device_camera()).set(CONSTWSTR("id")).equals(CONSTWSTR("off")))
+                b_vcall.disable();
 
             MODIFY(b_vcall).visible(true);
             getengine().redraw();
@@ -2056,7 +2056,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
                 b_noti_off.leech( TSNEW( leech_dock_right_center_s, minsz.x, minsz.y, 2, -1, 0, 1 ) );
                 MODIFY( b_noti_off ).visible( true );
 
-                if ( contact->is_av() )
+                if ( contact->flag_is_av )
                 {
                     if (av_contact_s *avcp = g_app->avcontacts().find_inprogress_any( contact ))
                     {
@@ -2095,7 +2095,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
                     int f = ap->get_features();
                     features |= f;
                     if ( c->get_state() == CS_ONLINE ) features_online |= f;
-                    if ( c->is_av() || c->is_ringtone() || c->is_calltone() ) now_disabled = true;
+                    if ( c->flag_is_av || c->flag_is_ringtone || c->flag_is_calltone ) now_disabled = true;
                 }
             } );
 
@@ -2636,19 +2636,15 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
 
     ts::safe_ptr<rectengine_c> active = g_app->active_contact_item ? &g_app->active_contact_item->getengine() : nullptr;
 
-    if (!active)
-        active = get_first_contact_item();
-
-
     contacts().iterate_root_contacts([](contact_root_c *c)->bool{
 
         if ( c->getkey().is_self )
             return true;
 
         bool redraw = false;
-        if (c->is_full_search_result())
+        if (c->flag_full_search_result)
         {
-            c->full_search_result(false);
+            c->flag_full_search_result = false;
             redraw = true;
         }
         if (c->gui_item)
@@ -2667,6 +2663,8 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
 
     if (active)
         scroll_to_child(active, ST_ANY_POS);
+    else if (!flags.is(F_KEEP_SCROLL_POS))
+        scroll_to_begin();
 
     gmsg<ISOGM_REFRESH_SEARCH_RESULT>().send();
 
@@ -2798,7 +2796,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     {
         contacts().iterate_proto_contacts( [&]( contact_c *c )->bool {
 
-            if ( c->get_options().is( contact_c::F_SYSTEM_USER ) && c->getkey().protoid == (unsigned)ch.protoid )
+            if ( c->is_system_user && c->getkey().protoid == (unsigned)ch.protoid )
             {
                 c->set_name( ch.s );
                 if ( c->get_historian()->gui_item )
@@ -3142,6 +3140,14 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         sort_tag = contacts().sort_tag();
     }
     return 0;
+}
+
+/*virtual*/ void gui_contactlist_c::on_manual_scroll(manual_scroll_e ms)
+{
+    if (MS_BY_MOUSE == ms)
+        flags.set(F_KEEP_SCROLL_POS);
+
+    super::on_manual_scroll(ms);
 }
 
 /*virtual*/ void gui_contactlist_c::children_repos_info(cri_s &info) const

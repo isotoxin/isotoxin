@@ -1,5 +1,6 @@
 #include "stdafx.h"
 
+#ifdef _WIN32
 #pragma USELIB("plgcommon")
 
 #pragma comment(lib, "Dnsapi.lib")
@@ -7,179 +8,236 @@
 #pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Iphlpapi.lib")
+#endif
 
+/*
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
+*/
 
-#include "appver.inl"
+#include "../appver.inl"
 
-static host_functions_s *hf;
-static contact_state_e self_state; // cleared in handshake
+class xxx
+{
+    host_functions_s *hf;
+    contact_state_e self_state;
+
+public:
+
+#define FUNC1( rt, fn, p0 ) rt fn(p0);
+#define FUNC2( rt, fn, p0, p1 ) rt fn(p0, p1);
+    PROTO_FUNCTIONS
+#undef FUNC2
+#undef FUNC1
+
+    void on_handshake(host_functions_s *hf_)
+    {
+#ifdef _WIN32
+        WSADATA wsa;
+        WSAStartup(MAKEWORD(2, 2), &wsa);
+#endif // _WIN32
+
+        hf = hf_;
+        self_state = CS_OFFLINE;
+    }
+
+};
+
+static xxx cl;
 
 
-void __stdcall offline()
+
+void xxx::call(contact_id_s id, const call_prm_s *ci)
 {
 }
 
-void __stdcall online()
+void xxx::stream_options(contact_id_s id, const stream_options_s * so)
 {
 }
 
-void __stdcall call(int id, const call_info_s *ci)
-{
-}
-
-
-void __stdcall stop_call(int id)
-{
-}
-
-void __stdcall accept_call(int id)
-{
-}
-
-void __stdcall stream_options(int id, const stream_options_s * so)
-{
-}
-
-int __stdcall send_av(int id, const call_info_s * ci)
+int xxx::send_av(contact_id_s id, const call_prm_s * ci)
 {
     return SEND_AV_OK;
 }
 
-void __stdcall tick(int *sleep_time_ms)
+void xxx::tick(int *sleep_time_ms)
 {
 }
 
-void __stdcall goodbye()
+void xxx::set_name(const char*utf8name)
 {
 }
 
-void __stdcall set_name(const char*utf8name)
+void xxx::set_statusmsg(const char*utf8status)
 {
 }
 
-void __stdcall set_statusmsg(const char*utf8status)
+void xxx::set_ostate(int ostate)
 {
+}
+void xxx::set_gender(int gender) // unused
+{
+}
+void xxx::set_avatar(const void*data, int isz)
+{
+}
+void xxx::set_config(const void*data, int isz)
+{
+}
+void xxx::save_config(void * param)
+{
+    savebuffer b;
+    
+    //save your protocol state to buffer
+    //save_state(b);
+
+    hf->on_save(b.data(), static_cast<int>(b.size()), param);
 }
 
-void __stdcall set_ostate(int ostate)
+void xxx::signal(contact_id_s cid, signal_e s)
 {
+    switch (s)
+    {
+    case APPS_INIT_DONE:
+        break;
+    case APPS_ONLINE:
+        break;
+    case APPS_OFFLINE:
+        break;
+    case APPS_GOODBYE:
+
+#ifdef _WIN32
+        WSACleanup();
+#endif // _WIN32
+
+        break;
+
+
+    case CONS_ACCEPT_INVITE:
+        break;
+    case CONS_REJECT_INVITE:
+        break;
+    case CONS_ACCEPT_CALL:
+        break;
+    case CONS_STOP_CALL:
+        break;
+    case CONS_DELETE:
+        break;
+    case CONS_TYPING:
+        break;
+
+    case REQS_DETAILS:
+        break;
+    case REQS_AVATAR:
+        break;
+    case REQS_EXPORT_DATA:
+        break;
+    }
 }
-void __stdcall set_gender(int /*gender*/)
-{
-}
-void __stdcall get_avatar(int id)
-{
-}
-void __stdcall set_avatar(const void*data, int isz)
-{
-}
-void __stdcall set_config(const void*data, int isz)
-{
-}
-void __stdcall init_done()
-{
-}
-void __stdcall save_config(void * param)
-{
-}
-int __stdcall resend_request(int id, const char* invite_message_utf8)
+
+int xxx::resend_request(contact_id_s id, const char* invite_message_utf8)
 {
     return CR_FUNCTION_NOT_FOUND;
 }
-int __stdcall add_contact(const char* public_id, const char* invite_message_utf8)
-{
 
+void xxx::contact(const contact_data_s * icd)
+{
+}
+
+int xxx::add_contact(const char* public_id, const char* invite_message_utf8)
+{
     return CR_INVALID_PUB_ID;
 
 }
-void __stdcall del_contact(int id)
+void xxx::send_message(contact_id_s id, const message_s *msg)
 {
 }
 
-void __stdcall send_message(int id, const message_s *msg)
+void xxx::del_message( u64 utag )
 {
 }
 
-void __stdcall del_message( u64 utag )
+void xxx::file_send(contact_id_s cid, const file_send_info_prm_s *finfo)
 {
 }
 
-void __stdcall accept(int id)
+void xxx::file_accept(u64 utag, u64 offset)
 {
 }
 
-void __stdcall reject(int id)
+void xxx::file_control(u64 utag, file_control_e fctl)
 {
 }
-
-void __stdcall configurable(const char *field, const char *val)
-{
-}
-
-void __stdcall file_send(int cid, const file_send_info_s *finfo)
-{
-}
-
-void __stdcall file_accept(u64 utag, u64 offset)
-{
-}
-
-void __stdcall file_control(u64 utag, file_control_e fctl)
-{
-}
-bool __stdcall file_portion(u64 utag, const file_portion_s *portion)
+bool xxx::file_portion(u64 utag, const file_portion_prm_s *portion)
 {
     return false;
 
 }
 
-void __stdcall add_groupchat(const char *groupaname, bool persistent)
+void xxx::folder_share_ctl(u64 utag, const folder_share_control_e ctl)
+{
+
+}
+
+void xxx::folder_share_toc(contact_id_s cid, const folder_share_prm_s *sfd)
 {
 }
-void __stdcall ren_groupchat(int gid, const char *groupaname)
+
+void  xxx::folder_share_query(u64, const folder_share_query_prm_s *prm)
+{
+
+}
+
+
+void xxx::create_conference(const char *groupaname, const char *options)
 {
 }
-void __stdcall join_groupchat(int gid, int cid)
+void xxx::ren_conference(contact_id_s gid, const char *groupaname)
 {
 }
-void __stdcall typing(int cid)
+void xxx::join_conference(contact_id_s gid, contact_id_s cid)
 {
 }
-void __stdcall export_data()
+void xxx::del_conference(const char *conference_id)
 {
 }
-void __stdcall logging_flags(unsigned int f)
+void xxx::enter_conference(const char *conference_id)
 {
 }
+void xxx::leave_conference(contact_id_s gid, int keep_leave)
+{
+}
+void xxx::logging_flags(unsigned int f)
+{
+}
+void xxx::telemetry_flags(unsigned int f)
+{
+}
+
+#define FUNC1( rt, fn, p0 ) rt PROTOCALL static_##fn(p0 pp0) { return cl.fn(pp0); }
+#define FUNC2( rt, fn, p0, p1 ) rt PROTOCALL static_##fn(p0 pp0, p1 pp1) { return cl.fn(pp0, pp1); }
+PROTO_FUNCTIONS
+#undef FUNC2
+#undef FUNC1
 
 proto_functions_s funcs =
 {
-#define FUNC0( rt, fn ) &fn,
-#define FUNC1( rt, fn, p0 ) &fn,
-#define FUNC2( rt, fn, p0, p1 ) &fn,
+#define FUNC1( rt, fn, p0 ) &static_##fn,
+#define FUNC2( rt, fn, p0, p1 ) &static_##fn,
     PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
-#undef FUNC0
 };
 
-proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
+proto_functions_s* PROTOCALL api_handshake(host_functions_s *hf_)
 {
-    WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
-
-    hf = hf_;
-
-    self_state = CS_OFFLINE;
-
+    cl.on_handshake(hf_);
     return &funcs;
 }
 
 
-void __stdcall api_getinfo( proto_info_s *info )
+void PROTOCALL api_getinfo( proto_info_s *info )
 {
 
 #define  NL "\n"
@@ -198,6 +256,9 @@ void __stdcall api_getinfo( proto_info_s *info )
         "",
         "uin",
         "f=png,jpg,gif" NL "s=8192" NL "a=32" NL "b=96",
+        "", //CONFA_OPT_TYPE "=t/a",
+        "", //"%APPDATA%\\tox", WINDOWS_ONLY // path to import
+        "", //"%APPDATA%\\tox\\isotoxin_tox_save.tox", WINDOWS_ONLY // file
         nullptr
     };
 
@@ -206,7 +267,7 @@ void __stdcall api_getinfo( proto_info_s *info )
     info->priority = 500;
     info->indicator = 1000;
     info->features = PF_UNAUTHORIZED_CHAT | PF_UNAUTHORIZED_CONTACT | PF_AVATARS | PF_NEW_REQUIRES_LOGIN | PF_OFFLINE_MESSAGING | PF_AUTH_NICKNAME | PF_SEND_FILE; // | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_GROUP_CHAT | PF_INVITE_NAME;
-    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5; // | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_enc_only | CF_trust_only; // | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
 
 }
 

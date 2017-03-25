@@ -230,6 +230,17 @@ void active_protocol_c::setup_avatar_restrictions( ts::str_c& s )
     }
 }
 
+void active_protocol_c::signal(contact_id_s cid, signal_e s)
+{
+    ipcp->send(ipcw(AQ_SIGNAL) << cid << static_cast<ts::int32>(s));
+}
+
+void active_protocol_c::signal(signal_e s)
+{
+    ASSERT(s < _SIGNAL_NEED_CONTACT);
+    ipcp->send(ipcw(AQ_SIGNAL) << contact_id_s() << static_cast<ts::int32>(s));
+}
+
 bool active_protocol_c::cmdhandler(ipcr r)
 {
     switch(r.header().cmd)
@@ -290,10 +301,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 if ( w().manual_cos != COS_ONLINE )
                     set_ostate( w().manual_cos );
 
-                ipcp->send( ipcw( AQ_SIGNAL ) << static_cast<ts::int32>(APPS_INIT_DONE) );
+                signal(APPS_INIT_DONE);
                 if ( CR_OK == s &&  0 != ( w().data.options & active_protocol_data_s::O_AUTOCONNECT ) )
                 {
-                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
+                    signal(APPS_ONLINE);
                     w().flags.set( F_ONLINE_SWITCH );
                 }
 
@@ -350,6 +361,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->ostate = static_cast<contact_online_state_e>(r.get<int>());
             m->gender = static_cast<contact_gender_e>(r.get<int>());
             m->grants = r.get<int>();
+            m->caps = r.get<int>();
 
             g_app->setuap(static_cast<ts::uint16>(id), m->key.id);
 
@@ -504,7 +516,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             TSNEW( video_frame_decoder_c, this, f ); // not memory leak!
         }
         break;
-    case AQ_CONTROL_FILE:
+    case XX_CONTROL_FILE:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
             m->i_utag = r.get<uint64>();
@@ -520,8 +532,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->i_utag = r.get<uint64>();
             m->filesize = r.get<uint64>();
             m->filename.set_as_utf8(r.getastr());
-
-            fix_path( m->filename, FNO_MAKECORRECTNAME );
 
             m->send_to_main_thread();
 
@@ -573,6 +583,44 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->data.set_size(dsz);
             memcpy(m->data.data(), data, dsz);
 
+            m->send_to_main_thread();
+        }
+        break;
+    case HA_FOLDER_SHARE_TOC:
+        {
+            ASSERT(r.sz < 0, "HQ_FILE_PORTION must be xchg buffer");
+
+            struct fsd_s // HA_FOLDER_SHARE_TOC
+            {
+                u64 utag;
+                int size;
+            };
+
+            fsd_s *d = (fsd_s *)(r.d + sizeof(data_header_s));
+
+            gmsg<ISOGM_FOLDER_SHARE> *m = TSNEW(gmsg<ISOGM_FOLDER_SHARE>, d->utag, id, gmsg<ISOGM_FOLDER_SHARE>::DT_TOC);
+            m->toc.set_size(d->size);
+            memcpy(m->toc.data(), d+1, d->size);
+
+            m->send_to_main_thread();
+
+            if (ipcp)
+                ipcp->junct.unlock_buffer(d);
+
+        }
+        break;
+    case XX_FOLDER_SHARE_CONTROL:
+        {
+            gmsg<ISOGM_FOLDER_SHARE> *m = TSNEW(gmsg<ISOGM_FOLDER_SHARE>, r.get<uint64>(), id, gmsg<ISOGM_FOLDER_SHARE>::DT_CTL);
+            m->ctl = static_cast<folder_share_control_e>(r.get<ts::int32>());
+            m->send_to_main_thread();
+        }
+        break;
+    case XX_FOLDER_SHARE_QUERY:
+        {
+            gmsg<ISOGM_FOLDER_SHARE> *m = TSNEW(gmsg<ISOGM_FOLDER_SHARE>, r.get<uint64>(), id, gmsg<ISOGM_FOLDER_SHARE>::DT_QUERY);
+            m->tocname = r.getastr();
+            m->fakename = r.getastr();
             m->send_to_main_thread();
         }
         break;
@@ -834,7 +882,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
                 {
             to_offline:
                     r.unlock();
-                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_OFFLINE));
+                    signal(APPS_OFFLINE);
                     syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
                 }
             }
@@ -843,7 +891,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
                 r.unlock();
                 if (ipcp)
                 {
-                    ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
+                    signal(APPS_ONLINE);
                     syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
                 }
             }
@@ -865,7 +913,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
         if (!typingsendcontact.is_empty() && (typingtime - ts::Time::current()) > 0)
         {
             // still typing
-            ipcp->send(ipcw(AQ_TYPING) << typingsendcontact);
+            signal(typingsendcontact, CONS_TYPING);
         } else
         {
             typingsendcontact.clear();
@@ -1000,8 +1048,11 @@ const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
             return *icon.bmp;
 
     auto r = syncdata.lock_read();
+    ts::str_c t(r().data.tag);
+    ts::str_c d(r().getstr(IS_PROTO_ICON));
+    r.unlock();
 
-    const ts::bitmap_c *icon = &prepare_proto_icon( r().data.tag, r().getstr(IS_PROTO_ICON), sz, icot );
+    const ts::bitmap_c *icon = &prepare_proto_icon( t, d, sz, icot );
     icon_s &ic = icons_cache.add();
     ic.bmp = icon;
     ic.icot = icot;
@@ -1313,7 +1364,7 @@ void active_protocol_c::del_contact( const contact_key_s &ck )
     ASSERT( ck.protoid == (unsigned)id );
     ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
 
-    ipcp->send( ipcw(AQ_DEL_CONTACT) << ck.gidcid() );
+    signal(ck.gidcid(), CONS_DELETE);
 }
 
 void active_protocol_c::refresh_details( const contact_key_s &ck )
@@ -1321,7 +1372,7 @@ void active_protocol_c::refresh_details( const contact_key_s &ck )
     ASSERT( ck.protoid == (unsigned)id );
     ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
 
-    ipcp->send( ipcw( AQ_REFRESH_DETAILS ) << ck.gidcid() );
+    signal(ck.gidcid(), REQS_DETAILS);
 }
 
 void active_protocol_c::resend_request( contact_id_s cid, const ts::str_c &msg_utf8 )
@@ -1370,21 +1421,6 @@ void active_protocol_c::join_conference(contact_id_s gid, contact_id_s cid)
     ipcp->send(ipcw(AQ_JOIN_CONFERENCE) << gid << cid);
 }
 
-
-void active_protocol_c::accept(contact_id_s cid)
-{
-    ipcp->send( ipcw(AQ_ACCEPT) << cid );
-}
-
-void active_protocol_c::reject(contact_id_s cid)
-{
-    ipcp->send( ipcw(AQ_REJECT) << cid );
-}
-
-void active_protocol_c::accept_call(contact_id_s cid)
-{
-    ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
-}
 
 void active_protocol_c::send_proto_data(contact_id_s cid, const ts::blob_c &pdata)
 {
@@ -1445,11 +1481,6 @@ void active_protocol_c::call(contact_id_s cid, int seconds, bool videocall)
     ipcp->send(ipcw(AQ_CALL) << cid << seconds << static_cast<ts::int32>(videocall ? 1 : 0));
 }
 
-void active_protocol_c::stop_call(contact_id_s cid)
-{
-    ipcp->send(ipcw(AQ_STOP_CALL) << cid);
-}
-
 void active_protocol_c::set_stream_options(contact_id_s cid, int so, const ts::ivec2 &vr)
 {
     ipcp->send(ipcw(AQ_STREAM_OPTIONS) << cid << so << vr.x << vr.y);
@@ -1484,7 +1515,7 @@ void active_protocol_c::send_configurable(const configurable_s &c)
         w().cbits = 0;
         w().flags.set(F_ONLINE_SWITCH);
         w.unlock();
-        ipcp->send(ipcw(AQ_SIGNAL) << static_cast<ts::int32>(APPS_ONLINE));
+        signal(APPS_ONLINE);
     }
     else
     {
@@ -1543,7 +1574,7 @@ void active_protocol_c::file_accept(uint64 utag, uint64 offset)
 
 void active_protocol_c::file_control(uint64 utag, file_control_e fctl)
 {
-    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((ts::int32)fctl));
+    ipcp->send(ipcw(XX_CONTROL_FILE) << utag << ((ts::int32)fctl));
 }
 
 void active_protocol_c::send_file(contact_id_s cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize)
@@ -1572,7 +1603,7 @@ bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *dat
         fd_s *d = (fd_s *)(dh + 1);
         d->utag = utag;
         d->offset = offset;
-        d->sz = (ts::int32)sz;
+        d->sz = static_cast<ts::int32>(sz);
 
         memcpy( d + 1, data, sz );
 
@@ -1583,9 +1614,50 @@ bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *dat
     return false;
 }
 
-void active_protocol_c::avatar_data_request(contact_id_s cid)
+void active_protocol_c::send_folder_share_ctl(uint64 utag, folder_share_control_e ctl)
 {
-    ipcp->send(ipcw(AQ_GET_AVATAR_DATA) << cid);
+    ipcp->send(ipcw(XX_FOLDER_SHARE_CONTROL) << utag << static_cast<ts::int32>(ctl));
+}
+
+void active_protocol_c::query_folder_share_file(uint64 utag, const ts::asptr &filedn, const ts::asptr &fakefn)
+{
+    ipcp->send(ipcw(XX_FOLDER_SHARE_QUERY) << utag << filedn << fakefn);
+}
+
+
+void active_protocol_c::send_folder_share_toc(contact_id_s cid, int ver, const folder_share_send_c &fsh)
+{
+    if (!ipcp) return;
+    isotoxin_ipc_s *ipcc = ipcp;
+
+    struct hdr_s // AQ_SHARE_FOLDER_ANONCE
+    {
+        uint64 utag;
+        contact_id_s id;
+        ts::int32 ver;
+        ts::int32 sz;
+        char name[64];
+    };
+
+    ts::aint bsz = fsh.get_toc().bin.size();
+    bsz += sizeof(data_header_s) + sizeof(hdr_s);
+
+    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer(static_cast<int>(bsz)))
+    {
+        dh->cmd = AQ_FOLDER_SHARE_ANNOUNCE;
+        hdr_s *d = (hdr_s *)(dh + 1);
+        memset( d, 0, sizeof(hdr_s) );
+        d->id = cid;
+        d->ver = ver;
+        d->sz = static_cast<ts::int32>(fsh.get_toc().bin.size());
+        d->utag = fsh.get_utag();
+        fsh.get_name().copy2buf(d->name);
+
+        memcpy(d + 1, fsh.get_toc().bin.data(), fsh.get_toc().bin.size());
+
+        ipcc->junct.unlock_send_buffer(dh, static_cast<int>(bsz));
+    }
+
 }
 
 void active_protocol_c::del_message(uint64 utag)
@@ -1609,14 +1681,9 @@ void active_protocol_c::typing( const contact_key_s &ck )
     g_app->F_TYPING(true);
     contact_id_s gidcid = ck.gidcid();
     if (typingsendcontact != gidcid)
-        ipcp->send(ipcw(AQ_TYPING) << gidcid);
+        signal(gidcid, CONS_TYPING);
     typingsendcontact = gidcid;
     typingtime = ts::Time::current() + 5000;
-}
-
-void active_protocol_c::export_data()
-{
-    ipcp->send( ipcw(AQ_EXPORT_DATA) );
 }
 
 

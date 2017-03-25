@@ -73,6 +73,7 @@ colors {
 	notice_confa_new=#00a400
 	notice_confa_rotten=#ff0000
 	notice_found_bg=#64a7ff
+	notice_fsh_bg=#52daa9
 	notice_warning_bg=#ffd700
 	menu_item_text=#000000
 	menu_item_text_h=#000000
@@ -155,6 +156,8 @@ colors {
 	btn_text_normal=#000000
 	btn_text_hover=#000000
 	btn_text_press=#000000
+	gen_shf=#007c00
+	gen_shf1=#e3edf5
 	gen_z=#808080
 	gen_z_border=#414142
 	gen_grey_border=#414142

@@ -5,8 +5,14 @@
 
 #include "../plgcommon/plgcommon.h"
 
+#ifdef _WIN32
 #include <winsock2.h>
 #include <Mmsystem.h>
+#endif
+
+#ifdef _MSC_VER
+#pragma  warning(disable:4505)
+#endif
 
 #pragma warning(disable : 4324)
 #include "sodium.h"

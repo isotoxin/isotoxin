@@ -90,10 +90,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="win32_core.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="capture.h" />
+    <ClInclude Include="capture_data.h" />
     <ClInclude Include="decoder.h" />
+    <ClInclude Include="fmt_wav.h" />
     <ClInclude Include="player_data.h" />
     <ClInclude Include="s3.h" />
     <ClInclude Include="slot.h" />

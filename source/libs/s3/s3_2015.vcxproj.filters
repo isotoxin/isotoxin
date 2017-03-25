@@ -25,6 +25,9 @@
     <ClCompile Include="capture.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="win32_core.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="decoder.h">
@@ -43,6 +46,12 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="player_data.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="fmt_wav.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="capture_data.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

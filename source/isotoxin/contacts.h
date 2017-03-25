@@ -8,6 +8,7 @@ enum message_type_app_e : unsigned
     MTA_INCOMING_CALL = MT_INCOMING_CALL,
     MTA_CALL_STOP = MT_CALL_STOP,
     MTA_CALL_ACCEPTED__ = MT_CALL_ACCEPTED,
+    MTA_FOLDER_SHARE_ANNONUCE__ = MT_FOLDER_SHARE_ANNOUNCE,
 
     // not saved to db
     MTA_HISTORY_LOAD_BUTTON,
@@ -138,7 +139,7 @@ struct contact_key_s
         protoid(static_cast<ts::uint16>(ap_) )
     {
         ASSERT(ap_ >= 0 && ap_ < 65536);
-        ASSERT(gid_.is_empty() || (gid_.id >= 0 && gid_.id < 65536 && gid_.is_conference()));
+        ASSERT(gid_.is_empty() || (gid_.id < 65536 && gid_.is_conference()));
     }
 
     explicit contact_key_s( bool self = false )
@@ -284,6 +285,7 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
     contact_id_s key;
     ts::uint16 apid;
     int mask;
+    int caps = 0;
     ts::str_c pubid;
     ts::str_c name;
     ts::str_c statusmsg;
@@ -380,36 +382,54 @@ class contact_c : public ts::shared_object
     UNIQUE_PTR( avatar_s ) avatar;
     ts::blob_c protodata;
 
-    // TODO: lower memory usage: use bits
-    contact_state_e state = CS_OFFLINE;
-    contact_online_state_e ostate = COS_ONLINE;
-    contact_gender_e gender = CSEX_UNKNOWN;
-
-    typedef ts::flags_t<ts::uint32, 0xFFFF> Options;
-    Options opts;
-
     void setmeta(contact_root_c *metac);
 
 public:
 
-    static const ts::flags32_s::BITS F_DEFALUT      = SETBIT(0);
-    static const ts::flags32_s::BITS F_AVA_DEFAULT  = SETBIT(1);
-    static const ts::flags32_s::BITS F_UNKNOWN      = SETBIT(2);
-    static const ts::flags32_s::BITS F_ALLOW_INVITE = SETBIT(3); // only valid for unknown contacts
-    static const ts::flags32_s::BITS F_SYSTEM_USER  = SETBIT(4);
+    union
+    {
+        uint64 sombits;
+        struct
+        {
+            // saved
+            unsigned is_default : 1;
+            unsigned is_ava_default : 1;
+            unsigned is_unknown : 1;
+            unsigned is_allow_invite : 1; // only valid for unknown contacts
+            unsigned is_system_user : 1;
+            unsigned __unused_05 : 1;
+            unsigned __unused_06 : 1;
+            unsigned __unused_07 : 1;
+            unsigned __unused_08 : 1;
+            unsigned __unused_09 : 1;
+            unsigned __unused_10 : 1;
+            unsigned __unused_11 : 1;
+            unsigned __unused_12 : 1;
+            unsigned __unused_13 : 1;
+            unsigned __unused_14 : 1;
+            unsigned __unused_15 : 1;
 
-    // not saved
-    static const ts::flags32_s::BITS F_ALLOWACCEPTDATA = SETBIT(21);
-    static const ts::flags32_s::BITS F_HISTORY_NEED_LOAD = SETBIT(22);
-    static const ts::flags32_s::BITS F_JUST_REJECTED = SETBIT(23);
-    static const ts::flags32_s::BITS F_JUST_ACCEPTED = SETBIT(24);
-    static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(25);
-    static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(26);
-    static const ts::flags32_s::BITS F_VIDEOCALL = SETBIT(27); // valid only when F_CALLTONE
-    static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
-    static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
-    static const ts::flags32_s::BITS F_RINGTONE = SETBIT(30);
-    static const ts::flags32_s::BITS F_DIP = SETBIT(31);
+            // not saved
+            unsigned state : contact_state_bits;
+            unsigned ostate : contact_online_state_bits;
+            unsigned gender : contact_gender_bits;
+
+            unsigned flag_dip : 1;
+            unsigned flag_allowacceptdata : 1;
+            unsigned flag_just_rejected : 1;
+            unsigned flag_just_accepted : 1;
+            unsigned flag_is_ringtone : 1;
+            unsigned flag_is_calltone : 1;
+            unsigned flag_is_av : 1;
+            unsigned flag_is_videocall : 1;
+            unsigned flag_history_need_load : 1;
+            unsigned flag_full_search_result : 1;
+            unsigned flag_support_folder_share : 1;
+            unsigned flag_folder_share_mode : 1;
+            unsigned flag_last_activity : 1;
+            unsigned flag_caps_received : 1;
+        };
+    };
 
     int operator()(const contact_c&oc) const { return key(oc.key); }
     int operator()(const contact_key_s&k) const { return key(k); }
@@ -436,9 +456,9 @@ public:
     void redraw(float delay);
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; }; // meta, but not conference
-    bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_conference() || (getkey().protoid == 0 && getkey().is_self)); } // root contact - in contact list
+    bool is_rootcontact() const { return !is_unknown && (is_meta() || getkey().is_conference() || (getkey().protoid == 0 && getkey().is_self)); } // root contact - in contact list
 
-    bool is_rejected() const { return CS_REJECTED == get_state() || get_options().unmasked().is( F_JUST_REJECTED ); };
+    bool is_rejected() const { return CS_REJECTED == get_state() || flag_just_rejected; };
 
     bool is_unknown_conference_member() const
     {
@@ -446,8 +466,8 @@ public:
     }
     void make_unknown_conference_member( int id );
 
-    const Options &get_options() const {return opts;}
-    Options &options() {return opts;}
+    //const Options &get_options() const {return opts;}
+    //Options &options() {return opts;}
 
     contact_root_c *getmeta() {return metacontact;}
     const contact_root_c *getmeta() const {return metacontact;}
@@ -462,7 +482,7 @@ public:
     void set_customname( const ts::str_c &name_ ) { customname = name_; }
     void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
     void set_details( const ts::str_c &details_ ) { details = details_; }
-    void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
+    void set_state( contact_state_e st ) { state = st; is_unknown = (st == CS_UNKNOWN) ? 1 : 0; }
     void set_ostate( contact_online_state_e ost ) { ostate = ost; }
     void set_gender( contact_gender_e g ) { gender = g; }
     
@@ -482,9 +502,9 @@ public:
     ts::str_c get_name(bool metacompile = true) const;
     const ts::str_c &get_customname() const { return customname; }
     ts::str_c get_statusmsg(bool metacompile = true) const;
-    contact_state_e get_state() const {return state;}
-    contact_online_state_e get_ostate() const {return ostate;}
-    contact_gender_e get_gender() const {return gender;}
+    contact_state_e get_state() const {return (contact_state_e)state;}
+    contact_online_state_e get_ostate() const {return (contact_online_state_e)ostate;}
+    contact_gender_e get_gender() const {return (contact_gender_e)gender;}
 
     const ts::blob_c &get_protodata() const { return protodata; }
     bool set_protodata(const ts::blob_c &d);
@@ -508,10 +528,6 @@ public:
     bool b_receive_file_as(RID, GUIPARAM);
     bool b_refuse_file(RID, GUIPARAM);
     
-    bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
-    bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS); }
-    bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
-
     void rebuild_system_user_avatar( active_protocol_c *ap );
     int avatar_tag() const {return avatar ? avatar->tag : 0; }
     void set_avatar( const void *body, ts::aint size, int tag )
@@ -530,6 +546,8 @@ public:
     virtual const avatar_s *get_avatar() const;
 
 };
+
+TS_STATIC_CHECK( sizeof(contact_c) == offsetof(contact_c, sombits) + 8, "somwrong" );
 
 typedef ts::array_shared_t<contact_c, 8> contacts_array_t;
 
@@ -564,6 +582,7 @@ class contact_root_c : public contact_c // metas and conferences
     ts::wstr_c mhc;
     ts::astrings_c tags;
     ts::buf0_c tags_bits; // rebuilt
+    //ts::wstr_c sfp; FOLDER_SHARE_PATH
 
     time_t readtime = 0; // all messages after readtime considered unread
     keep_contact_history_e keeph = KCH_DEFAULT;
@@ -591,7 +610,6 @@ public:
     /*virtual*/ const ts::str_c get_pubid_desc() const override { return compile_pubid(); };
     /*virtual*/ const avatar_s *get_avatar() const override;
 
-    ts::wstr_c contactidfolder() const;
     void send_file(ts::wstr_c fn);
 
     void stop_av();
@@ -783,7 +801,7 @@ public:
         for ( post_s *p : history )
             posts.dealloc( p );
         history.clear();
-        opts.unmasked().set( F_HISTORY_NEED_LOAD );
+        flag_history_need_load = true;
     }
 
     void export_history(const ts::wsptr &templatename, const ts::wsptr &fname);
@@ -937,6 +955,8 @@ public:
     ts::str_c compile_name() const;
     ts::str_c compile_statusmsg() const;
 
+    ts::wstr_c showname() const;
+
     contact_state_e get_meta_state() const;
     contact_online_state_e get_meta_ostate() const;
     contact_gender_e get_meta_gender() const;
@@ -957,11 +977,12 @@ public:
     const ts::wstr_c &get_mhcmd() const { return mhc; }
     void set_mhcmd( const ts::wstr_c &v ) { mhc = v; }
 
+    //FOLDER_SHARE_PATH
+    //const ts::wstr_c &get_share_folder_path() const { return sfp; }
+    //void set_share_folder_path(const ts::wstr_c &v) { sfp = v; }
+
     bool keep_history() const;
     int calc_unread() const;
-
-    bool is_full_search_result() const { return opts.unmasked().is(F_FULL_SEARCH_RESULT); }
-    void full_search_result(bool f) { opts.unmasked().init(F_FULL_SEARCH_RESULT, f); }
 
     bool is_active() const;
 
@@ -995,10 +1016,14 @@ template<> struct gmsg<ISOGM_INCOMING_MESSAGE> : public gmsgbase
     gmsg() :gmsgbase(ISOGM_INCOMING_MESSAGE) {}
     contact_id_s gid;
     contact_id_s cid;
-    ts::uint16 apid;
-    time_t create_time;
-    message_type_app_e mt;
+    union
+    {
+        uint64 create_time;
+        uint64 utag; // for some messages
+    };
     ts::str_c msgutf8;
+    message_type_app_e mt;
+    ts::uint16 apid;
 };
 
 template<> struct gmsg<ISOGM_FILE> : public gmsgbase
@@ -1019,6 +1044,31 @@ template<> struct gmsg<ISOGM_AVATAR> : public gmsgbase
     contact_key_s contact;
     ts::blob_c data;
     int tag = 0;
+};
+
+template<> struct gmsg<ISOGM_FOLDER_SHARE> : public gmsgbase
+{
+    enum data_type_e
+    {
+        DT_TOC,
+        DT_CTL,
+        DT_QUERY,
+    };
+
+    gmsg(uint64 utag, int apid, data_type_e dt) :gmsgbase(ISOGM_FOLDER_SHARE), utag(utag), apid(apid), dt(dt) {}
+    uint64 utag;
+    ts::blob_c toc;
+    ts::str_c tocname;
+    ts::str_c fakename;
+    folder_share_control_e ctl = FSC_NONE;
+    int apid;
+    data_type_e dt;
+};
+
+template<> struct gmsg<ISOGM_FOLDER_SHARE_UPDATE> : public gmsgbase
+{
+    gmsg(uint64 utag) :gmsgbase(ISOGM_FOLDER_SHARE_UPDATE), utag(utag) {}
+    uint64 utag;
 };
 
 template<> struct gmsg<ISOGM_TYPING> : public gmsgbase

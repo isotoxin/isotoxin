@@ -404,7 +404,7 @@ void test_gchkeys()
 
     for (int i = 0; i < ARRAY_SIZE( keys ); ++i)
     {
-        Print( "%i: %i, %i - %i, %i\n", i, keys[i].closest[0], keys[i].closest[1], keys[i].closest[2], keys[i].closest[3], keys[i].closest[4] );
+        Print( "%i: %i, %i - %i, %i\n", i, keys[i].closest[0], keys[i].closest[1], keys[i].closest[2], keys[i].closest[3] );
     }
 }
 

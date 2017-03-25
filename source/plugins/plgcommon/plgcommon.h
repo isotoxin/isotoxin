@@ -108,7 +108,6 @@ __forceinline int time_ms()
     return (int)timeGetTime();
 }
 
-
 bool AssertFailed(const char *file, int line, const char *s, ...);
 inline bool AssertFailed(const char *file, int line) {return AssertFailed(file, line, "");}
 
@@ -153,10 +152,17 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #ifdef _MSC_VER
 #define UNSTABLE_CODE_PROLOG __try {
 #define UNSTABLE_CODE_EPILOG } __except(EXCEPTIONFILTER()){}
+#define LENDIAN(x) (x)
 #endif // _MSC_VER
 #ifdef __GNUC__
 #define UNSTABLE_CODE_PROLOG try {
 #define UNSTABLE_CODE_EPILOG } catch(...){}
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define LENDIAN(x) (x)
+#endif
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define LENDIAN(x) not_yet_implemented
+#endif
 #endif // __GNUC__
 #else
 #define UNSTABLE_CODE_PROLOG ;
@@ -167,6 +173,7 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 typedef std::widechar WIDECHAR;
 #define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( std::sptr<TCHARACTER>((s),(l)) )
 #include "plghost_interface.h"
+#undef LENDIAN
 #undef MAKESTRTYPE
 #undef STRTYPE
 
@@ -478,8 +485,9 @@ template <int hashsize> struct blake2b
 
 struct bytes
 {
-    const void *data;
-    aint datasize;
+    const void *data = nullptr;
+    aint datasize = 0;
+    bytes() {}
     bytes(const void *data, aint datasize) :data(data), datasize(datasize) {}
 };
 
@@ -747,7 +755,7 @@ CONN_OPTIONS
 #undef COPDEF
 
 
-template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)
+template<typename EL > int findIndex(const std::vector<EL> &vec, const EL & el)
 {
     size_t cnt = vec.size();
     for (size_t index = 0; index < cnt; ++index)
@@ -757,18 +765,18 @@ template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & e
     return -1;
 }
 
-template< typename VEC, typename EL > bool isPresent(const VEC &vec, const EL & el)
+template<typename EL > bool isPresent(const std::vector<EL> &vec, const EL & el)
 {
-    for (VEC::const_iterator it = vec.cbegin(); it != vec.cend(); ++it)
+    for (std::vector<EL>::const_iterator it = vec.cbegin(); it != vec.cend(); ++it)
     {
         if (*it == el) return true;
     }
     return false;
 }
 
-template< typename VEC, typename EL > bool addIfNotPresent(VEC &vec, const EL & el) // true - added
+template<typename EL > bool addIfNotPresent(std::vector<EL> &vec, const EL & el) // true - added
 {
-    for (VEC::iterator it = vec.begin(); it != vec.end(); ++it)
+    for (std::vector<EL>::iterator it = vec.begin(); it != vec.end(); ++it)
     {
         if (*it == el) return false;
     }
@@ -776,9 +784,9 @@ template< typename VEC, typename EL > bool addIfNotPresent(VEC &vec, const EL & 
     return true;
 }
 
-template< typename VEC, typename EL > bool removeIfPresent(VEC &vec, const EL & el) // true - found and removed
+template< typename EL > bool removeIfPresent(std::vector<EL> &vec, const EL & el) // true - found and removed
 {
-    for (VEC::iterator it = vec.begin(); it != vec.end(); ++it)
+    for (std::vector<EL>::iterator it = vec.begin(); it != vec.end(); ++it)
     {
         if (*it == el)
         {
@@ -789,19 +797,37 @@ template< typename VEC, typename EL > bool removeIfPresent(VEC &vec, const EL & 
     return false;
 }
 
-template< typename VEC, typename EL > bool removeIfPresentFast(VEC &vec, const EL & el) // true - found and removed
+template< typename EL > bool removeIfPresentFast(std::vector<EL> &vec, const EL & el) // true - found and removed
 {
-    for (VEC::iterator it = vec.begin(); it != vec.end(); ++it)
+    for (std::vector<EL>::iterator it = vec.begin(); it != vec.end(); ++it)
     {
         if (*it == el)
         {
-            *it = vec.back();
+            *it = std::move(vec.back());
             vec.resize(vec.size() - 1);
             return true;
         }
     }
     return false;
 }
+
+template< typename EL > void removeFast(std::vector<EL> &vec, size_t index) // true - found and removed
+{
+    std::vector<EL>::iterator it = vec.begin() + index;
+    *it = std::move(vec.back());
+    vec.resize(vec.size() - 1);
+}
+
+template<typename checker> u64 random64(const checker &ch)
+{
+    u64 v;
+    do
+    {
+        randombytes_buf(&v, sizeof(v));
+    } while (v == 0 || ch(v));
+    return v;
+}
+
 
 #define _MY_WS2_32_WINSOCK_SWAP_LONGLONG(l)            \
             ( ( ((l) >> 56) & 0x00000000000000FFLL ) |       \

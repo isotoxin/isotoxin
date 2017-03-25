@@ -675,6 +675,111 @@ void unfinished_file_transfer_s::get_column_desc(int index, ts::column_desc_s&cd
 // transfer file
 
 
+/////// folder share
+
+void folder_share_s::set(int column, ts::data_value_s &v)
+{
+    switch (column)
+    {
+    case C_HISTORIAN:
+        historian = contact_key_s::buildfromdbvalue(v.i, true);
+        return;
+    case C_UTAG:
+        utag = v.i;
+        return;
+    case C_NAME:
+        name = v.text;
+        return;
+    case C_PATH:
+        path.set_as_utf8(v.text);
+        return;
+    case C_OUTBOUND:
+        t = static_cast<fstype_e>(v.i);
+        return;
+    case C_USETIME:
+        usetime = v.i;
+        return;
+    }
+}
+
+void folder_share_s::get(int column, ts::data_pair_s& v)
+{
+    ts::column_desc_s ccd;
+    get_column_desc(column, ccd);
+    v.type_ = ccd.type_;
+    v.name = ccd.name_;
+    switch (column)
+    {
+    case C_HISTORIAN:
+        v.i = historian.dbvalue();
+        return;
+    case C_UTAG:
+        v.i = utag;
+        return;
+    case C_NAME:
+        v.text = name;
+        return;
+    case C_PATH:
+        v.text = to_utf8(path);
+        return;
+    case C_OUTBOUND:
+        v.i = t;
+        return;
+    case C_USETIME:
+        v.i = usetime;
+        return;
+    }
+}
+
+ts::data_type_e folder_share_s::get_column_type(int index)
+{
+    switch (index)
+    {
+    case C_HISTORIAN:
+    case C_UTAG:
+    case C_USETIME:
+        return ts::data_type_e::t_int64;
+    case C_PATH:
+    case C_NAME:
+        return ts::data_type_e::t_str;
+    case C_OUTBOUND:
+        return ts::data_type_e::t_int;
+    }
+    FORBIDDEN();
+    return ts::data_type_e::t_null;
+}
+
+void folder_share_s::get_column_desc(int index, ts::column_desc_s&cd)
+{
+    cd.type_ = get_column_type(index);
+    switch (index)
+    {
+    case C_HISTORIAN:
+        cd.name_ = CONSTASTR("historian");
+        break;
+    case C_UTAG:
+        cd.name_ = CONSTASTR("utag");
+        break;
+    case C_NAME:
+        cd.name_ = CONSTASTR("name");
+        break;
+    case C_PATH:
+        cd.name_ = CONSTASTR("path");
+        break;
+    case C_OUTBOUND:
+        cd.name_ = CONSTASTR("outb");
+        break;
+    case C_USETIME:
+        cd.name_ = CONSTASTR("lastuse");
+        break;
+    default:
+        FORBIDDEN();
+    }
+}
+
+// folder share
+
+
 /////// conferences
 
 void conference_s::set( int column, ts::data_value_s &v )
@@ -1194,6 +1299,7 @@ template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::read( ts::
 
 ts::wstr_c& profile_c::path_by_name(ts::wstr_c &profname)
 {
+    profname.insert(0,CONSTWSTR("profile" NATIVE_SLASH_S ));
     profname.append(CONSTWSTR(".profile"));
     profname = ts::fn_change_name_ext(cfg().get_path(), profname);
     return profname;
@@ -1841,14 +1947,14 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         ts::localtime_s tt;
 
         ts::wstr_c tstr( cfg().folder_backup() );
-        path_expand_env( tstr, ts::wstr_c(CONSTWSTR("0")) );
-        ts::fix_path( tstr, FNO_APPENDSLASH| FNO_SIMPLIFY );
+        path_expand_env( tstr, nullptr );
+        ts::fix_path( tstr, FNO_APPENDSLASH| FNO_SIMPLIFY_NOLOWERCASE );
         ts::make_path( tstr, 0 );
 
-        tstr.append( ts::fn_get_name( path ) ).append_char(' ');
+        tstr.append( ts::fn_get_name( path ) ).append_char('_');
         ts::wstr_c filesmask(tstr);
         tstr.append_as_uint( tt.tm_year + 1900 ).append_char('-').append_as_uint( tt.tm_mon + 1, 2 ).append_char( '-' ).append_as_uint( tt.tm_mday, 2 );
-        tstr.append_char( ' ' ).append_as_uint( tt.tm_hour, 2 ).append_char( '-' ).append_as_uint( tt.tm_min, 2 ).append_char( '-' ).append_as_uint( tt.tm_sec, 2 );
+        tstr.append_char('_').append_as_uint(tt.tm_hour, 2).append_char('-').append_as_uint(tt.tm_min, 2).append_char('-').append_as_uint(tt.tm_sec, 2);
         tstr.append( CONSTWSTR(".zip") );
         zip.getblob().save_to_file( tstr );
 
@@ -2004,6 +2110,24 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         tmphist.flush(db,true,false);
 
         param( CONSTASTR( "uuid" ), ts::tmp_str_c().set_as_num<uint64>( uuid ) );
+    }
+
+    {
+
+        REMOVE_CODE_REMINDER(603);
+
+        auto fix = [](const ts::wstr_c &p)
+        {
+            ts::wstr_c s(p);
+            s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR("{ConfigPath}"));
+            s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR("{ContactId}"));
+            return s;
+        };
+
+        download_folder(fix(download_folder()));
+        download_folder_images(fix(download_folder_images()));
+        download_folder_images(fix(download_folder_images()));
+
     }
 
 
@@ -2430,7 +2554,7 @@ void profile_c::flush_contacts()
             continue; // never save conferences here
 
         auto *row = table_contacts.find<false>( [&]( const contacts_s &k )->bool { return k.key == ck; } );
-        if ( c && !c->get_options().unmasked().is( contact_c::F_DIP ) )
+        if ( c && !c->flag_dip )
         {
             if ( !row )
             {
@@ -2542,6 +2666,33 @@ ts::wstr_c profile_c::get_disabled_dicts()
         return dd;
 
     return ts::wstr_c();
+}
+
+void profile_c::del_folder_share(uint64 utag)
+{
+    if (auto *row = prf().get_table_folder_share().find<true>([utag](folder_share_s &fsh) {
+
+        if (fsh.utag == utag)
+            return true;
+        return false;
+    })) {
+        if (row->deleted()) prf().changed();
+    }
+}
+
+void profile_c::del_folder_share_by_historian(const contact_key_s &h)
+{
+    bool ch = false;
+    while (auto *row = prf().get_table_folder_share().find<true>([h](folder_share_s &fsh) {
+
+        if (fsh.historian == h)
+            return true;
+        return false;
+    })) {
+        ch |= row->deleted();
+    }
+    if (ch)
+        prf().changed();
 }
 
 bool profile_c::delete_conference( int id )
@@ -2948,6 +3099,14 @@ bool profile_c::protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt
     }
 
     return true;
+}
+
+ts::wstr_c profile_c::download_folder_prepared(const contact_root_c *r)
+{
+    ts::wstr_c downf = download_folder();
+    downf.replace_all(CONSTWSTR("%DOWNLOAD%"), ts::wsptr()); // avoid recursion
+    path_expand_env(downf, r);
+    return downf;
 }
 
 void profile_c::cleanup_tables()

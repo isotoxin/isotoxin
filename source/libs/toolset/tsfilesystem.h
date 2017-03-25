@@ -18,10 +18,12 @@ namespace ts
 
 #ifdef _WIN32
 #define NATIVE_SLASH '\\'
+#define NATIVE_SLASH_S "\\"
 #define ENEMY_SLASH '/'
 #endif
 #ifdef _NIX
 #define NATIVE_SLASH '/'
+#define NATIVE_SLASH_S "/"
 #define ENEMY_SLASH '\\'
 #endif
 
@@ -50,11 +52,135 @@ inline wstr_c  TSCALL fn_fix_path(const wsptr &ipath, int fnoptions)
 
 bool    TSCALL make_path(const wstr_c &path, int fnoptions);
 
-void    TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs );
+enum scan_dir_e
+{
+    SD_CONTINUE,
+    SD_TERMINATE,
+    SD_STOP_SCAN_THIS_LEVEL
+};
+
+class scan_dir_file_descriptor_c
+{
+    wstr_c path_;
+    wstr_c full_;
+    wstr_c name_;
+#ifdef _WIN32
+    pwstr_c p_name_;
+#endif
+#ifdef _NIX
+    pstr_c p_name_;
+#endif
+    uint64 sz_ = 0xffffffffffffffffull;
+    uint64 tm_ = 0;
+
+public:
+
+    bool is_dir() const
+    {
+        return p_name_.is_empty();
+    }
+
+#ifdef _WIN32
+    void prepare(const wstr_c &path, const pwstr_c &name);
+#endif
+#ifdef _NIX
+    void prepare(const wstr_c &path, const pstr_c &name);
+#endif
+    wstr_c path() const
+    {
+        return path_;
+    }
+
+    wstr_c name()
+    {
+        if (name_.is_empty())
+        {
+#ifdef _WIN32
+            name_.set(p_name_);
+#endif
+#ifdef _NIX
+            name_ = from_utf8(p_name_);
+#endif
+        }
+        return name_;
+    }
+
+    wstr_c fullname();
+    uint64 size()
+    {
+        if (0xffffffffffffffffull == sz_)
+        {
+#ifdef _WIN32
+            void *fh = f_open(fullname());
+            sz_ = f_size(fh);
+            tm_ = f_time_last_write(fh);
+            f_close(fh);
+#endif
+#ifdef _NIX
+            struct stat s;
+            if (-1 == stat(fncvt(fullname()), &s))
+                return 0;
+            sz_ = s.st_size;
+            tm_ = (uint64)s.st_mtime * 10000000;
+#endif
+        }
+        return sz_;
+    }
+    uint64 modtime() // modification time
+    {
+        if (0 == tm_)
+        {
+#ifdef _WIN32
+            void *fh = f_open(fullname());
+            sz_ = f_size(fh);
+            tm_ = f_time_last_write(fh);
+            f_close(fh);
+#endif
+#ifdef _NIX
+            struct stat s;
+            if (-1 == stat(fncvt(fullname()), &s))
+                return 0;
+            sz_ = s.st_size;
+            tm_ = (uint64)s.st_mtime * 10000000;
+#endif
+        }
+        return tm_;
+    };
+};
+
+typedef fastdelegate::FastDelegate< scan_dir_e(int , scan_dir_file_descriptor_c &) > SCAN_DIR_CALLBACK_H;
+void TSCALL scan_dir(const wstr_c &path, SCAN_DIR_CALLBACK_H cb);
+
+namespace internals
+{
+    template<typename CB> struct scandirproxy_s
+    {
+        scandirproxy_s(const CB &cb) :cb(cb) {}
+        const CB &cb;
+        scan_dir_e scanh(int lv, scan_dir_file_descriptor_c &d)
+        {
+            return cb(lv, d);
+        }
+
+    private:
+        scandirproxy_s(const scandirproxy_s&) UNUSED;
+        scandirproxy_s(scandirproxy_s &&) UNUSED;
+        void operator=(const scandirproxy_s&) UNUSED;
+        void operator=(scandirproxy_s &&) UNUSED;
+
+    };
+}
+
+template<typename CB> void scan_dir_t(const wstr_c &path, const CB &cb)
+{
+    internals::scandirproxy_s<CB> p(cb);
+    scan_dir(path, DELEGATE(&p, scanh));
+}
+
 void    TSCALL del_dir(const wstr_c &path);
 void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone, const wsptr &skip = CONSTWSTR(".svn;.hg;.git"));
 
-bool    TSCALL dir_present(const wstr_c &path);
+bool    TSCALL is_dir_exists(const wstr_c &path);
 
 bool TSCALL is_file_exists(const wsptr &fname);
 bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
@@ -158,6 +284,14 @@ inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &nameext)
     int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(nameext);
 }
+
+wstr_c INLINE scan_dir_file_descriptor_c::fullname()
+{
+    if (full_.is_empty())
+        full_ = fn_join(path_, name());
+    return full_;
+}
+
 
 class enum_files_c
 {

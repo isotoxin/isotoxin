@@ -143,7 +143,7 @@ dialog_prepareimage_c::~dialog_prepareimage_c()
         szcapture = avcapture->size, startcamera = CONSTWSTR("face=avcapture");
 
     dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0, ctlopen).sethint(loc_text(loc_loadimagefromfile));
-    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(loc_text(loc_pasteimagefromclipboard));
+    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(LOC_PASTEIMAGEFROMCLIPBOARD);
     dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2, ctlcam).sethint(loc_text(loc_capturecamera));
 
 
@@ -1111,11 +1111,12 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
     if (contact_root_c *c = contacts().rfind(ck))
     {
         ts::wstr_c tmpsave(cfg().temp_folder_sendimg());
-        path_expand_env(tmpsave, ts::wstr_c());
+        path_expand_env(tmpsave, nullptr);
         ts::make_path(tmpsave, 0);
 
         ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
         BLAKE2B( hash, saved_image.data(), saved_image.size() );
+        ts::fix_path(tmpsave, FNO_APPENDSLASH);
         tmpsave.append_as_hex( hash, sizeof( hash ) );
 
         switch (saved_img_format)

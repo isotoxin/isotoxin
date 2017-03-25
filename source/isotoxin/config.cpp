@@ -211,6 +211,42 @@ void config_c::load( const ts::wstr_c &path_override )
 
         }
 
+        {
+
+            REMOVE_CODE_REMINDER(603);
+
+            auto fix = [](const ts::wstr_c &p)
+            {
+                ts::wstr_c s(p);
+                s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR("{ConfigPath}"));
+                s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR("{ContactId}"));
+                return s;
+            };
+
+            temp_folder_sendimg(fix(temp_folder_sendimg()));
+            temp_folder_handlemsg(fix(temp_folder_handlemsg()));
+            folder_backup(fix(folder_backup()));
+        }
+
+        // move all *.profile to {ConfigPath}/profile
+        {
+            ts::wstr_c from = ts::fn_get_path(cfg().get_path());
+            ts::wstr_c p = ts::fn_join(from, CONSTWSTR("profile"));
+            if (!ts::is_dir_exists(p))
+            {
+                ts::make_path(p, 0);
+
+                auto mover = [&](const ts::wstr_c& base, const ts::wstr_c& fn) {
+                    ts::ren_or_move_file(ts::fn_join(from, fn), ts::fn_join(p, fn));
+                    return true;
+                };
+
+                ts::enum_files(from, mover, ts::wstr_c(), CONSTWSTR("*.profile"));
+            }
+            
+        }
+
+
         build(application_c::appbuild());
 
         int mf = misc_flags();

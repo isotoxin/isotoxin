@@ -38,7 +38,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::ivec2 dialog_contact_props_c::get_min_size() const
 {
-    return ts::ivec2(530, 385);
+    return ts::ivec2(560, 385);
 }
 
 void dialog_contact_props_c::getbutton(bcreate_s &bcr)
@@ -770,7 +770,7 @@ void dialog_contact_props_c::add_det(RID lstctl, int index, contact_c *c)
         }
     };
 
-    if ( !c->get_options().is(contact_c::F_SYSTEM_USER) && !c->getkey().is_conference() )
+    if ( !c->is_system_user && !c->getkey().is_conference() )
     {
         ts::str_c temp( c->get_name() );
         text_adapt_user_input( temp );
@@ -847,19 +847,19 @@ void dialog_contact_props_c::add_det(RID lstctl, int index, contact_c *c)
 
         if (!contactue->getkey().is_conference() || contactue == c)
         {
-            addl( loc_text( loc_connection_name ), ap->get_name(), false, false, false, vals.add( ap->get_name() ) );
-            addl( loc_text( loc_module ), ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ), false, false, false, vals.add( ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ) ) );
+            addl(LOC_CONNECTION_NAME, ap->get_name(), false, false, false, vals.add( ap->get_name() ) );
+            addl( LOC_MODULE, ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ), false, false, false, vals.add( ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ) ) );
         }
     }
 
-    if (!c->get_options().is( contact_c::F_SYSTEM_USER ))
+    if (!c->is_system_user)
     {
         if ( c->getkey().is_conference() && c->get_state() == CS_OFFLINE )
         {
-            addl( loc_text( loc_state ), to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), CS_ROTTEN ) ), true, false, false, -1 );
+            addl( LOC_STATE, to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), CS_ROTTEN ) ), true, false, false, -1 );
 
         } else
-            addl( loc_text( loc_state ), to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), c->get_state() ) ), true, false, false, -1 );
+            addl( LOC_STATE, to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), c->get_state() ) ), true, false, false, -1 );
     }
 
     desc.replace_all( CONSTWSTR( "<id>" ), id );

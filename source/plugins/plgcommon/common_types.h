@@ -2,7 +2,7 @@
 
 #include "boost/boost_some.h"
 
-#define PLUGIN_INTERFACE_VER 1
+#define PLUGIN_INTERFACE_VER 2
 
 #define HOME_SITE "http://isotoxin.im"
 
@@ -113,7 +113,15 @@ enum cd_mask_e
     CDM_PERMISSIONS     = 1 << 8,
     CDM_DETAILS         = 1 << 9,
     CDM_DATA            = 1 << 10,
+    CDM_CAPS            = 1 << 11,
 };
+
+enum contact_caps_e
+{
+    CCAPS_SUPPORT_SHARE_FOLDER = 1 << 0,
+    CCAPS_SUPPORT_BBCODES = 1 << 1,
+};
+
 
 enum conference_permission_e
 {
@@ -154,19 +162,26 @@ enum cmd_result_e
     CR_SERVER_CLOSED_CONNECTION,
 };
 
-enum request_entity_e
-{
-    RE_DETAILS,
-    RE_AVATAR,
-    RE_EXPORT_DATA,
-};
-
-enum app_signal_e
+enum signal_e
 {
     APPS_INIT_DONE,
     APPS_ONLINE,
     APPS_OFFLINE,
-    APPS_GOODBYE,
+    APPS_GOODBYE, // before unload library. Last call before library free
+    REQS_EXPORT_DATA,
+
+    _SIGNAL_NEED_CONTACT,
+
+    CONS_ACCEPT_INVITE,
+    CONS_REJECT_INVITE,
+    CONS_ACCEPT_CALL,
+    CONS_STOP_CALL,
+    CONS_DELETE,
+    CONS_TYPING,
+
+    REQS_DETAILS,
+    REQS_AVATAR,
+
 };
 
 enum file_control_e
@@ -181,6 +196,14 @@ enum file_control_e
     FIC_DISCONNECT, // file transfer broken due disconnect. It will be resumed asap
     FIC_CHECK,
     FIC_UNKNOWN,
+    FIC_STUCK,
+};
+
+enum folder_share_control_e
+{
+    FSC_NONE,
+    FSC_ACCEPT,
+    FSC_REJECT,
 };
 
 enum message_type_e : unsigned // hard order
@@ -191,6 +214,7 @@ enum message_type_e : unsigned // hard order
     MT_INCOMING_CALL,
     MT_CALL_STOP,
     MT_CALL_ACCEPTED,
+    MT_FOLDER_SHARE_ANNOUNCE,
 
     message_type_check,
     message_type_bits = 1 + (::boost::static_log2<(message_type_check - 1)>::value)

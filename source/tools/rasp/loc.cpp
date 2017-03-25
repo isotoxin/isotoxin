@@ -150,16 +150,22 @@ int proc_loc(const wstrings_c & pars)
     if (pars.size() < 3) return 0;
     wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
 
-    if (!dir_present(pts))
-    { Print(FOREGROUND_RED, "path-to-source not found: %s", pts.cstr()); return 0; }
+    if (!is_dir_exists(pts))
+    { Print(FOREGROUND_RED, "path-to-source not found: %s", to_utf8(pts).cstr()); return 0; }
 
     wstr_c ptl = pars.get(2); fix_path(ptl, FNO_SIMPLIFY);
-    if (!dir_present(ptl))
-    { Print(FOREGROUND_RED, "path-to-loc not found: %s", ptl.cstr()); return 0; }
+    if (!is_dir_exists(ptl))
+    { Print(FOREGROUND_RED, "path-to-loc not found: %s", to_utf8(ptl).cstr()); return 0; }
+
+    Print(FOREGROUND_GREEN, "update loc: %s", to_utf8(pts).cstr());
 
     wstrings_c lines;
     wstrings_c sfiles;
-    fill_dirs_and_files(pts,sfiles,lines);
+
+    scan_dir_t(pts, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+        sfiles.add( fd.fullname() );
+        return ts::SD_CONTINUE;
+    });
 
     tbuf_t<aint> used_tags;
 
@@ -273,13 +279,13 @@ int proc_lochange(const wstrings_c & pars)
     if (pars.size() < 3) return 0;
     wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
 
-    if (!dir_present(pts))
+    if (!is_dir_exists(pts))
     {
         Print(FOREGROUND_RED, "path-to-source not found: %s", pts.cstr()); return 0;
     }
 
     wstr_c ptl = pars.get(2); fix_path(ptl, FNO_SIMPLIFY);
-    if (!dir_present(ptl))
+    if (!is_dir_exists(ptl))
     {
         Print(FOREGROUND_RED, "path-to-loc not found: %s", ptl.cstr()); return 0;
     }
@@ -290,7 +296,10 @@ int proc_lochange(const wstrings_c & pars)
 
     wstrings_c lines;
     wstrings_c sfiles;
-    fill_dirs_and_files(pts, sfiles, lines);
+    scan_dir_t(pts, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+        sfiles.add(fd.fullname());
+        return ts::SD_CONTINUE;
+    });
 
 
     hashmap_t<aint, wstr_c> localehash;
@@ -348,7 +357,7 @@ int proc_dos2unix(const wstrings_c & pars)
     if (pars.size() < 3) return 0;
     wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
 
-    if (!dir_present(pts))
+    if (!is_dir_exists(pts))
     {
         Print(FOREGROUND_RED, "path-to-files not found: %s", pts.cstr()); return 0;
     }
@@ -364,7 +373,10 @@ int proc_dos2unix(const wstrings_c & pars)
 
     wstrings_c lines;
     wstrings_c sfiles;
-    fill_dirs_and_files(pts, sfiles, lines);
+    scan_dir_t(pts, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+        sfiles.add(fd.fullname());
+        return ts::SD_CONTINUE;
+    });
 
 
     for (const wstr_c & f : sfiles)
@@ -400,7 +412,7 @@ int proc_unix2dos(const wstrings_c & pars)
     if (pars.size() < 3) return 0;
     wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
 
-    if (!dir_present(pts))
+    if (!is_dir_exists(pts))
     {
         Print(FOREGROUND_RED, "path-to-files not found: %s", pts.cstr()); return 0;
     }
@@ -416,7 +428,10 @@ int proc_unix2dos(const wstrings_c & pars)
 
     wstrings_c lines;
     wstrings_c sfiles;
-    fill_dirs_and_files(pts, sfiles, lines);
+    scan_dir_t(pts, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+        sfiles.add(fd.fullname());
+        return ts::SD_CONTINUE;
+    });
 
 
     for (const wstr_c & f : sfiles)

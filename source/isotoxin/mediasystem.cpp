@@ -345,7 +345,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
     ts::aint clampbytes = format.avgBytesPerMSecs( clampms );
     ts::aint a = w().available();
     if (a > clampbytes)
-        w().remove_data( a - clampms );
+        w().remove_data( a - clampbytes );
 
     w.unlock();
 

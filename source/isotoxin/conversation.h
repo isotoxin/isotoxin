@@ -4,6 +4,7 @@
 
 enum notice_e
 {
+    NOTICE_INITIAL,
     NOTICE_NETWORK,
     NOTICE_NEWVERSION,
     NOTICE_FRIEND_REQUEST_RECV,
@@ -13,6 +14,7 @@ enum notice_e
     NOTICE_CALL,
     NOTICE_FILE,
     NOTICE_CONFERENCE,
+    NOTICE_FOLDERSHARE,
     NOTICE_PREV_NEXT,
     
     NOTICE_WARN_NODICTS,
@@ -23,17 +25,146 @@ enum notice_e
 
 #define MIN_CONV_SIZE ts::ivec2(300,200)
 
+struct notice_s;
 class gui_notice_c;
 template<> struct gmsg<ISOGM_NOTICE> : public gmsgbase
 {
-    gmsg(contact_root_c *owner, contact_c *sender, notice_e nid, const ts::str_c& text) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid), text(text) {}
-    gmsg(contact_root_c *owner, contact_c *sender, notice_e nid) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid) {}
-    contact_root_c *owner;
-    contact_c *sender;
-    notice_e n;
-    ts::str_c text; // utf8
-    uint64 utag = 0; // file utag
+    gmsg(notice_s *pars) :gmsgbase(ISOGM_NOTICE), pars(pars) {}
     gui_notice_c *just_created = nullptr;
+    notice_s *pars;
+};
+
+struct notice_s
+{
+    notice_e n;
+    notice_s(notice_e n) :n(n) {}
+    void send()
+    {
+        gmsg<ISOGM_NOTICE>(this).send();
+    }
+    virtual contact_c *get_sender()
+    {
+        return nullptr;
+    }
+    virtual contact_root_c *get_owner()
+    {
+        return nullptr;
+    }
+
+    virtual gui_notice_c &build(RID lstrid);
+};
+
+template<notice_e N> struct notice_t : public notice_s
+{
+    notice_t() :notice_s(N) {}
+};
+
+struct notice_historian_s : public notice_s
+{
+    contact_root_c *owner;
+    notice_historian_s(notice_e n, contact_root_c *owner) :notice_s(n), owner(owner) {}
+    /*virtual*/ contact_root_c *get_owner() override { return owner; }
+};
+
+struct notice_subcontact_s : public notice_s
+{
+    contact_c *subc;
+    notice_subcontact_s(notice_e n, contact_c *subc) :notice_s(n), subc(subc) {}
+    /*virtual*/ contact_c *get_sender() override { return subc; }
+    /*virtual*/ contact_root_c *get_owner() override { return subc->get_historian(); }
+};
+
+
+template<> struct notice_t<NOTICE_INITIAL> : public notice_historian_s
+{
+    notice_t(contact_root_c *owner) :notice_historian_s(NOTICE_INITIAL,owner) {}
+};
+
+template<> struct notice_t<NOTICE_NETWORK> : public notice_s
+{
+    ts::str_c pubid;
+    notice_t(const ts::str_c &pubid) :notice_s(NOTICE_NETWORK), pubid(pubid) {}
+    /*virtual*/ gui_notice_c &build(RID lstrid) override;
+};
+
+template<> struct notice_t<NOTICE_PREV_NEXT> : public notice_historian_s
+{
+    notice_t(contact_root_c *owner) :notice_historian_s(NOTICE_PREV_NEXT, owner) {}
+};
+
+template<> struct notice_t<NOTICE_NEWVERSION> : public notice_s
+{
+    ts::str_c s;
+    bool is64;
+    notice_t(const ts::str_c &s, bool is64) :notice_s(NOTICE_NEWVERSION), s(s), is64(is64) {}
+    /*virtual*/ contact_root_c *get_owner();
+};
+
+template<> struct notice_t<NOTICE_FRIEND_REQUEST_RECV> : public notice_subcontact_s
+{
+    ts::str_c s;
+    notice_t(contact_c *subc, const ts::str_c &s) :notice_subcontact_s(NOTICE_FRIEND_REQUEST_RECV, subc), s(s) {}
+};
+
+struct notice_historian_and_sender_s : public notice_historian_s
+{
+    contact_c *subc;
+    notice_historian_and_sender_s(notice_e n, contact_root_c *owner, contact_c *subc) :notice_historian_s(n, owner), subc(subc) {}
+
+    /*virtual*/ contact_c *get_sender() override { return subc; }
+};
+
+
+template<> struct notice_t<NOTICE_CALL> : public notice_historian_and_sender_s
+{
+    notice_t(contact_root_c *owner, contact_c *subc) :notice_historian_and_sender_s(NOTICE_CALL, owner, subc) {}
+};
+
+template<> struct notice_t<NOTICE_CALL_INPROGRESS> : public notice_historian_and_sender_s
+{
+    notice_t(contact_root_c *owner, contact_c *subc) :notice_historian_and_sender_s(NOTICE_CALL_INPROGRESS, owner, subc) {}
+    /*virtual*/ gui_notice_c &build(RID lstrid) override;
+};
+
+template<> struct notice_t<NOTICE_INCOMING_CALL> : public notice_historian_and_sender_s
+{
+    notice_t(contact_root_c *owner, contact_c *subc) :notice_historian_and_sender_s(NOTICE_INCOMING_CALL, owner, subc) {}
+};
+
+template<> struct notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT> : public notice_subcontact_s
+{
+    notice_t(contact_c *subc) :notice_subcontact_s(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT, subc) {}
+
+};
+
+
+template<> struct notice_t<NOTICE_FILE> : public notice_historian_and_sender_s
+{
+    ts::wstr_c filename;
+    uint64 filesize;
+    uint64 utag;
+
+    notice_t(contact_root_c *historian, contact_c *sender, ts::wstr_c filename, uint64 filesize, uint64 utag):
+        notice_historian_and_sender_s(NOTICE_FILE, historian, sender), filename(filename), filesize(filesize), utag(utag) {}
+
+};
+
+template<> struct notice_t<NOTICE_FOLDERSHARE> : public notice_s
+{
+    ts::str_c name;
+    uint64 utag;
+    folder_share_s::fstype_e type = folder_share_s::FST_UNKNOWN;
+    notice_t(uint64 utag) :notice_s(NOTICE_FOLDERSHARE), utag(utag) {}
+    notice_t(uint64 utag, const ts::str_c &name, folder_share_s::fstype_e type) :notice_s(NOTICE_FOLDERSHARE), name(name), utag(utag), type(type) {}
+    /*virtual*/ contact_root_c *get_owner() override;
+    /*virtual*/ gui_notice_c &build(RID lstrid) override;
+};
+
+
+template<> struct notice_t<NOTICE_CONFERENCE> : public notice_historian_s
+{
+    notice_t(contact_root_c *confa) :notice_historian_s(NOTICE_CONFERENCE, confa) {}
+    /*virtual*/ gui_notice_c &build(RID lstrid) override;
 };
 
 template<> struct gmsg<ISOGM_NOTICE_PRESENT> : public gmsgbase
@@ -72,6 +203,14 @@ template<> struct MAKE_CHILD<gui_notice_conference_c> : public _PCHILD( gui_noti
     ~MAKE_CHILD();
 };
 
+class gui_notice_foldershare_c;
+template<> struct MAKE_CHILD<gui_notice_foldershare_c> : public _PCHILD(gui_notice_foldershare_c)
+{
+    MAKE_CHILD(RID parent_) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
+
 class gui_notice_c : public gui_label_ex_c
 {
     DUMMY(gui_notice_c);
@@ -83,7 +222,7 @@ protected:
     ts::shared_ptr<contact_root_c> historian;
     ts::shared_ptr<contact_c> sender;
     notice_e notice;
-    uint64 utag = 0;
+    uint64 utag = 0; // TODO create gui_notice_infile_c and move it to
     int addheight = 0;
     int clicklink = -1;
 
@@ -94,7 +233,6 @@ protected:
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
     GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
     GM_RECEIVER(gui_notice_c, ISOGM_NEWVERSION);
-    GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_notice_c, GM_UI_EVENT);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
@@ -104,9 +242,49 @@ protected:
     mutable int next_cache_write_index = 0;
     /*virtual*/ int get_height_by_width(int width) const override;
 
-    void update_text(int dtimesec = 0);
-
     bool b_turn_off_spelling(RID, GUIPARAM);
+
+    void die();
+
+    struct ba
+    {
+        struct b : public ts::movable_flag<true>
+        {
+            GET_BUTTON_FACE face;
+            GUIPARAMHANDLER h;
+            bool disabled;
+        };
+        ts::tmp_array_inplace_t<b, 2> bb;
+        gui_notice_c *host;
+
+        ba(gui_notice_c *host):host(host)
+        {
+
+        }
+        ~ba();
+
+        ba &add(GET_BUTTON_FACE f, GUIPARAMHANDLER h, bool disabled = false)
+        {
+            b & btn = bb.add();
+            btn.face = f;
+            btn.h = h;
+            btn.disabled = disabled;
+            return *this;
+        }
+
+        ba &add(bool condition, GET_BUTTON_FACE f, GUIPARAMHANDLER h, bool disabled = false)
+        {
+            if (!condition)
+                return *this;
+
+            return add(f,h,disabled);
+        }
+
+    private:
+        ba(ba&) UNUSED;
+        void operator=(const ba&) UNUSED;
+        void operator=(ba &&) UNUSED;
+    };
 
 public:
     gui_notice_c() {}
@@ -114,6 +292,7 @@ public:
     gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data);
     gui_notice_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
     gui_notice_c(MAKE_CHILD<gui_notice_conference_c> &data);
+    gui_notice_c(MAKE_CHILD<gui_notice_foldershare_c> &data);
     /*virtual*/ ~gui_notice_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -127,9 +306,7 @@ public:
     notice_e get_notice() const { return notice; }
     uint64 get_utag() const {return utag;}
 
-    void setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 utag);
-    void setup(const ts::str_c &itext_utf8);
-    void setup(contact_c *sender);
+    virtual void setup(notice_s *pars);
     bool setup_tail(RID r = RID(), GUIPARAM p = nullptr);
 
 };
@@ -204,6 +381,8 @@ class gui_notice_callinprogress_c : public gui_notice_c
 
     void on_fsvideo_die();
 
+    void update(int dtsec);
+
 public:
     gui_notice_callinprogress_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
     /*virtual*/ ~gui_notice_callinprogress_c();
@@ -226,11 +405,15 @@ public:
         return avcp.get();
     }
     vsb_c *getcamera() { return camera.get();  }
+
+    /*virtual*/ void setup(notice_s *pars) override;
 };
 
 class gui_notice_conference_c : public gui_notice_c
 {
     typedef gui_notice_c super;
+
+    GM_RECEIVER(gui_notice_conference_c, ISOGM_V_UPDATE_CONTACT);
 
     static const ts::flags32_s::BITS F_FIRST_TIME = F_FREEBITSTART_NOTICE << 0;
     static const ts::flags32_s::BITS F_COLLAPSED = F_FREEBITSTART_NOTICE << 1;
@@ -271,7 +454,49 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data );
 
-    void setup_conference();
+    /*virtual*/ void setup(notice_s *pars) override;
+};
+
+class folder_share_c;
+class gui_notice_foldershare_c : public gui_notice_c
+{
+    GM_RECEIVER(gui_notice_foldershare_c, ISOGM_FOLDER_SHARE);
+    GM_RECEIVER(gui_notice_foldershare_c, ISOGM_FOLDER_SHARE_UPDATE);
+
+    typedef gui_notice_c super;
+
+    static const ts::flags32_s::BITS F_DIRTY = F_FREEBITSTART_NOTICE << 0;
+    static const ts::flags32_s::BITS F_CHECK = F_FREEBITSTART_NOTICE << 1;
+    static const ts::flags32_s::BITS F_IDLECN = F_FREEBITSTART_NOTICE << 2;
+
+    void runcheck();
+    bool runidlecn(bool idlemodenow);
+    bool check(RID, GUIPARAM);
+    bool idlecountdown(RID, GUIPARAM);
+
+    ts::str_c name;
+    folder_share_s::fstype_e type;
+    int idlecdn = 5;
+    int tag;
+
+    folder_share_c *get();
+    void update(folder_share_c *sh);
+    bool b_accept(RID, GUIPARAM par);
+    bool b_accept2(RID, GUIPARAM par); // select folder
+    bool b_reject(RID, GUIPARAM par);
+    bool b_dismiss(RID, GUIPARAM par);
+    bool b_tryagain(RID, GUIPARAM par);
+    bool b_refresh(RID, GUIPARAM par);
+    
+
+public:
+    gui_notice_foldershare_c(MAKE_CHILD<gui_notice_foldershare_c> &data);
+    /*virtual*/ ~gui_notice_foldershare_c();
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data);
+
+    /*virtual*/ void setup(notice_s *pars) override;
 };
 
 class gui_notice_network_c : public gui_notice_c
@@ -330,8 +555,7 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
     /*virtual*/ int get_height_by_width(int width) const override;
 
-    void setup(const ts::str_c &pubid); // network
-
+    /*virtual*/ void setup(notice_s *pars) override;
 };
 
 class gui_noticelist_c : public gui_vscrollgroup_c
@@ -349,7 +573,7 @@ class gui_noticelist_c : public gui_vscrollgroup_c
     ts::shared_ptr<contact_root_c> historian;
 
     void clear_list(bool hide = true);
-    gui_notice_c &create_notice(notice_e n);
+    gui_notice_c &create_notice(notice_s *pars);
     bool resort_children(RID, GUIPARAM);
     void kill_notice( notice_e n );
 
@@ -769,7 +993,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     ts::smart_int target_offset;
     int prevdelta = 0;
 
-    /*virtual*/ void on_manual_scroll() override;
+    /*virtual*/ void on_manual_scroll(manual_scroll_e ms) override;
 
     bool font_size_up(RID, GUIPARAM);
     bool font_size_down(RID, GUIPARAM);

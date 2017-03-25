@@ -209,7 +209,7 @@ class win32_wnd_c : public wnd_c
                 TSDEL( w );
             }
             return DefWindowProcW( hwnd, msg, wparam, lparam );
-        case WM_USER + 7213:
+        case WM_NOTIFICATION_ICON_CALLBACK:
             if ( wnd )
             {
                 switch ( lparam )
@@ -229,7 +229,7 @@ class win32_wnd_c : public wnd_c
                 }
             }
             return 0;
-        case WM_USER + 7214:
+        case WM_NOTIFICATION_ICON_EVENT:
             {
                 HICON oi = wnd->notifyicon;
                 wnd->notifyicon = wnd->get_icon( true );

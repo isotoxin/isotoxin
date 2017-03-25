@@ -904,9 +904,9 @@ public:
         return str;
     }
 
-    str_t<TCHARACTER, CORE> extract_numbers() const
+    str_t<TCHARACTER, str_core_copy_on_demand_c<TCHARACTER> > extract_numbers() const
     {
-        str_t<TCHARACTER, CORE> str;
+        str_t<TCHARACTER, str_core_copy_on_demand_c<TCHARACTER> > str;
         if (core.len() == 0) return str;
         for (ZSTRINGS_SIGNED i = 0, cnt = get_length(); i < cnt; ++i)
         {
@@ -915,9 +915,9 @@ public:
         return str;
     }
 
-    str_t<TCHARACTER, CORE> extract_non_numbers() const
+    str_t<TCHARACTER, str_core_copy_on_demand_c<TCHARACTER> > extract_non_numbers() const
     {
-        str_t<TCHARACTER, CORE> str;
+        str_t<TCHARACTER, str_core_copy_on_demand_c<TCHARACTER> > str;
         if (core.len() == 0) return str;
         for (ZSTRINGS_UNSIGNED i = 0, cnt = get_length(); i < cnt; ++i)
         {
@@ -987,6 +987,13 @@ public:
             out[i] = as_byte_hex(index + i * 2);
         for (ZSTRINGS_SIGNED i = n; i < N; ++i)
             out[i] = 0;
+    }
+
+    void hex2buf(ZSTRINGS_BYTE *out) const
+    {
+        ZSTRINGS_SIGNED n = get_length() / 2;
+        for (ZSTRINGS_SIGNED i = 0; i < n; ++i)
+            out[i] = as_byte_hex(i * 2);
     }
 
     ZSTRINGS_BYTE as_byte_hex( ZSTRINGS_SIGNED char_index ) const
@@ -1439,12 +1446,20 @@ public:
 
 	}
 
-    strpart get_trimmed() const
+    strpart get_trimmed(const TCHARACTER *addition_hollow_chars = ZSTRINGS_NULL) const
     {
+        auto is_hollow = [&](TCHARACTER c)
+        {
+            if (CHAR_is_hollow(c)) return true;
+            if (addition_hollow_chars)
+                return CHARz_find(addition_hollow_chars, c) >= 0;
+            return false;
+        };
+
         ZSTRINGS_SIGNED tlen = get_length();
         ZSTRINGS_SIGNED i0 = 0, i1 = tlen - 1;
-        for( ;i0 < tlen && CHAR_is_hollow( get_char(i0)); ++i0 );
-        for( ;i1 >=0 && CHAR_is_hollow( get_char(i1)); --i1 );
+        for( ;i0 < tlen && is_hollow( get_char(i0)); ++i0 );
+        for( ;i1 >=0 && is_hollow( get_char(i1)); --i1 );
         return substr(i0,i1+1);
     }
 
@@ -1589,6 +1604,21 @@ public:
 		core.change( n + len, zstrings_internal::mod_insert_chars<TCHARACTER>(idx, c, n) );
 		return *this;
     }
+
+    // use this replacer if str-to can be calculated only if substr found
+    template<typename GET> void replace_all_lazy(const sptr<TCHARACTER> &substr, const GET&getreplto)
+    {
+        int index = find_pos(substr);
+        if (index >= 0)
+        {
+            str_t<TCHARACTER,CORE> tos(getreplto());
+            do {
+                replace(index, substr.l, tos);
+                index = find_pos(index + tos.get_length(), substr);
+            } while (index >= 0);
+        }
+    }
+
 
     template<class CORE1, class CORE2> str_t<TCHARACTER, CORE> &  replace_all(ZSTRINGS_SIGNED sme, const str_t<TCHARACTER, CORE1> &substr, const str_t<TCHARACTER, CORE2> &strreplace)
     {
@@ -1772,6 +1802,7 @@ public:
         if (idx > get_length()) return strpart();
         return strpart(sptr<TCHARACTER>(core() + idx, get_length() - idx));
     }
+
     strpart substr(ZSTRINGS_SIGNED &idx, TCHARACTER obr, TCHARACTER cbr) const /// find substring between obr and cbr characters
     {
         if (core.len() == 0) return strpart();
@@ -1798,6 +1829,15 @@ public:
 
         return strpart();
     }
+
+    template <typename PRC> strpart psubstr(const PRC& prc) const /// returns substring from idx0 to idx1
+    {
+        ZSTRINGS_SIGNED from = 0;
+        ZSTRINGS_SIGNED to = get_length();
+        prc(*this, from, to);
+        return substr(from, to);
+    }
+
 
     template<class CORE2> bool substr( str_t<TCHARACTER, CORE2> &out, ZSTRINGS_SIGNED index, TCHARACTER separator ) /// get token substring
     {
@@ -1994,7 +2034,7 @@ public:
                     if(tstr.get_char(i)=='0') ++count; else break;
                 if(tstr.get_length()>count)
                 {
-                    for(ZSTRINGS_SIGNED yu=0, ccc = tstr.get_length()-count;yu<ccc;yu++) append_char(TCHARACTER(tstr.get_char(yu)));
+                    for(ZSTRINGS_SIGNED yu=0, cnt = tstr.get_length()-count;yu<cnt;yu++) append_char(TCHARACTER(tstr.get_char(yu)));
                 }
             }
         } else
@@ -2008,7 +2048,7 @@ public:
             if(dec<ZSTRINGS_SIGNED(tstr.get_length()-count)) 
             {
                 append_char(TCHARACTER('.'));
-                for(ZSTRINGS_SIGNED yu=0, ccc=tstr.get_length()-count-dec;yu<ccc;yu++)
+                for(ZSTRINGS_SIGNED yu=0, cnt =tstr.get_length()-count-dec;yu<cnt;yu++)
                     append_char(TCHARACTER(tstr.get_char(dec+yu)));
             }
         }
@@ -2169,7 +2209,7 @@ public:
         {
             if (s.s[len] == 0) break;
         }
-        return set( s, len );
+        return set(sptr<TCHARACTER>(s.s, len));
     }
 
     template<class CORE2> str_t & setcopy(const str_t<TCHARACTER, CORE2> &s)
@@ -2214,6 +2254,15 @@ public:
 		xset<true>( *this, s );
 		return *this;
 	}
+
+    template <ZSTRINGS_SIGNED N> void copy2buf(TCHARACTER (&out)[N]) const
+    {
+        ZSTRINGS_SIGNED cpysz = get_length();
+        if (cpysz >= N) cpysz = N - 1;
+        memcpy(out, core(), cpysz * sizeof(TCHARACTER));
+        out[cpysz] = 0;
+    }
+
 
     str_t & encode_base64( const void * data, ZSTRINGS_UNSIGNED size )
     {
@@ -2864,4 +2913,3 @@ template<> struct _to_char_or_not_to_char<ZSTRINGS_WIDECHAR>
 
 #define CONSTASTR( s ) ASPTR_MACRO( s, sizeof(s)-1 )
 #define CONSTWSTR( s ) WSPTR_MACRO( s, sizeof(s)-1 )
-

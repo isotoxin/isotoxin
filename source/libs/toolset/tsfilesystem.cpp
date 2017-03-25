@@ -205,7 +205,9 @@ namespace ts
                             {
                                 if ( int pl = get_system_path( b.str(), pk.e ) )
                                 {
+                                    int deci = ll + 2 - pl;
                                     envstr.replace( ii, ll + 2, wsptr( b, pl ) );
+                                    iie -= deci;
                                 } else
                                 {
                                     dprc = iie + 1;
@@ -405,68 +407,116 @@ namespace ts
 
 	}
 
-	void TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs )
-	{
 #ifdef _WIN32
-		wstr_c wildcard(fn_join( path, wsptr(CONSTWSTR("*.*")) ));
-		WIN32_FIND_DATAW fff;
-
-		HANDLE h = FindFirstFileW(wildcard, &fff);
-		if (h == INVALID_HANDLE_VALUE)
-		{
-			dirs.add(path);
-			return;
-		}
-		for (BOOL isFound = TRUE; isFound; isFound = FindNextFileW(h, &fff))
-		{
-			pwstr_c sFileName(wsptr(fff.cFileName, CHARz_len(fff.cFileName)));
-			if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			{
-				if (sFileName == CONSTWSTR(".") || sFileName == CONSTWSTR("..") ) continue;
-				fill_dirs_and_files( fn_join( path, sFileName.as_sptr() ), files, dirs );
-			} else
-			{
-				files.add( fn_join( path, sFileName.as_sptr() ) );
-			}
-		}
-		FindClose( h );
-		dirs.add( path );
-#endif // _WIN32
+    void scan_dir_file_descriptor_c::prepare(const wstr_c &path, const pwstr_c &name)
+    {
+        path_ = path;
+        p_name_ = name;
+        name_.clear();
+        full_.clear();
+        sz_ = 0xffffffffffffffffull;
+        tm_ = 0;
+    }
+#endif
 #ifdef _NIX
-    DIR *dir;
-    class dirent *ent;
-    class stat st;
-
-    dir = opendir(to_utf8(path));
-    if (nullptr == dir)
+    void scan_dir_file_descriptor_c::prepare(const wstr_c &path, const pstr_c &name)
     {
-        dirs.add(path);
-        return;
+        path_ = path;
+        pa_name_ = name;
+        name_.clear();
+        full_.clear();
+        sz_ = 0xffffffffffffffffull;
+        tm_ = 0;
     }
+#endif
 
-    while ((ent = readdir(dir)) != nullptr)
+    void scan_dir(int lv, const wstr_c &path, scan_dir_file_descriptor_c &fd, SCAN_DIR_CALLBACK_H cb)
     {
-        pstr_c sFileName(asptr( ent->d_name ));
-        bool is_dir = (st.st_mode & S_IFDIR) != 0;
-        if (is_dir)
+#ifdef _WIN32
+        wstr_c wildcard(fn_join(path, wsptr(CONSTWSTR("*.*"))));
+        WIN32_FIND_DATAW fff;
+
+        HANDLE h = FindFirstFileW(wildcard, &fff);
+        if (h == INVALID_HANDLE_VALUE)
         {
-            if (sFileName == CONSTASTR(".") || sFileName == CONSTASTR("..") ) continue;
-            fill_dirs_and_files( fn_join( path, from_utf8(sFileName) ), files, dirs );
-        } else
-        {
-            files.add( fn_join( path, from_utf8(sFileName) ) );
+            fd.prepare(path, ts::pwstr_c()); // dir
+            cb(lv, fd);
+            return;
         }
-    }
-    closedir(dir);
+        for (BOOL isFound = TRUE; isFound; isFound = FindNextFileW(h, &fff))
+        {
+            pwstr_c sFileName(wsptr(fff.cFileName, CHARz_len(fff.cFileName)));
+            if (fff.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            {
+                if (sFileName == CONSTWSTR(".") || sFileName == CONSTWSTR("..")) continue;
+                scan_dir(lv + 1, fn_join(path, sFileName.as_sptr()), fd, cb);
+            }
+            else
+            {
+                fd.prepare(path, sFileName);
+                cb(lv,fd);
+            }
+        }
+        FindClose(h);
+        fd.prepare(path, ts::pwstr_c()); // dir
+        cb(lv, fd);
+#endif // _WIN32
+
+#ifdef _NIX
+        DIR *dir;
+        class dirent *ent;
+        class stat st;
+
+        dir = opendir(to_utf8(path));
+        if (nullptr == dir)
+        {
+            fd.prepare(path, ts::pstr_c()); // dir
+            cb(lv, fd);
+            return;
+        }
+
+        while ((ent = readdir(dir)) != nullptr)
+        {
+            pstr_c sFileName(asptr(ent->d_name));
+            bool is_dir = (st.st_mode & S_IFDIR) != 0;
+            if (is_dir)
+            {
+                if (sFileName == CONSTASTR(".") || sFileName == CONSTASTR("..")) continue;
+                scan_dir(lv + 1, fn_join(path, from_utf8(sFileName)), fd, cb);
+            }
+            else
+            {
+                fd.prepare(path, sFileName);
+                cb(lv, fd);
+            }
+        }
+        closedir(dir);
+        fd.prepare(path, ts::pstr_c()); // dir
+        cb(lv, fd);
 #endif //_NIX
-	}
+
+    }
+
+    void TSCALL scan_dir(const wstr_c &path, SCAN_DIR_CALLBACK_H cb)
+    {
+        scan_dir_file_descriptor_c fd;
+        scan_dir(0, path, fd, cb);
+    }
+
 
 	void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone, const wsptr& skip)
 	{
 		wstrings_c files;
 		wstrings_c dirs;
 
-		fill_dirs_and_files( path_from, files, dirs );
+        scan_dir_t(path_from, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+            if (fd.is_dir())
+                dirs.add(fd.path());
+            else
+                files.add(fd.fullname());
+            return ts::SD_CONTINUE;
+        });
+
 
 		int pfl = path_from.get_length();
 		if (__ending_slash(path_from)) --pfl;
@@ -535,7 +585,13 @@ namespace ts
 		wstrings_c files;
 		wstrings_c dirs;
 
-		fill_dirs_and_files( path, files, dirs );
+        scan_dir_t(path, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+            if (fd.is_dir())
+                dirs.add(fd.path());
+            else
+                files.add(fd.fullname());
+            return ts::SD_CONTINUE;
+        });
 
         for (const auto & s : files)
             ts::kill_file(s);
@@ -910,7 +966,7 @@ namespace ts
 #endif //_NIX
 	}
 
-	bool    TSCALL dir_present(const wstr_c &path)
+	bool    TSCALL is_dir_exists(const wstr_c &path)
 	{
 #ifdef _WIN32
 		WIN32_FIND_DATAW find_data;

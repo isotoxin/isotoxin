@@ -32,8 +32,8 @@ bool special_command( contact_root_c *h, contact_c *r, ts::str_c utf8t )
         const int symbols_per_mesage = 30;
 
         ts::buf_c b;
-        b.load_from_disk_file( from_utf8( utf8t.substr( 6 ) ) );
-        ts::wstr_c alltw = from_utf8( b.cstr() );
+        b.load_from_disk_file(from_utf8(utf8t.substr(6)));
+        ts::wstr_c alltw = from_utf8(b.cstr());
         int backsecs = alltw.get_length() / symbols_per_mesage;
         backsecs *= 3600;
         time_t pt = ts::now() - backsecs;
@@ -49,7 +49,7 @@ bool special_command( contact_root_c *h, contact_c *r, ts::str_c utf8t )
             row.other.options = 0;
             row.other.utag = prf().getuid();
 
-            ts::str_c tt = to_utf8( alltw.substr( ii - symbols_per_mesage, ii ) );
+            ts::str_c tt = to_utf8(alltw.substr(ii - symbols_per_mesage, ii));
             ts::refstring_t<char> *t = ts::refstring_t<char>::build( tt, g_app->global_allocator );
 
             row.other.message_utf8 = t;
@@ -97,6 +97,14 @@ bool special_command( contact_root_c *h, contact_c *r, ts::str_c utf8t )
         return true;
     }
 
+    if (utf8t.begins(CONSTASTR("/conf")))
+    {
+        DEFERRED_EXECUTION_BLOCK_BEGIN(1.0)
+            notice_t<NOTICE_CONFERENCE>((contact_root_c *)param).send();
+        DEFERRED_EXECUTION_BLOCK_END(h);
+        return true;
+    }
+
     return false;
 }
 #endif
@@ -135,6 +143,33 @@ static bool same_author( gui_message_item_c *prev, gui_message_item_c *next )
         return false;
 
     return same_msg_themerect( prev, next->themename().substr( 8 /*message.*/ ) );
+}
+
+gui_notice_c::ba::~ba()
+{
+    int i = 0;
+    int y = 0;
+    for (b &btn : bb)
+    {
+        gui_button_c &guib = MAKE_CHILD<gui_button_c>(host->getrid());
+        guib.set_face_getter(btn.face);
+        ts::ivec2 minsz = guib.get_min_size();
+        guib.set_handler(btn.h, host);
+        guib.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, i, static_cast<int>(bb.size())));
+        MODIFY(guib).visible(true);
+        if (btn.disabled)
+            guib.disable();
+
+        if (minsz.y > y)
+            y = minsz.y;
+        ++i;
+    }
+    host->addheight = y + 10;
+}
+
+/*virtual*/ contact_root_c *notice_t<NOTICE_NEWVERSION>::get_owner()
+{
+    return &contacts().get_self();
 }
 
 
@@ -185,6 +220,11 @@ gui_notice_c::gui_notice_c( MAKE_CHILD<gui_notice_conference_c> &data ) : gui_la
     set_theme_rect( CONSTASTR( "notice.confa" ), false );
 }
 
+gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_foldershare_c> &data) : gui_label_ex_c(data), notice(NOTICE_FOLDERSHARE)
+{
+    set_theme_rect(CONSTASTR("notice.fsh"), false);
+}
+
 gui_notice_c::~gui_notice_c()
 {
     if (gui)
@@ -197,9 +237,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 {
     if (notice == NOTICE_FILE && utag == ifl.i_utag && (ifl.fctl == FIC_BREAK || ifl.fctl == FIC_DISCONNECT))
     {
-        RID par = getparent();
-        TSDEL(this);
-        HOLD(par).as<gui_noticelist_c>().refresh();
+        die();
     }
     return 0;
 }
@@ -241,43 +279,44 @@ static bool unique_notice(notice_e notice)
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 {
-    if (NOTICE_KILL_CALL_INPROGRESS == n.n)
+    if (NOTICE_KILL_CALL_INPROGRESS == n.pars->n)
     {
         if (NOTICE_CALL_INPROGRESS == notice || NOTICE_CALL == notice || NOTICE_INCOMING_CALL == notice)
             TSDEL(this);
         return 0;
     }
 
+    auto same_historian = [](contact_root_c *h1, contact_root_c *h2)
+    {
+        if (h1 == h2)
+            return true;
+        if (h1 == nullptr && h2 != nullptr && h2->getkey().is_self)
+            return true;
+        if (h1 != nullptr && h2 == nullptr && h1->getkey().is_self)
+            return true;
+
+        return false;
+    };
+
 
     if (n.just_created == this) return 0;
-    if (n.sender != sender) return 0;
+    
+    if (sender == nullptr)
+        if (!same_historian(n.pars->get_owner(),historian)) return 0;
+    else 
+        if (n.pars->get_sender() != sender) return 0;
+
     bool die = false;
-    if (n.n == notice)
+    if (n.pars->n == notice)
     {
         if (unique_notice(notice))
             die = true;
     }
-    if (NOTICE_CALL_INPROGRESS == n.n && (NOTICE_INCOMING_CALL == notice || NOTICE_CALL == notice))
+    if (NOTICE_CALL_INPROGRESS == n.pars->n && (NOTICE_INCOMING_CALL == notice || NOTICE_CALL == notice))
         die = true;
 
     if (die) TSDEL(this);
     // no need to refresh here due ISOGM_NOTICE is notice-creation event and it initiates refresh
-    return 0;
-}
-
-ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
-{
-    if ( NOTICE_CONFERENCE == notice && c.contact->getkey().is_conference() && historian == c.contact )
-    {
-        if ( c.contact->get_state() == CS_OFFLINE )
-        {
-            TSDEL( this );
-        } else {
-            setup( c.contact );
-            gui->repos_children( &HOLD( getparent() ).as<gui_group_c>() );
-        }
-    }
-
     return 0;
 }
 
@@ -431,6 +470,17 @@ bool gui_notice_c::b_turn_off_spelling(RID, GUIPARAM)
     return true;
 }
 
+void gui_notice_c::die()
+{
+    RID par = getparent();
+    TSDEL(this);
+
+    RID parent = HOLD(par)().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
+    HOLD(par).as<gui_noticelist_c>().refresh();
+
+}
+
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
@@ -456,18 +506,21 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     return 0;
 }
 
-static ts::wstr_c downloaded_info()
+static ts::wstr_c downloaded_info(float &k)
 {
-    ts::wstr_c info(CONSTWSTR("0"));
+    k = -1.0f;
+    ts::wstr_c info(CONSTWSTR("0%"));
 
     if (g_app->download_progress.y > 0)
     {
+        k = (float)(double(g_app->download_progress.x) / g_app->download_progress.y);
+
         info = text_sizebytes( g_app->download_progress.x, true );
 
         info.append(CONSTWSTR(" / "))
             .append( text_sizebytes( g_app->download_progress.y, true ) )
             .append(CONSTWSTR(" ("))
-            .append(ts::roundstr<ts::wstr_c>(100.0*double(g_app->download_progress.x) / g_app->download_progress.y, 2))
+            .append(ts::roundstr<ts::wstr_c>(100.0*k, 2))
             .append(CONSTWSTR("%)"));
     }
     return info;
@@ -477,35 +530,42 @@ bool choose_dicts_load(RID, GUIPARAM); // from settings.cpp
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
 {
-    if (notice == NOTICE_NEWVERSION && p.id < 0)
+    if (notice == NOTICE_NEWVERSION && p.id < 0 && getengine().children_count())
     {
         g_app->download_progress = ts::ivec2(p.downloaded, p.total);
 
-        ts::wstr_c ot = textrect.get_text();
-        int pp = ot.find_pos(CONSTWSTR("<null=px>"));
-        if (pp >= 0)
+        if (rectengine_c *pbe = getengine().get_child(0))
         {
-            ot.set_length(pp + 9).append(downloaded_info());
-            textrect.set_text_only(ot, false);
-            getengine().redraw();
+            gui_hslider_c *pb = ts::ptr_cast<gui_hslider_c *>(&pbe->getrect());
+            float k = 0;
+            ts::wstr_c t(downloaded_info(k));
+            pb->set_level(k,t);
         }
     }
 
     return 0;
 }
 
-void gui_notice_c::setup(const ts::str_c &itext_utf8)
+ts::wstr_c incoming_call_text(const ts::str_c &utf8name)
 {
-    switch (notice)
+    return TTT("Incoming call from $", 134) / from_utf8(utf8name);
+}
+
+void gui_notice_c::setup(notice_s *pars)
+{
+    switch (pars->n)
     {
     case NOTICE_NEWVERSION:
         {
-            ts::wstr_c newtext(1024,false);
+            notice_t<NOTICE_NEWVERSION> *p = static_cast<notice_t<NOTICE_NEWVERSION> *>(pars);
+
+            bool pb = false;
+            ts::wstr_c newtext(256,false);
             newtext.set(CONSTWSTR("<p=c>"));
 
-            ts::wstr_c ver = from_utf8( itext_utf8 );
-            if ( itext_utf8.ends( CONSTASTR( "/64" ) ) )
-                ver.trunc_length( 3 ).append( CONSTWSTR(" (64 bit)") );
+            ts::wstr_c ver = from_utf8( p->s );
+            if ( p->is64 )
+                ver.append( CONSTWSTR(" (64 bit)") );
 
             newtext.append(TTT("New version available: $",163) / ver);
             newtext.append(CONSTWSTR("<br>"));
@@ -516,12 +576,25 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
             newtext.append( CONSTWSTR( " (32 bit)" ) );
 #endif
 
-            if ( auparams().lock_read()().in_progress )
+            if ( auparams().lock_read()().in_downloading() )
             {
-                newtext.append(CONSTWSTR("<br><b>"));
-                newtext.append(TTT("-loading-",166));
-                newtext.append(CONSTWSTR("</b><br><null=px>"));
-                newtext.append(downloaded_info());
+                newtext.append(CONSTWSTR("<br><b>-- "));
+                newtext.append(TTT("loading",166));
+                newtext.append(CONSTWSTR(" --</b><br><null=px>"));
+
+                pb = true;
+                
+                if (getengine().children_count() == 0)
+                {
+                    gui_hslider_c &pbar = MAKE_CHILD<gui_hslider_c>(getrid());
+                    int slh = pbar.get_min_size().y;
+                    addheight = slh + 10;
+                    pbar.leech(TSNEW(leech_dock_bottom_s, slh, 5, 5));
+                    pbar.set_pb_mode();
+                    float k = 0;
+                    ts::wstr_c t(downloaded_info(k));
+                    pbar.set_level(k, t);
+                }
 
             } else if (auparams().lock_read()().downloaded)
             {
@@ -566,9 +639,8 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
         break;
     case NOTICE_WARN_NODICTS:
         {
-            ts::wstr_c newtext(128, false);
-            newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("You have enabled spell check, but no dictionaries have loaded. You should load at least one dictionary or just turn off spell check.",426));
+            ts::wstr_c newtext(CONSTWSTR("<p=c>"), 
+                TTT("You have enabled spell check, but no dictionaries have loaded. You should load at least one dictionary or just turn off spell check.",426));
 
             gui_button_c &b_offspell = MAKE_CHILD<gui_button_c>(getrid());
             b_offspell.set_text(TTT("Turn off spell check",427));
@@ -588,54 +660,39 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
             textrect.set_text_only(newtext, false);
         }
         break;
-    }
-    setup_tail();
-}
-
-void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64 utag_)
-{
-    if (sender_)
-    {
-        historian = sender_->get_historian();
-        sender = sender_;
-    }
-
-    utag = utag_;
-    switch (notice)
-    {
     case NOTICE_FRIEND_REQUEST_RECV:
         {
-            ts::wstr_c newtext(1024,false);
-            newtext.set(CONSTWSTR("<p=c><b>"));
-            newtext.append(from_utf8(sender_->get_pubid_desc()));
-            newtext.append(CONSTWSTR("</b><br>"));
+            notice_t<NOTICE_FRIEND_REQUEST_RECV> *p = static_cast<notice_t<NOTICE_FRIEND_REQUEST_RECV> *>(pars);
 
-            if (itext_utf8.equals(CONSTASTR("\1restorekey")))
-            {
-                newtext.append(TTT("Restore key confirm",198));
-            } else
-            {
-                newtext.append(TTT("Authorization request",74));
-                newtext.append(CONSTWSTR("<hr=7,2,1>"));
+            historian = p->subc->get_historian();
+            sender = p->subc;
 
-                ts::str_c n = itext_utf8;
-                text_adapt_user_input(n);
-                newtext.append(from_utf8(n));
+            ts::wstr_c newtext(CONSTWSTR("<p=c><b>"), from_utf8(sender->get_pubid_desc()), CONSTWSTR("</b><br>"));
+
+            if (p->s.equals(CONSTASTR("\1restorekey")))
+            {
+                newtext.append(TTT("Restore key confirm", 198));
+            }
+            else
+            {
+                newtext.append(TTT("Authorization request", 74));
+                text_adapt_user_input(p->s);
+                newtext.append(CONSTWSTR("<br><i>")).append(from_utf8(p->s));
             }
 
-            textrect.set_text_only(newtext,false);
+            textrect.set_text_only(newtext, false);
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-            b_accept.set_text(TTT("Accept",75));
+            b_accept.set_text(TTT("Accept", 75));
             b_accept.set_face_getter(BUTTON_FACE(button));
-            b_accept.set_handler(DELEGATE(sender_, b_accept), this);
+            b_accept.set_handler(DELEGATE(sender.get(), b_accept), this);
             b_accept.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_accept).visible(true);
 
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-            b_reject.set_text(TTT("Reject",76));
+            b_reject.set_text(TTT("Reject", 76));
             b_reject.set_face_getter(BUTTON_FACE(button));
-            b_reject.set_handler(DELEGATE(sender_, b_reject), this);
+            b_reject.set_handler(DELEGATE(sender.get(), b_reject), this);
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
             MODIFY(b_reject).visible(true);
 
@@ -644,112 +701,88 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64
         break;
     case NOTICE_FILE:
         {
-            int spl = itext_utf8.find_pos('\1');
-            ASSERT( spl > 0 );
-            uint64 fsz;
-            itext_utf8.hex2buf<8>( (ts::uint8 *)&fsz, spl + 1 );
-            ts::wstr_c newtext(CONSTWSTR("<p=c>"), TTT("Incoming file[br]Name: $[br]Size: $",175) / ts::wstr_c(CONSTWSTR("<b>"),from_utf8(itext_utf8.substr(0,spl)),CONSTWSTR("</b>")) / text_sizebytes(fsz, true));
-            newtext.append(CONSTWSTR("<hr=7,2,1>"));
-            textrect.set_text_only(newtext,false);
+            notice_t<NOTICE_FILE> *p = static_cast<notice_t<NOTICE_FILE> *>(pars);
 
-            int minw = 0;
-            gui_button_c &b_receiveas = MAKE_CHILD<gui_button_c>(getrid());
-            b_receiveas.set_face_getter(BUTTON_FACE(button));
-            b_receiveas.set_text(TTT("Save as...",177), minw); minw += 6; if (minw < 100) minw = 100;
-            b_receiveas.set_handler(DELEGATE(sender_, b_receive_file_as), this);
-            b_receiveas.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 1, 3));
-            MODIFY(b_receiveas).visible(true);
+            historian = p->owner;
+            sender = p->subc;
+            utag = p->utag;
 
-            gui_button_c &b_receive = MAKE_CHILD<gui_button_c>(getrid());
-            b_receive.set_face_getter(BUTTON_FACE(button));
-            b_receive.set_text(TTT("Save",176) );
-            b_receive.set_handler(DELEGATE(sender_, b_receive_file), this);
-            b_receive.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 0, 3));
-            MODIFY(b_receive).visible(true);
+            ts::wstr_c newtext(CONSTWSTR("<p=c>"),
+                TTT("Incoming file[br]Name: $[br]Size: $", 175) / ts::wstr_c(CONSTWSTR("<b>"), p->filename, CONSTWSTR("</b>")) / text_sizebytes(p->filesize, true));
+            textrect.set_text_only(newtext, false);
 
-            ts::wstr_c downf = prf().download_folder();
-            path_expand_env(downf, sender_->get_historian()->contactidfolder());
+            bool savebtndisabled = false;
+            ts::wstr_c downf = prf().download_folder_prepared(historian);
             make_path(downf, 0);
-            if (!dir_present(downf) || fsz > ts::get_free_space(downf))
-                b_receive.disable();
+            if (!is_dir_exists(downf) || p->filesize > ts::get_free_space(downf))
+                savebtndisabled = true;
 
-            gui_button_c &b_refuse = MAKE_CHILD<gui_button_c>(getrid());
-            b_refuse.set_face_getter(BUTTON_FACE(button));
-            b_refuse.set_text(TTT("No",178));
-            b_refuse.set_handler(DELEGATE(sender_, b_refuse_file), this);
-            b_refuse.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 2, 3));
-            MODIFY(b_refuse).visible(true);
+            ba(this)
+                .add(BUTTON_FACE(fsh_accept), DELEGATE(sender.get(), b_receive_file), savebtndisabled)
+                .add(BUTTON_FACE(fsh_accept_sel), DELEGATE(sender.get(), b_receive_file_as))
+                .add(BUTTON_FACE(fsh_dismiss), DELEGATE(sender.get(), b_refuse_file));
 
-            addheight = 40;
         }
         break;
-    default:
-        if (sender_ == nullptr)
-            setup(itext_utf8);
-        else
-            setup(sender_);
-        return;
-    }
-    setup_tail();
-}
-
-bool gui_notice_c::close_reject_notice( RID, GUIPARAM )
-{
-    HOLD par(getparent());
-    sender->options().unmasked().clear( contact_c::F_JUST_REJECTED );
-    TSDEL( this );
-
-    gui->repos_children( &par.as<gui_group_c>() );
-    gui->repos_children( &HOLD( par().getparent() ).as<gui_group_c>() );
-
-    return true;
-}
-
-void gui_notice_c::setup(contact_c *sender_)
-{
-    historian = sender_->get_historian();
-    sender = sender_;
-
-    switch (notice) //-V719
-    {
     case NOTICE_FRIEND_REQUEST_SEND_OR_REJECT:
         {
-            update_text();
+            notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT> *p = static_cast<notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT> *>(pars);
+            historian = p->subc->get_historian();
+            sender = p->subc;
+
+            ts::str_c aname = sender->get_name();
+            text_adapt_user_input(aname);
+            
+            ts::wstr_c newtext(CONSTWSTR("<p=c><b>"), from_utf8(sender->get_pubid_desc()), CONSTWSTR("</b><br>"));
+            if (sender->is_rejected())
+                newtext.append(TTT("Your request was declined. You can send request again.", 80));
+            else if (sender->get_state() == CS_INVITE_SEND)
+                newtext.append(TTT("Authorization request has been sent. You can repeat request.", 89));
+
+            textrect.set_text_only(newtext, false);
 
             getengine().trunc_children(0);
 
             gui_button_c &b_resend = MAKE_CHILD<gui_button_c>(getrid());
-            b_resend.set_text(TTT("Again",81));
+            b_resend.set_text(TTT("Again", 81));
             b_resend.set_face_getter(BUTTON_FACE(button));
-            b_resend.set_handler(DELEGATE(sender_, b_resend), this);
+            b_resend.set_handler(DELEGATE(sender.get(), b_resend), this);
             b_resend.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_resend).visible(true);
 
             gui_button_c &b_kill = MAKE_CHILD<gui_button_c>(getrid());
-            b_kill.set_text(TTT("Delete",82));
+            b_kill.set_text(TTT("Delete", 82));
             b_kill.set_face_getter(BUTTON_FACE(button));
-            b_kill.set_handler(DELEGATE(sender_, b_kill), this);
+            b_kill.set_handler(DELEGATE(sender.get(), b_kill), this);
             b_kill.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
             MODIFY(b_kill).visible(true);
 
             addheight = 40;
 
-            if ( sender->get_state() == CS_UNKNOWN && sender->get_options().unmasked().is( contact_c::F_JUST_REJECTED ) )
+            if (sender->get_state() == CS_UNKNOWN && sender->flag_just_rejected)
             {
                 // allow close this notice without any actions
-                gui_button_c &bc = MAKE_CHILD<gui_button_c>( getrid() );
-                bc.set_face_getter( BUTTON_FACE_PRELOADED( cancelb ) );
-                bc.set_handler( DELEGATE( this, close_reject_notice ), nullptr );
+                gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
+                bc.set_face_getter(BUTTON_FACE_PRELOADED(cancelb));
+                bc.set_handler(DELEGATE(this, close_reject_notice), nullptr);
                 ts::ivec2 sz = g_app->preloaded_stuff().cancelb->size;
-                bc.leech( TSNEW( leech_dock_top_right_s, sz.x, sz.y, 3, 3 ) );
-                MODIFY( bc ).visible( true );
+                bc.leech(TSNEW(leech_dock_top_right_s, sz.x, sz.y, 3, 3));
+                MODIFY(bc).visible(true);
             }
 
         }
         break;
     case NOTICE_INCOMING_CALL:
         {
-            update_text();
+            notice_t<NOTICE_INCOMING_CALL> *p = static_cast<notice_t<NOTICE_INCOMING_CALL> *>(pars);
+
+            historian = p->owner;
+            sender = p->subc;
+
+            ts::str_c aname = sender->get_name();
+            text_adapt_user_input(aname);
+            ts::wstr_c newtext(CONSTWSTR("<p=c>"),incoming_call_text(aname));
+            textrect.set_text_only(newtext, false);
 
             getengine().trunc_children(0);
 
@@ -757,62 +790,38 @@ void gui_notice_c::setup(contact_c *sender_)
             if (active_protocol_c *ap = prf().ap(sender->getkey().protoid))
                 video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
 
-            int n = video_supported ? 3 : 2;
-            int i = 0;
-
-            gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-            b_accept.set_face_getter(BUTTON_FACE(accept_call));
-            b_accept.set_handler(DELEGATE(sender_, b_accept_call), nullptr);
-            ts::ivec2 minsz = b_accept.get_min_size();
-            b_accept.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, i++, n));
-            MODIFY(b_accept).visible(true);
-
-            if (video_supported)
-            {
-                gui_button_c &b_accept_v = MAKE_CHILD<gui_button_c>(getrid());
-                b_accept_v.set_face_getter(BUTTON_FACE(accept_call_video));
-                b_accept_v.set_handler(DELEGATE(sender_, b_accept_call_with_video), nullptr);
-                minsz = b_accept_v.get_min_size();
-                b_accept_v.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, i++, n));
-                MODIFY(b_accept_v).visible(true);
-            }
-
-            gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-            b_reject.set_face_getter(BUTTON_FACE(reject_call));
-            b_reject.set_handler(DELEGATE(sender_, b_reject_call), this);
-            minsz = b_reject.get_min_size();
-            b_reject.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, i++, n));
-            MODIFY(b_reject).visible(true);
-
-            addheight = 50;
+            ba(this)
+                .add(BUTTON_FACE(accept_call), DELEGATE(sender.get(), b_accept_call))
+                .add(video_supported, BUTTON_FACE(accept_call_video), DELEGATE(sender.get(), b_accept_call_with_video))
+                .add(BUTTON_FACE(reject_call), DELEGATE(sender.get(), b_reject_call));
 
             g_app->update_buttons_head();
         }
         break;
     case NOTICE_CALL:
         {
-            update_text();
+            notice_t<NOTICE_CALL> *p = static_cast<notice_t<NOTICE_CALL> *>(pars);
+
+            historian = p->owner;
+            sender = p->subc;
+
+            ts::str_c aname = sender->get_name();
+            text_adapt_user_input(aname);
+            ts::wstr_c newtext(CONSTWSTR("<p=c>"), TTT("Call to $", 136) / from_utf8(aname));
+            textrect.set_text_only(newtext, false);
 
             getengine().trunc_children(0);
 
-            gui_button_c &b_cancel = MAKE_CHILD<gui_button_c>(getrid());
-            b_cancel.set_face_getter(BUTTON_FACE(call_cancel));
-            b_cancel.set_handler(DELEGATE(sender_, b_cancel_call), this);
-            ts::ivec2 minsz = b_cancel.get_min_size();
-            b_cancel.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
-            MODIFY(b_cancel).visible(true);
+            ba(this)
+                .add(BUTTON_FACE(call_cancel), DELEGATE(sender.get(), b_cancel_call));
 
-            addheight = 50;
         }
-        break;
-    case NOTICE_CONFERENCE:
-        ts::ptr_cast<gui_notice_conference_c *>( this )->setup_conference();
-        return;
-    case NOTICE_CALL_INPROGRESS:
-        ts::ptr_cast<gui_notice_callinprogress_c *>( this )->setup_callinprogress();
         break;
     case NOTICE_PREV_NEXT:
         {
+            notice_t<NOTICE_PREV_NEXT> *p = static_cast<notice_t<NOTICE_PREV_NEXT> *>(pars);
+            historian = p->owner;
+            sender = nullptr;
             getengine().trunc_children(0);
 
             gui_messagelist_c &ml = HOLD(HOLD(getparent())().getparent()).as<gui_conversation_c>().get_msglist();
@@ -840,8 +849,14 @@ void gui_notice_c::setup(contact_c *sender_)
         }
         break;
     }
-
     setup_tail();
+}
+
+bool gui_notice_c::close_reject_notice( RID, GUIPARAM )
+{
+    sender->flag_just_rejected = false;;
+    die();
+    return true;
 }
 
 bool gui_notice_c::setup_tail(RID, GUIPARAM)
@@ -860,48 +875,12 @@ bool gui_notice_c::setup_tail(RID, GUIPARAM)
     return true;
 }
 
-ts::wstr_c incoming_call_text( const ts::str_c &utf8name )
+/*virtual*/ gui_notice_c &notice_t<NOTICE_CONFERENCE>::build(RID lstrid)
 {
-    return TTT("Incoming call from $", 134) / from_utf8(utf8name);
+    gui_notice_conference_c &nn = MAKE_CHILD<gui_notice_conference_c>(lstrid);
+    return nn;
 }
 
-void gui_notice_c::update_text(int dtimesec)
-{
-    ts::str_c aname = sender->get_name();
-    text_adapt_user_input(aname);
-
-    ts::wstr_c newtext(CONSTWSTR("<p=c>"));
-    bool hr = true;
-    switch (notice)
-    {
-        case NOTICE_FRIEND_REQUEST_SEND_OR_REJECT:
-
-            newtext.append(CONSTWSTR("<b>"));
-            newtext.append(from_utf8(sender->get_pubid_desc()));
-            newtext.append(CONSTWSTR("</b><br>"));
-            if (sender->is_rejected())
-                newtext.append(TTT("Your request was declined. You can send request again.",80));
-            else if (sender->get_state() == CS_INVITE_SEND)
-                newtext.append(TTT("Authorization request has been sent. You can repeat request.",89));
-            hr = false;
-
-            break;
-        case NOTICE_INCOMING_CALL:
-            newtext.append(incoming_call_text(aname));
-            break;
-        case NOTICE_CALL_INPROGRESS:
-            newtext.set(CONSTWSTR("<p=c>")).append( from_utf8(aname) );
-            if (dtimesec > 0)
-                newtext.append(text_seconds(dtimesec));
-            break;
-        case NOTICE_CALL:
-            newtext.append(TTT("Call to $",136) / from_utf8(aname));
-            break;
-    }
-
-    if (hr) newtext.append(CONSTWSTR("<hr=7,2,1>"));
-    textrect.set_text_only(newtext,false);
-}
 
 MAKE_CHILD<gui_notice_conference_c>::~MAKE_CHILD()
 {
@@ -925,7 +904,7 @@ gui_notice_conference_c::~gui_notice_conference_c()
 
 void gui_notice_conference_c::update()
 {
-    setup_conference();
+    setup(nullptr);
     getengine().redraw();
     setup_tail();
 }
@@ -1003,9 +982,32 @@ bool gui_notice_conference_c::check_indicator( RID, GUIPARAM )
     return true;
 }
 
-void gui_notice_conference_c::setup_conference()
+ts::uint32 gui_notice_conference_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
-    if (historian->is_av())
+    if (c.contact->getkey().is_conference() && historian == c.contact)
+    {
+        if (c.contact->get_state() == CS_OFFLINE)
+        {
+            die();
+        }
+        else {
+            update();
+        }
+    }
+
+    return 0;
+}
+
+void gui_notice_conference_c::setup(notice_s *pars)
+{
+    if (pars)
+    {
+        notice_t<NOTICE_CONFERENCE> *p = static_cast<notice_t<NOTICE_CONFERENCE> *>(pars);
+        historian = p->owner;
+        sender = nullptr;
+    }
+
+    if (historian->flag_is_av)
     {
         DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_indicator ), 0);
     } else
@@ -1182,6 +1184,382 @@ void gui_notice_conference_c::setup_conference()
 
     textrect.set_text_only( txt, false );
     textrect.change_option( ts::TO_LASTLINEADDH, ts::TO_LASTLINEADDH );
+}
+
+
+/*virtual*/ contact_root_c *notice_t<NOTICE_FOLDERSHARE>::get_owner()
+{
+    if (folder_share_c *fsh = g_app->find_folder_share_by_utag(utag))
+        return contacts().rfind(fsh->get_hkey());
+    return nullptr;
+}
+
+/*virtual*/ gui_notice_c &notice_t<NOTICE_FOLDERSHARE>::build(RID lstrid)
+{
+    gui_notice_foldershare_c &nn = MAKE_CHILD<gui_notice_foldershare_c>(lstrid);
+    return nn;
+}
+
+
+MAKE_CHILD<gui_notice_foldershare_c>::~MAKE_CHILD()
+{
+    MODIFY(get()).visible(true);
+}
+
+gui_notice_foldershare_c::gui_notice_foldershare_c(MAKE_CHILD<gui_notice_foldershare_c> &data) :gui_notice_c(data)
+{
+    notice = NOTICE_FOLDERSHARE;
+}
+
+gui_notice_foldershare_c::~gui_notice_foldershare_c()
+{
+    if (gui)
+    {
+        gui->delete_event(DELEGATE(this, check));
+        gui->delete_event(DELEGATE(this, idlecountdown));
+    }
+}
+
+void gui_notice_foldershare_c::runcheck()
+{
+    if (flags.is(F_CHECK))
+        return;
+
+    DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, check), 0);
+    flags.set(F_CHECK);
+}
+
+bool gui_notice_foldershare_c::runidlecn(bool idlemodenow)
+{
+    if (!idlemodenow)
+    {
+        idlecdn = 5; // 5sec
+        return false;
+    }
+    else
+    {
+        if (!flags.is(F_IDLECN) && idlecdn > 0)
+        {
+            flags.set(F_IDLECN);
+            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, idlecountdown), 0);
+
+        } else if (idlecdn > 0)
+            return false;
+    }
+    return idlemodenow;
+}
+
+bool gui_notice_foldershare_c::check(RID, GUIPARAM c)
+{
+    if (flags.is(F_DIRTY))
+        update(get());
+
+    flags.clear(F_CHECK);
+    return true;
+}
+
+bool gui_notice_foldershare_c::idlecountdown(RID, GUIPARAM)
+{
+    flags.clear(F_IDLECN);
+    --idlecdn;
+    if (idlecdn > 0)
+    {
+        flags.set(F_IDLECN);
+        DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, idlecountdown), 0);
+    }
+    else
+        runcheck();
+
+    return true;
+}
+
+void gui_notice_foldershare_c::update(folder_share_c *share)
+{
+    getengine().trunc_children(0);
+    addheight = 0;
+
+    ts::wstr_c newtext(CONSTWSTR("<p=c>"));
+    if (folder_share_s::FST_RECV == type)
+    {
+        newtext.append(TTT("Incoming folder share", 538));
+        newtext.append(CONSTWSTR(": <i>")).append(from_utf8(name));
+        newtext.append(CONSTWSTR("</i><br>"));
+    }
+    else
+    {
+        newtext.append(TTT("Outgoing folder share", 539));
+        newtext.append(CONSTWSTR(": <i>")).append(from_utf8(name));
+
+        if (share)
+            newtext.append(CONSTWSTR("</i><br><b>")).append(share->get_path()).append(CONSTWSTR("</b><br>"));
+        else
+            newtext.append(CONSTWSTR("</i><br>"));
+    }
+
+    if (!share)
+    {
+        if (folder_share_s::FST_RECV == type)
+            newtext.append(TTT("Waiting",177));
+        else
+            newtext.append(TTT("Offline",178));
+
+        ba(this)
+            .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_dismiss));
+
+        textrect.set_text_only(newtext, false);
+        setup_tail();
+        getengine().redraw();
+
+        return;
+    }
+
+    switch (share->get_state())
+    {
+    case folder_share_c::FSS_WORKING:
+        if (folder_share_s::FST_RECV == type)
+        {
+            if (share->is_announce_present())
+            {
+                ba(this)
+                    .add(BUTTON_FACE(fsh_accept), DELEGATE(this, b_accept))
+                    .add(BUTTON_FACE(fsh_accept_sel), DELEGATE(this, b_accept2))
+                    .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_reject));
+            }
+            else
+            {
+                folder_share_recv_c *fsr = static_cast<folder_share_recv_c *>(share);
+
+                bool addrefresh = false;
+
+                //bool addrefresh = false;
+                if (file_transfer_s *tr = g_app->find_file_transfer_by_fshutag(fsr->get_utag()))
+                {
+                    newtext.append(CONSTWSTR("<ee>")).append(TTT("Receiving $", 545) / ts::wstr_c(CONSTWSTR("<b>"),
+                        tr->filename_on_disk.psubstr([](const ts::wstr_c &me, ts::ZSTRINGS_SIGNED &start, ts::ZSTRINGS_SIGNED &end) { if (me.ends(CONSTWSTR(TRANSFERING_EXT))) end = me.get_length() - ASTR_LENGTH(TRANSFERING_EXT); }),
+                        CONSTWSTR("</b>"))).append(CONSTWSTR("<br>"));
+                }
+                else
+                    newtext.append(LOC_IDLE), addrefresh = true;
+
+                addrefresh = runidlecn(addrefresh);
+
+                ba(this)
+                    .add(addrefresh, BUTTON_FACE(fsh_refresh), DELEGATE(this, b_refresh))
+                    .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_dismiss));
+
+            }
+
+        }
+        else if (folder_share_s::FST_RECV != type)
+        {
+            folder_share_send_c *fss = static_cast<folder_share_send_c *>(share);
+
+            bool addrefresh = false;
+
+            fss->iterate_apids( [&](const folder_share_c::pstate_s &s)
+            {
+                if (active_protocol_c *ap = prf().ap(s.apid))
+                {
+                    if (fss->is_multiapids())
+                        newtext.append(ts::from_utf8(ap->get_name())).append(CONSTWSTR(": "));
+
+                    if (s.announced)
+                    {
+                        newtext.append(TTT("Wait for accept",541)).append(CONSTWSTR("<br>"));
+                    }
+                    else if (s.accepted)
+                    {
+                        if (file_transfer_s *tr = g_app->find_file_transfer_by_fshutag(fss->get_utag()))
+                        {
+                            newtext.append(CONSTWSTR("<ee>")).append(TTT("Transferring $",542) / ts::wstr_c(CONSTWSTR("<b>"), 
+                                tr->filename_on_disk.psubstr([](const ts::wstr_c &me, ts::ZSTRINGS_SIGNED &start, ts::ZSTRINGS_SIGNED &end) { if (me.ends(CONSTWSTR(TRANSFERING_EXT))) end = me.get_length() - ASTR_LENGTH(TRANSFERING_EXT); }),
+                                CONSTWSTR("</b>"))).append(CONSTWSTR("<br>"));
+                        }
+                        else if (fss->is_scaning())
+                        {
+                            newtext.append(TTT("Scan folder",543)).append(CONSTWSTR("<br>"));
+                        }
+                        else
+                            newtext.append(LOC_IDLE), addrefresh = true;
+                    }
+                }
+            });
+
+            addrefresh = runidlecn(addrefresh);
+
+            ba(this)
+                .add(addrefresh, BUTTON_FACE(fsh_refresh), DELEGATE(this, b_refresh))
+                .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_dismiss));
+        }
+
+        break;
+    case folder_share_c::FSS_MOVING_FOLDER:
+        newtext.append(CONSTWSTR("moving"));
+        break;
+    case folder_share_c::FSS_SUSPEND:
+        newtext.append(CONSTWSTR("suspend"));
+        break;
+    case folder_share_c::FSS_REJECT:
+
+        if (folder_share_s::FST_RECV != type)
+        {
+            newtext.append(TTT("Folder share was rejected",548));
+
+            ba(this)
+                .add(BUTTON_FACE(fsh_again), DELEGATE(this, b_tryagain))
+                .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_dismiss));
+
+        }
+
+
+        break;
+    }
+
+    textrect.set_text_only(newtext, false);
+    //textrect.change_option(ts::TO_LASTLINEADDH, ts::TO_LASTLINEADDH);
+
+    setup_tail();
+    getengine().redraw();
+
+}
+
+ts::uint32 gui_notice_foldershare_c::gm_handler(gmsg<ISOGM_FOLDER_SHARE_UPDATE> &p)
+{
+    flags.set(F_DIRTY);
+    runcheck();
+        
+    return 0;
+}
+
+ts::uint32 gui_notice_foldershare_c::gm_handler(gmsg<ISOGM_FOLDER_SHARE> &p)
+{
+    if (p.utag == utag)
+    {
+        if (p.ctl == FSC_REJECT)
+        {
+            if (folder_share_s::FST_RECV == type)
+            {
+                prf().del_folder_share(utag);
+                die();
+                return 0;
+            }
+        }
+
+        if (p.pass == 1)
+            update(get());
+    }
+
+    return 0;
+}
+
+
+void gui_notice_foldershare_c::created()
+{
+    gui_notice_c::created();
+
+    //gui_button_c &collapser = MAKE_CHILD<gui_button_c>(getrid());
+    //collapse_btn = &collapser;
+    //collapser.set_face_getter(BUTTON_FACE(gexpanded), BUTTON_FACE(gcollapsed), flags.is(F_COLLAPSED));
+    //collapser.set_handler(DELEGATE(this, on_collapse_or_expand), nullptr);
+    //ts::ivec2 s = collapser.get_min_size();
+    //MODIFY(collapser).pos(get_client_area().lt).size(s).visible(true);
+
+}
+
+/*virtual*/ bool gui_notice_foldershare_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    return super::sq_evt(qp, rid, data);
+}
+
+folder_share_c *gui_notice_foldershare_c::get()
+{
+    return g_app->find_folder_share_by_utag(utag);
+}
+
+bool gui_notice_foldershare_c::b_accept(RID, GUIPARAM par)
+{
+    if (folder_share_c *sh = get())
+    {
+        ASSERT(sh->is_type(folder_share_s::FST_RECV));
+        static_cast<folder_share_recv_c *>(sh)->accept();
+        sh->update_data();
+    }
+
+    return true;
+}
+
+bool gui_notice_foldershare_c::b_accept2(RID, GUIPARAM par)
+{
+    ts::wstr_c path = getroot()->save_directory_dialog(CONSTWSTR("/"), TTT("Select path for incoming folder",549), g_app->folder_share_sel_path2.is_empty() ? prf().download_folder_fshare() : g_app->folder_share_sel_path2);
+    if (!path.is_empty())
+    {
+        if (folder_share_c *sh = get())
+        {
+            ASSERT(sh->is_type(folder_share_s::FST_RECV));
+            static_cast<folder_share_recv_c *>(sh)->accept(path);
+            g_app->folder_share_sel_path2 = path;
+            sh->update_data();
+        }
+    }
+
+    return true;
+}
+
+
+bool gui_notice_foldershare_c::b_reject(RID, GUIPARAM)
+{
+    if (folder_share_c *sh = get())
+    {
+        sh->send_ctl(FSC_REJECT);
+        g_app->remove_folder_share(sh);
+    }
+
+    prf().del_folder_share(utag);
+
+    die();
+    return true;
+}
+
+bool gui_notice_foldershare_c::b_dismiss(RID, GUIPARAM)
+{
+    return b_reject(RID(), nullptr);
+}
+
+bool gui_notice_foldershare_c::b_tryagain(RID, GUIPARAM par)
+{
+    if (folder_share_c *sh = get())
+        static_cast<folder_share_send_c *>(sh)->again();
+    return true;
+}
+
+bool gui_notice_foldershare_c::b_refresh(RID, GUIPARAM par)
+{
+    if (folder_share_c *sh = get())
+        sh->refresh();
+    return true;
+}
+
+void gui_notice_foldershare_c::setup(notice_s *pars)
+{
+    notice_t<NOTICE_FOLDERSHARE> *p = static_cast<notice_t<NOTICE_FOLDERSHARE> *>(pars);
+    utag = p->utag;
+    historian = pars->get_owner();
+    name = p->name;
+    type = p->type;
+    if (folder_share_c *sh = get())
+    {
+        name = sh->get_name();
+        type = sh->is_type(folder_share_s::FST_RECV) ? folder_share_s::FST_RECV : folder_share_s::FST_SEND;
+        update(sh);
+    }
+    else
+        update(nullptr);
+}
+
+/*virtual*/ gui_notice_c &notice_t<NOTICE_CALL_INPROGRESS>::build(RID lstrid)
+{
+    gui_notice_callinprogress_c &nn = MAKE_CHILD<gui_notice_callinprogress_c>(lstrid);
+    return nn;
 }
 
 MAKE_CHILD<gui_notice_callinprogress_c>::~MAKE_CHILD()
@@ -1392,9 +1770,25 @@ namespace
 #define DEFAULT_WAITANIM_HEIGHT 90
 #define DEFAULT_CAMERAONLY_HEIGHT 120
 
-void gui_notice_callinprogress_c::setup_callinprogress()
+void gui_notice_callinprogress_c::update(int dtsec)
 {
-    update_text();
+    ts::str_c aname = sender->get_name();
+    text_adapt_user_input(aname);
+    ts::wstr_c newtext(CONSTWSTR("<p=c>"), from_utf8(aname));
+    if (dtsec > 0)
+        newtext.append(text_seconds(dtsec));
+    textrect.set_text_only(newtext, false);
+}
+
+void gui_notice_callinprogress_c::setup(notice_s *pars)
+{
+    notice_t<NOTICE_CALL_INPROGRESS> *p = static_cast<notice_t<NOTICE_CALL_INPROGRESS> *>(pars);
+
+    historian = p->owner;
+    sender = p->subc;
+
+    update(0);
+
     acquire_display();
 
     getengine().trunc_children(0);
@@ -1697,7 +2091,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<GM_HEARTBEAT>&)
         showntime = tt;
         if ( av_contact_s *avc = get_avc() )
         {
-            update_text(static_cast<int>(showntime - avc->core->starttime));
+            update(static_cast<int>(showntime - avc->core->starttime));
 
             ts::irect r = get_client_area();
             r.rb.y -= addheight;
@@ -1926,6 +2320,12 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_VIDEO_TICK> &sz)
     return 0;
 }
 
+/*virtual*/ gui_notice_c &notice_t<NOTICE_NETWORK>::build(RID lstrid)
+{
+    gui_notice_network_c &nn = MAKE_CHILD<gui_notice_network_c>(lstrid);
+    return nn;
+}
+
 MAKE_CHILD<gui_notice_network_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
@@ -1974,13 +2374,15 @@ gui_notice_network_c::~gui_notice_network_c()
 }
 
 
-void gui_notice_network_c::setup(const ts::str_c &pubid_)
+void gui_notice_network_c::setup(notice_s *pars)
 {
     MEMT( MEMT_NOTICE_NETWORK );
 
+    notice_t<NOTICE_NETWORK> *p = static_cast<notice_t<NOTICE_NETWORK> *>(pars);
+
     getengine().trunc_children(0); // just kill all buttons
 
-    pubid = pubid_;
+    pubid = p->pubid;
 
     ts::wstr_c sost, plugdesc, uname, ustatus, netname, idname( CONSTWSTR("ID") );
     curstate = CR_OK;
@@ -2182,7 +2584,8 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&p)
 
 bool gui_notice_network_c::resetup(RID, GUIPARAM)
 {
-    setup( pubid );
+    notice_t<NOTICE_NETWORK> pars(pubid);
+    setup( &pars );
     return true;
 }
 
@@ -2229,7 +2632,6 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return 0;
 }
 
-
 /*virtual*/ void gui_notice_network_c::created()
 {
     DMSG( "gui_notice_network_c: " << getrid() );
@@ -2273,7 +2675,7 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
     else if ( cc.equals( CONSTASTR( "export" ) ) )
     {
         if ( active_protocol_c *ap = prf().ap( networkid ) )
-            ap->export_data();
+            ap->signal(REQS_EXPORT_DATA);
     }
     else if ( cc.equals( CONSTASTR( "reset" ) ) )
     {
@@ -2676,7 +3078,10 @@ gui_noticelist_c::~gui_noticelist_c()
             w -= th->clborder_x();
     }
     for (rectengine_c *e : getengine())
-        if (e) { h = ts::tmax(h, e->getrect().get_height_by_width(w)); }
+        if (e) { h += e->getrect().get_height_by_width(w); }
+
+    int maxh = HOLD(getparent())().getprops().size().y / 2;
+    if (h > maxh) h = maxh;
 
     return ts::ivec2(70,h);
 }
@@ -2748,11 +3153,17 @@ bool gui_noticelist_c::resort_children(RID, GUIPARAM)
     return super::sq_evt(qp,rid,data);
 }
 
-gui_notice_c &gui_noticelist_c::create_notice(notice_e n)
+gui_notice_c &notice_s::build(RID lstrid)
+{
+    gui_notice_c &nn = MAKE_CHILD<gui_notice_c>(lstrid, n);
+    return nn;
+}
+
+gui_notice_c &gui_noticelist_c::create_notice(notice_s *pars)
 {
     MODIFY( *this ).visible(true);
-    ASSERT(NOTICE_NETWORK != n && NOTICE_CALL_INPROGRESS != n);
-    gui_notice_c &nn = MAKE_CHILD<gui_notice_c>(getrid(), n);
+    gui_notice_c &nn = pars->build(getrid());
+    nn.setup(pars);
     refresh();
     return nn;
 }
@@ -2887,10 +3298,15 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
         }
         if ( sender->get_state() == CS_INVITE_SEND || sender->is_rejected() )
         {
+            notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT> pars(sender);
             if (nrej == nullptr)
-                nrej = &create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
+            {
+                nrej = &create_notice(&pars);
+            } else
+            {
+                nrej->setup(&pars);
+            }
 
-            nrej->setup(sender);
             gui->repos_children(this);
         }
 
@@ -2928,33 +3344,35 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 {
-    if (NOTICE_KILL_CALL_INPROGRESS == n.n)
+    if (NOTICE_KILL_CALL_INPROGRESS == n.pars->n)
         return 0;
 
     if (g_app->F_SPLIT_UI())
     {
-        if ( !historian || historian != n.owner )
+        if ( !historian || historian != n.pars->get_owner() )
             return 0;
     }
 
-    if (NOTICE_NETWORK == n.n)
+    if (NOTICE_INITIAL == n.pars->n)
     {
+
         clear_list(false);
-        historian = n.owner;
+        historian = n.pars->get_owner();
 
         if ( historian->getkey().is_self )
         {
             if (g_app->F_NEWVERSION())
             {
                 not_at_end();
-                gui_notice_c &nn = create_notice(NOTICE_NEWVERSION);
-                nn.setup( cfg().autoupdate_newver() );
+                bool is64 = false;
+                notice_t<NOTICE_NEWVERSION> pars(cfg().autoupdate_newver(is64), is64);
+                create_notice(&pars);
             }
 
             if (g_app->F_SHOW_SPELLING_WARN() && prf().is_any_active_ap())
             {
-                gui_notice_c &nn = create_notice(NOTICE_WARN_NODICTS);
-                nn.setup(ts::str_c());
+                notice_t<NOTICE_WARN_NODICTS> pars;
+                create_notice(&pars);
             }
 
             ts::tmp_tbuf_t<ts::ivec2> splist;
@@ -2977,22 +3395,23 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 {
                     not_at_end();
                     MODIFY(*this).visible(true);
-                    gui_notice_network_c &nn = MAKE_CHILD<gui_notice_network_c>(getrid());
-                    nn.setup(pubid);
+
+                    notice_t<NOTICE_NETWORK> pars(pubid);
+                    create_notice( &pars );
                 }
             }
         } else
         {
             historian->subiterate([this](contact_c *c) {
-                if (c->is_calltone())
+                if (c->flag_is_calltone)
                 {
-                    gui_notice_c &n = create_notice(NOTICE_CALL);
-                    n.setup(c);
+                    notice_t<NOTICE_CALL> pars(historian, c);
+                    create_notice(&pars);
                 }
-                if (c->is_av())
+                if (c->flag_is_av)
                 {
-                    gui_notice_callinprogress_c &n = MAKE_CHILD<gui_notice_callinprogress_c>(getrid());
-                    n.setup(c);
+                    notice_t<NOTICE_CALL_INPROGRESS> pars(historian, c);
+                    create_notice(&pars);
                 }
             });
 
@@ -3001,8 +3420,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 contact_c *sender = contacts().find(ftr.sender);
                 if (sender)
                 {
-                    gui_notice_c &n = create_notice(NOTICE_FILE);
-                    n.setup(ftr.text_for_notice(), sender, ftr.i_utag);
+                    notice_t<NOTICE_FILE> pars(historian, sender, ftr.filename, ftr.filesize, ftr.i_utag);
+                    create_notice(&pars);
                 }
             });
 
@@ -3010,15 +3429,27 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 historian->subiterate([this](contact_c *c) {
                     if (c->get_state() == CS_INVITE_SEND || c->is_rejected())
                     {
-                        gui_notice_c &n = create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
-                        n.setup(c);
+                        notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT> pars(c);
+                        create_notice(&pars);
                     }
                 });
 
-            if ( historian->is_full_search_result())
+
+            prf().get_table_folder_share().find<true>([&](folder_share_s &fsh) {
+
+                if (fsh.historian == historian->getkey())
+                {
+                    notice_t<NOTICE_FOLDERSHARE> pars(fsh.utag, fsh.name, fsh.t);
+                    create_notice(&pars);
+                }
+
+                return false;
+            });
+
+            if ( historian->flag_full_search_result)
             {
-                gui_notice_c &ntc = create_notice(NOTICE_PREV_NEXT);
-                ntc.setup( historian );
+                notice_t<NOTICE_PREV_NEXT> pars(historian);
+                create_notice(&pars);
             }
         }
 
@@ -3027,34 +3458,12 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
         return 0;
     }
 
-    if ( historian == n.owner )
+    if ( historian == n.pars->get_owner() )
     {
-        switch ( n.n )
-        {
-        case NOTICE_CALL_INPROGRESS:
-            {
-                gui_notice_callinprogress_c &nn = MAKE_CHILD<gui_notice_callinprogress_c>( getrid() );
-                n.just_created = &nn;
-                nn.setup( n.sender );
-            }
-            break;
-        case NOTICE_CONFERENCE:
-            {
-                gui_notice_conference_c &nn = MAKE_CHILD<gui_notice_conference_c>( getrid() );
-                n.just_created = &nn;
-                nn.setup( n.sender );
-            }
-            break;
-        default:
-            {
-                gui_notice_c &nn = create_notice( n.n );
-                n.just_created = &nn;
-                nn.setup( n.text, n.sender, n.utag );
-                if ( n.sender == nullptr || n.utag )
-                    getengine().child_move_top( &nn.getengine() );
-            }
-            break;
-        }
+        gui_notice_c &nn = create_notice( n.pars );
+        n.just_created = &nn;
+        if (n.pars->get_sender() == nullptr || n.pars->n == NOTICE_FILE )
+            getengine().child_move_top( &nn.getengine() );
         refresh();
     }
 
@@ -3232,7 +3641,7 @@ void gui_message_item_c::del()
                     nitm->set_no_author( false ), next->redraw();
     }
 
-    TSDEL( this );
+    TSDEL(this);
 }
 
 
@@ -3771,8 +4180,7 @@ void gui_message_item_c::init_date_separator( const tm &tmtm )
     ts::swstr_t<-128> tstr;
     text_set_date(tstr, from_utf8(prf().date_sep_template()), tmtm);
 
-    ts::wstr_c newtext( CONSTWSTR("<p=c>") );
-    newtext.append(tstr);
+    ts::wstr_c newtext(CONSTWSTR("<p=c>"), tstr);
     textrect.set_text_only(newtext, false);
 }
 
@@ -3916,13 +4324,13 @@ bool gui_message_item_c::setup_normal( const post_s&p )
     contact_c *sender = contacts().find( p.sender );
     if ( !sender )
     {
-        TSDEL( this );
+        TSDEL(this);
         return true;
     }
     contact_c *receiver = contacts().find( p.receiver );
     if ( !receiver )
     {
-        TSDEL( this );
+        TSDEL(this);
         return true;
     }
 
@@ -3935,7 +4343,7 @@ bool gui_message_item_c::setup_normal( const post_s&p )
         contact_root_c * h = get_historian( sender, receiver );
         if ( h != historian )
         {
-            TSDEL( this );
+            TSDEL(this);
             return true;
         }
     }
@@ -3948,7 +4356,7 @@ bool gui_message_item_c::setup_normal( const post_s&p )
     setup_text( p );
 
     const found_item_s *found_item = nullptr;
-    if ( historian->is_full_search_result() && g_app->found_items )
+    if ( historian->flag_full_search_result && g_app->found_items )
         for ( const found_item_s &fi : g_app->found_items->items )
             if ( fi.historian == historian->getkey() )
             {
@@ -4323,7 +4731,7 @@ void gui_message_item_c::setup_text( const post_s &post )
         mt = static_cast<ts::uint16>(post.mt());
 
     textrect.set_options(ts::TO_LASTLINEADDH);
-
+    
     switch(mt)
     {
     case MTA_OLD_REQUEST:
@@ -4372,6 +4780,7 @@ void gui_message_item_c::setup_text( const post_s &post )
     case MTA_INCOMING_CALL:
     case MTA_FRIEND_REQUEST:
     case MTA_CALL_ACCEPTED__:
+    case MTA_FOLDER_SHARE_ANNONUCE__:
         FORBIDDEN();
         break;
     case MTA_RECV_FILE:
@@ -4445,7 +4854,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
     {
         ts::wstr_c path = fn_get_path(fn);
         ts::fix_path(path, FNO_NORMALIZE);
-        for(; !ts::dir_present(path);)
+        for(; !ts::is_dir_exists(path);)
         {
             if (path.find_pos(NATIVE_SLASH) < 0) return true;
             path.trunc_char(NATIVE_SLASH);
@@ -5824,7 +6233,7 @@ void gui_messagelist_c::scroll( ts::aint shift )
     target_offset = shift;
     prevdelta = 1 + ts::lround(0.3f * (target_offset - sbshift()));
     flags.set(F_SCROLLING_TO_TGT);
-    super::on_manual_scroll();
+    super::on_manual_scroll(MS_OTHER);
     scroll_do(RID(), nullptr);
 }
 
@@ -5834,7 +6243,7 @@ void gui_messagelist_c::goto_item(uint64 utag)
 
     auto fi = [ & ]() -> const found_item_s *
     {
-        if ( !found_item && historian->is_full_search_result() && g_app->found_items )
+        if ( !found_item && historian->flag_full_search_result && g_app->found_items )
         for ( const found_item_s &fi : g_app->found_items->items )
             if ( fi.historian == historian->getkey() )
             {
@@ -5897,7 +6306,7 @@ void gui_messagelist_c::find_prev_next(uint64 *prevutag, uint64 *nextutag)
 
     auto fi = [ & ]() -> const found_item_s *
     {
-        if ( !found_item && historian->is_full_search_result() && g_app->found_items )
+        if ( !found_item && historian->flag_full_search_result && g_app->found_items )
             for ( const found_item_s &fi : g_app->found_items->items )
                 if ( fi.historian == historian->getkey() )
                 {
@@ -6119,7 +6528,7 @@ namespace
                 set_text(lt);
 
                 ts::wstrings_c prfs;
-                ts::find_files( ts::fn_change_name_ext( cfg().get_path(), CONSTWSTR( "*.profile" ) ), prfs, ATTR_ANY );
+                ts::find_files( ts::fn_change_name_ext( cfg().get_path(), CONSTWSTR( "profile" NATIVE_SLASH_S "*.profile" ) ), prfs, ATTR_ANY );
 
                 if ( prfs.size() == 0 )
                 {
@@ -6234,10 +6643,10 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_REFRESH_SEARCH_RESULT> &)
 {
     if (historian)
-        if (historian->is_full_search_result() != flags.is(F_SEARCH_RESULTS_HERE) ||
-            (g_app->active_contact_item == historian->gui_item && historian->is_full_search_result()))
+        if ((bool)historian->flag_full_search_result != flags.is(F_SEARCH_RESULTS_HERE) ||
+            (g_app->active_contact_item == historian->gui_item && historian->flag_full_search_result))
         {
-            flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
+            flags.init(F_SEARCH_RESULTS_HERE, historian->flag_full_search_result);
             historian->reselect(flags.is(F_SEARCH_RESULTS_HERE) ? RSEL_SCROLL_END : 0);
         }
 
@@ -6436,11 +6845,11 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
     switch (p.post.mt())
     {
         case MTA_FRIEND_REQUEST:
-            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, ts::str_c(p.post.message_utf8->cstr())).send();
+            notice_t<NOTICE_FRIEND_REQUEST_RECV>(sender, ts::str_c(p.post.message_utf8->cstr())).send();
             break;
         case MTA_INCOMING_CALL:
             if (!historian->get_aaac())
-                gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, ts::str_c(p.post.message_utf8->cstr())).send();
+                notice_t<NOTICE_INCOMING_CALL>(historian, sender).send();
             break;
         default:
         {
@@ -6568,11 +6977,11 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
 
     if (!historian)
     {
-        gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
+        notice_t<NOTICE_INITIAL>(&contacts().get_self()).send();
         return 0;
     }
-    flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
-    gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
+    flags.init(F_SEARCH_RESULTS_HERE, historian->flag_full_search_result);
+    notice_t<NOTICE_INITIAL>(historian).send();
 
     if (self_selected)
         return 0;
@@ -6590,12 +6999,12 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
 
     time_t at_least = historian->get_readtime();
     const found_item_s *found_item = nullptr;
-    if (historian->is_full_search_result() && g_app->found_items)
+    if (historian->flag_full_search_result && g_app->found_items)
         for (const found_item_s &fi : g_app->found_items->items)
             if (fi.historian == historian->getkey())
             {
                 needload = -1; // just load whole history
-                historian->options().unmasked().set( contact_c::F_HISTORY_NEED_LOAD );
+                historian->flag_history_need_load = true;
                 found_item = &fi;
                 if (fi.mintime < at_least) at_least = fi.mintime;
                 break;
@@ -6621,12 +7030,12 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     return 0;
 }
 
-/*virtual*/ void gui_messagelist_c::on_manual_scroll()
+/*virtual*/ void gui_messagelist_c::on_manual_scroll(manual_scroll_e ms)
 {
     if (filler)
         filler->dont_scroll = true;
     flags.clear(F_SCROLLING_TO_TGT);
-    super::on_manual_scroll();
+    super::on_manual_scroll(ms);
 }
 
 gui_messagelist_c::filler_s::filler_s( gui_messagelist_c *owner, ts::aint loadn ) :owner( owner ), found_item( nullptr ), fillindex_up( -1 ), fillindex_down( 0 ), fillindex_down_end( 0 ), options( RSEL_INSERT_NEW ), load_n( loadn )
@@ -6756,7 +7165,7 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
     contact_root_c *h = owner->historian;
     if (!h) return true;
     const found_item_s *found_item_current = nullptr;
-    if (h->is_full_search_result() && g_app->found_items)
+    if (h->flag_full_search_result && g_app->found_items)
         for (const found_item_s &fi : g_app->found_items->items)
             if (fi.historian == h->getkey())
             {
@@ -6881,11 +7290,11 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
         }
         owner->getengine().redraw();
 
-        if (1 == h->subcount() && h->subget(0)->get_state() == CS_INVITE_RECEIVE && !h->subget(0)->get_options().unmasked().is(contact_c::F_JUST_ACCEPTED))
+        if (1 == h->subcount() && h->subget(0)->get_state() == CS_INVITE_RECEIVE && !h->subget(0)->flag_just_accepted)
         {
             if (!gmsg<ISOGM_NOTICE_PRESENT>( h, h->subget(0), NOTICE_FRIEND_REQUEST_RECV ).send().is(GMRBIT_ACCEPTED))
             {
-                gmsg<ISOGM_NOTICE>(h, h->subget(0), NOTICE_FRIEND_REQUEST_RECV, ts::str_c()).send();
+                notice_t<NOTICE_FRIEND_REQUEST_RECV>(h->subget(0), ts::str_c()).send();
             }
         }
     }
@@ -7385,6 +7794,25 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
 
 void gui_message_area_c::send_file_item(const ts::str_c& prm)
 {
+    if (prm.equals(CONSTASTR("s")))
+    {
+        ts::wstr_c path = getroot()->save_directory_dialog(CONSTWSTR("/"), TTT("Select share path", 536), g_app->folder_share_sel_path);
+        if (!path.is_empty())
+        {
+            if (contact_root_c *h = message_editor->get_historian())
+            {
+                ts::fix_path(path, FNO_SIMPLIFY | FNO_TRIMLASTSLASH);
+                g_app->folder_share_sel_path = path;
+                ts::str_c n(ts::to_utf8(ts::fn_get_name(path)));
+                if (n.is_empty()) n.set(CONSTASTR("default"));
+                folder_share_c *fsh = g_app->add_folder_share(h->getkey(), n, folder_share_s::FST_SEND, 0, path);
+                notice_t<NOTICE_FOLDERSHARE>(fsh->get_utag()).send();
+            }
+        }
+
+        return;
+    }
+
     if (prm.equals(CONSTASTR("i")))
     {
         if (contact_root_c *h = message_editor->get_historian())
@@ -7432,6 +7860,24 @@ bool gui_message_area_c::send_file(RID btn, GUIPARAM)
     m.add( TTT( "Send image", 375 ), 0, DELEGATE( this, send_file_item ), CONSTASTR( "i" ) );
     m.add( TTT("Send desktop area",471), 0, DELEGATE( this, send_file_item ), CONSTASTR( "d" ) );
     m.add( TTT( "Send file", 376 ), 0, DELEGATE( this, send_file_item ), CONSTASTR( "f" ) );
+    m.add_separator();
+    
+    bool support_share_folder = false;
+    bool already_share_folder_mode = false;
+    if (contact_root_c *h = message_editor->get_historian())
+    {
+        h->subiterate([&](contact_c *c) {
+            if (c->flag_support_folder_share)
+                support_share_folder = true;
+        });
+        already_share_folder_mode = h->flag_folder_share_mode;
+        if (already_share_folder_mode /*|| !h->get_share_folder_path().is_empty()*/) //FOLDER_SHARE_PATH
+            support_share_folder = false;
+    }
+
+    m.add(TTT("Share folder",537), (support_share_folder ? 0 : MIF_DISABLED) | (already_share_folder_mode ? MIF_MARKED : 0), DELEGATE(this, send_file_item), CONSTASTR("s"));
+
+
     gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_TU), m);
     return true;
 }
@@ -7459,7 +7905,7 @@ void gui_message_area_c::update_buttons()
                 int f = ap->get_features();
                 features |= f;
                 if (c->get_state() == CS_ONLINE) features_online |= f;
-                if (c->is_av()) now_disabled = true;
+                if (c->flag_is_av) now_disabled = true;
                 if (c->get_state() == CS_INVITE_RECEIVE || c->get_state() == CS_INVITE_SEND)
                     is_authorized = false;
             }
@@ -7594,7 +8040,7 @@ bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
         else
             caption->getcontact().subiterate([&](contact_c *c) {
                 if (show) return;
-                if (c->get_options().unmasked().is(contact_c::F_ALLOWACCEPTDATA))
+                if (c->flag_allowacceptdata)
                     show = true;
             });
     }
@@ -7716,7 +8162,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
 
     caption->setcontact( c.contact );
 
-    if (c.contact->is_av())
+    if (c.contact->flag_is_av)
     {
         static_cast<sound_capture_handler_c *>(g_app)->start_capture();
 
@@ -7733,7 +8179,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
     if (c.contact->getkey().is_conference() && c.contact->get_state() == CS_ONLINE)
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            gmsg<ISOGM_NOTICE>((contact_root_c *)param, (contact_c *)param, NOTICE_CONFERENCE).send();
+            notice_t<NOTICE_CONFERENCE>((contact_root_c *)param).send();
         DEFERRED_EXECUTION_BLOCK_END(c.contact.get());
     }
 

@@ -37,10 +37,12 @@ void Source::autoDelete()
 
 void Source::play(bool looping, float time)
 {
-    player_data_s &pd = *(player_data_s *)&player->data;
+    player_data_s &pd = player_data_s::cvt(player);
 
-	if (pd.pDS == nullptr) return;
-    SIMPLELOCK(pd.sync1);
+    if (!pd.is_coredata_initialized())
+        return;
+
+    SIMPLELOCK(pd.sync);
 
 	autoDeleteSources();
 
@@ -68,7 +70,7 @@ void Source::play(bool looping, float time)
 
 	if (found != -1) // slot is free, but format mismatch - need to recreate buffer
 	{
-		sg.slots[found].releaseBuffer();
+        slot_coredata_clear(&sg.slots[found]);
 	}
 	else // no free slots
 	{
@@ -76,7 +78,7 @@ void Source::play(bool looping, float time)
 		found = sg.active++; // add new slot
 	}
 
-	if (!sg.slots[found].createBuffer(player, pd.gdecoder->format, sg.is3d)) return;
+	if (!sg.slots[found].prepare(player, pd.gdecoder->format, sg.is3d)) return;
 
 skip_create:
 
@@ -92,9 +94,12 @@ skip_create:
 void Source::stop(float time)
 {
 	if (slotIndex == -1 || player == nullptr) return;//предварительная быстрая, но неточная проверка, которая допустима из расчета, что запись int - атомарная операция, а в параллельном потоке может быть записано только одно значение (-1)
-    player_data_s &pd = *(player_data_s *)&player->data;
-	if (pd.pDS == nullptr) return;
-    SIMPLELOCK(pd.sync1);
+    player_data_s &pd = player_data_s::cvt(player);
+
+    if (!pd.is_coredata_initialized())
+        return;
+
+    SIMPLELOCK(pd.sync);
 	if (slotIndex == -1) {/*ErrorHandler(EL_ERROR, "Sound source is already stopped");*/ return;}
 	pd.soundGroups[soundGroup].slots[slotIndex].stop(time);
 }
@@ -124,8 +129,10 @@ void MSource::init(const void *data_, int size_)
 
 void MSource::play(bool looping, float time)
 {
-    player_data_s &pd = *(player_data_s *)&player->data;
-	if (pd.pDS == nullptr) return;
+    player_data_s &pd = player_data_s::cvt(player);
+
+    if (!pd.is_coredata_initialized())
+        return;
 
 	if (data == nullptr) // no data (yet)
 	{
@@ -210,8 +217,8 @@ void PSource::rewind(bool start)
 
 bool PSource::prefetchComplete(int size)
 {
-    player_data_s &pd = *(player_data_s *)&player->data;
-    SIMPLELOCK(pd.sync1);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    player_data_s &pd = player_data_s::cvt(player);
+    SIMPLELOCK(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 	bool res = false;
 
 	do//цикл нужен только для обработки случая начальной загрузки 2*prefetchBytes байт, т.к. конец файла может быть достигнут на меньшем кол-ве байт
@@ -246,10 +253,12 @@ void PSource::play(float time)
 {
 	if (!active) {ErrorHandler(EL_ERROR, "PSource should be activated before play"); return;}
     
-    player_data_s &pd = *(player_data_s *)&player->data;
+    player_data_s &pd = player_data_s::cvt(player);
 
-	if (pd.pDS == nullptr) return;
-    spinlock::auto_simple_lock asl(pd.sync1); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    if (!pd.is_coredata_initialized())
+        return;
+
+    spinlock::auto_simple_lock asl(pd.sync); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (waitingForPrefetchComplete || (actualDataSize[0] == 0 && actualDataSize[1] == 0))
 	{
@@ -264,33 +273,37 @@ void PSource::play(float time)
 
 bool PSource::update()
 {
-    player_data_s &pd = *(player_data_s *)&player->data;
-	if (pd.pDS == nullptr) return false;
-    spinlock::auto_simple_lock asl(pd.sync1);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    player_data_s &pd = player_data_s::cvt(player);
+
+    if (!pd.is_coredata_initialized())
+        return false;
+    spinlock::auto_simple_lock asl(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (!active) return slotIndex == -1;
 
-	DWORD status;
-	if (slotIndex != -1 && pd.soundGroups[soundGroup].slots[slotIndex].buffer->GetStatus(&status) == DSERR_BUFFERLOST)//такое может быть при вытаскивании наушников в Windows 7
+	if (slotIndex != -1 && slot_coredata_fail( pd.soundGroups[soundGroup].slots + slotIndex) )
 	{
 		player->Shutdown(true);//try reinit
-		if (pd.pDS == nullptr) return false;
+
+        if (!pd.is_coredata_initialized())
+            return false;
+
 	}
 
 	if (!waitingForPrefetchComplete)
 	{
-		if (!looped && eofPos[prBuf] < prefetchBytes) ;//достигнут конец файла незацикленного звука - ничего не делаем
+		if (!looped && eofPos[prBuf] < prefetchBytes) ; // end of non-looped file has been reached - do nothing
 		else if (actualDataSize[prBuf] == (eofPos[prBuf] < prefetchBytes ? eofPos[prBuf] : 0))
 		{
 			waitingForPrefetchComplete = true;
 
-			if (actualDataSize[0] == 0 && actualDataSize[1] == 0)//первый раз грузим оба буфера сразу
+			if (actualDataSize[0] == 0 && actualDataSize[1] == 0) // first time load both buffers
 				prefetch(buf[0], 2*prefetchBytes);
 			else
 				prefetch(buf[prBuf]+actualDataSize[prBuf], prefetchBytes-actualDataSize[prBuf]);
 		}
 
-		if (startPlayOnPrefetchComplete >= 0 && actualDataSize[0] > 0)//начинаем играть как только появились данные
+		if (startPlayOnPrefetchComplete >= 0 && actualDataSize[0] > 0) // start play as soon as data available
 		{
             asl.unlock();
 			Source::play(looped, startPlayOnPrefetchComplete);
@@ -308,7 +321,7 @@ s3int RawSource::read(char *dest, s3int sz)
 	{
 	case 0:
 		_ASSERT(sz == 4);
-		*(DWORD*)dest = MAKEFOURCC('R','A','W',' ');
+		*(unsigned long*)dest = MAKEFOURCC('R','A','W',' ');
 		readStage++;
 		return 4;
 

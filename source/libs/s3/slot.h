@@ -3,24 +3,40 @@
 #include "s3.h"
 #include "decoder.h"
 
+#ifdef CORE_WIN32
+#ifdef _M_X64
+#define SLOT_COREDATA_SIZE (sizeof(void *)*3)
+#else
+#define SLOT_COREDATA_SIZE (sizeof(void *)*4)
+#endif
+#define PLAYER_COREDATA_SIZE (sizeof(void *)*6)
+#elif defined CORE_NIX
+#define SLOT_COREDATA_SIZE 4
+#define PLAYER_COREDATA_SIZE 4
+#endif
 
 namespace s3
 {
+    void slot_coredata_clear(Slot *slot);
+    bool slot_coredata_prepare(Slot *slot, Player *player, bool is3d);
+    void slot_coredata_start_play(Slot *slot, Player *player);
+    void slot_coredata_stop_play(Slot *slot);
+    void slot_coredata_update(Slot *slot, Player *player, bool full);
+    bool slot_coredata_fail(Slot *slot);
+
 class Slot
 {
 public:
-	Source *source;
-	LPDIRECTSOUNDBUFFER8 buffer;
-	LPDIRECTSOUND3DBUFFER8 buffer3D;
-	DWORD prevPlayPos;
+	Source *source = nullptr;
+    char coredata[SLOT_COREDATA_SIZE] = {};
 	Format format;
-	int bufferSize, silenceSize;
+	int silenceSize;
 	Decoder *decoder;//используется указатель, чтобы можно было делать std::swap
 
 	bool paused, looping;
 	float fade, fadeSpeed;
 
-	Slot() : source(nullptr), buffer(nullptr), buffer3D(nullptr), decoder(new Decoder) {}
+    Slot() : decoder(new Decoder) {}
 	~Slot()
 	{
 		clear();
@@ -29,16 +45,13 @@ public:
 	void clear()
 	{
 		if (source) stop();
-		releaseBuffer();
+        slot_coredata_clear(this);
 		memset(&format, 0, sizeof(format));
 	}
 
-	void releaseBuffer()
-	{
-		if (buffer  ) buffer  ->Release(), buffer   = nullptr;
-		if (buffer3D) buffer3D->Release(), buffer3D = nullptr;
-	}
-	bool createBuffer(Player *player, const Format &f, bool is3d);
+	bool prepare(Player *player, const Format &f, bool is3d);
+
+
 	void startPlay(Player *player, float time);
 	void stop();
 	void stop(float time) {if (time == 0) stop(); else fadeSpeed = -1/time;}
@@ -47,27 +60,4 @@ public:
 	void update(Player *player, float dt, bool full);
 };
 
-inline WAVEFORMATEX BuildWaveFormat(int channels, int sampleRate, int bitsPerSample)
-{
-	WAVEFORMATEX wf = {};
-	wf.wFormatTag = WAVE_FORMAT_PCM;
-	wf.nChannels = (WORD)channels;
-	wf.nSamplesPerSec = sampleRate;
-	wf.wBitsPerSample = (WORD)bitsPerSample;
-	wf.nBlockAlign = wf.nChannels * wf.wBitsPerSample / 8;
-	wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
-	return wf;
-}
-
-inline int LinearToDirectSoundVolume(float k)
-{
-	return k <= 0 ? DSBVOLUME_MIN : k >= 1 ? DSBVOLUME_MAX : std::max(DSBVOLUME_MIN, int((100*20) * log10f(k)));//100 = -DSBVOLUME_MIN/100 dB, 20 - из определения dB для sound pressure level
-}
-
-inline void ConvertVectorToDirectSoundCS(D3DVECTOR &dest, const float v[3], bool rightHandedCS)
-{
-	dest.x = v[0];
-	if (rightHandedCS)  dest.y = v[2], dest.z = v[1];//другой способ - менять знак z
-	else                dest.y = v[1], dest.z = v[2];
-}
 }

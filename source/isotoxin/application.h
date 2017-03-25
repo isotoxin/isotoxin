@@ -75,8 +75,13 @@ enum autoupdate_beh_e
 
 struct autoupdate_params_s
 {
+    enum
+    {
+        NUM_PATHS = 2,
+    };
+
     ts::str_c ver;
-    ts::wstr_c path;
+    ts::wstr_c paths[NUM_PATHS];
     ts::astrmap_c dbgoptions;
     ts::str_c proxy_addr;
     int proxy_type = 0;
@@ -87,98 +92,17 @@ struct autoupdate_params_s
 #ifndef MODE64
     bool disable64 = false;
 #endif // MODE64
-};
 
-struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
-{
-    static const int BPSSV_WAIT_FOR_ACCEPT = -3;
-    static const int BPSSV_PAUSED_BY_REMOTE = -2;
-    static const int BPSSV_PAUSED_BY_ME = -1;
-    static const int BPSSV_ALLOW_CALC = 0;
-
-    uint64 i_utag = 0; // protocol's internal tag
-
-    uint64 write_buffer_offset = 0;
-    ts::buf0_c write_buffer;
-
-    struct job_s : public ts::movable_flag<true>
+    void setup_paths();
+    bool need_setup_paths() const
     {
-        DUMMY( job_s );
-        uint64 offset = 0xFFFFFFFFFFFFFFFFull;
-        int sz = 0;
-        job_s( uint64 offset, int sz ) :offset( offset ), sz( sz ) {}
-        job_s() {}
-    };
-
-    /*virtual*/ int iterate(ts::task_executor_c *e) override;
-    /*virtual*/ void done( bool canceled ) override;
-    /*virtual*/ void result() override;
-
-    struct data_s
-    {
-        //uint64 offset = 0;
-        uint64 progrez = 0;
-        void * handle = nullptr;
-        ts::array_inplace_t<job_s, 1> query_job;
-        ts::Time prevt = ts::Time::current();
-        ts::Time speedcalc = ts::Time::current();
-        ts::aint transfered_last_tick = 0;
-        int bytes_per_sec = BPSSV_ALLOW_CALC;
-        float upduitime = 0;
-        int lock = 0;
-
-        float deltatime(bool updateprevt, int addseconds = 0)
-        {
-            ts::Time cur = ts::Time::current();
-            float dt = (float)((double)(cur - prevt) * (1.0/1000.0));
-            if (updateprevt)
-            {
-                prevt = cur;
-                if (addseconds)
-                    prevt += addseconds * 1000;
-            }
-            return dt;
-        }
-
-    };
-
-    spinlock::syncvar<data_s> data;
-    int queueemptycounter = 0;
-
-    void * file_handle() const { return data.lock_read()().handle; }
-    //uint64 get_offset() const { return data.lock_read()().offset; }
-
-    bool dip = false;
-    bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
-    bool update_item = false;
-    bool read_fail = false;
-    bool done_transfer = false;
-
-    file_transfer_s();
-    ~file_transfer_s();
-
-    bool auto_confirm();
-
-    int progress( int &bytes_per_sec, uint64 &cursz ) const;
-    void upd_message_item(bool force);
-    static void upd_message_item( unfinished_file_transfer_s &uft );
-
-    void upload_accepted();
-    void resume();
-    void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
-    void kill( file_control_e fctl = FIC_BREAK, unfinished_file_transfer_s *uft = nullptr );
-    void save( uint64 offset, ts::buf0_c&data );
-    void query( uint64 offset, int sz );
-    void pause_by_remote( bool p );
-    void pause_by_me( bool p );
-    bool is_freeze()
-    {
-        auto wdata = data.lock_write();
-        return ( const_cast<data_s *>( &wdata() )->deltatime( false ) ) > 60; /* last activity in 60 sec */
+        return paths[0].is_empty() || paths[1].is_empty();
     }
-    bool confirm_required() const;
 
-    ts::str_c text_for_notice() const;
+    bool in_downloading() const
+    {
+        return in_progress && autoupdate == AUB_DOWNLOAD;
+    }
 };
 
 namespace ts
@@ -339,6 +263,7 @@ public:
     preloaded_stuff_s m_preloaded_stuff;
 
     ts::array_del_t<file_transfer_s, 2> m_files;
+    ts::array_del_t<folder_share_c, 4> m_foldershares;
 
     struct blinking_reason_s : public ts::movable_flag<true>
     {
@@ -348,7 +273,7 @@ public:
         ts::Time acblinking_stop = ts::Time::undefined();
         int unread_count = 0;
         ts::flags32_s flags;
-        ts::tbuf_t<uint64> ftags_request, ftags_progress;
+        ts::tbuf_t<uint64> ftags_request, ftags_progress, fshares;
 
         static const ts::flags32_s::BITS F_BLINKING_FLAG = SETBIT(0);
         static const ts::flags32_s::BITS F_CONTACT_BLINKING = SETBIT(1);
@@ -369,7 +294,7 @@ public:
         bool is_blank() const
         {
             if (contacts().find(historian) == nullptr) return true;
-            return unread_count == 0 && ftags_request.count() == 0 && ftags_progress.count() == 0 && (flags.__bits & ~(F_CONTACT_BLINKING|F_BLINKING_FLAG|F_REDRAW)) == 0;
+            return unread_count == 0 && ftags_request.count() == 0 && ftags_progress.count() == 0 && fshares.count() == 0 && (flags.__bits & ~(F_CONTACT_BLINKING|F_BLINKING_FLAG|F_REDRAW)) == 0;
         }
         bool notification_icon_need_blink() const
         {
@@ -396,6 +321,16 @@ public:
                 flags.set(F_REDRAW);
             }
         }
+
+        bool is_folder_share_announce() const { return fshares.count() > 0; }
+        void folder_share(uint64 utag)
+        {
+            ts::aint oldc = fshares.count();
+            ftags_request.set(utag);
+            if (oldc != fshares.count())
+                flags.set(F_REDRAW);
+        }
+
         bool is_file_download() const { return is_file_download_request() || is_file_download_process(); }
         bool is_file_download_request() const { return ftags_request.count() > 0; }
         bool is_file_download_process() const { return ftags_progress.count() > 0; }
@@ -422,6 +357,16 @@ public:
                 ftags_request.clear(), ftags_progress.clear();
             else
                 ftags_request.find_remove_fast(ftag), ftags_progress.find_remove_fast(ftag);
+            if (was_f)
+                flags.set(F_REDRAW);
+        }
+        void folder_share_remove(uint64 utag)
+        {
+            bool was_f = is_folder_share_announce();
+            if (!utag)
+                fshares.clear();
+            else
+                fshares.find_remove_fast(utag);
             if (was_f)
                 flags.set(F_REDRAW);
         }
@@ -526,6 +471,10 @@ public:
     bool update_state();
 public:
 
+    ts::wstr_c folder_share_sel_path;
+    ts::wstr_c folder_share_sel_path2;
+    ts::wstr_c file_save_as_path;
+
     ts::shared_ptr<ts::dynamic_allocator_s> global_allocator;
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
@@ -616,10 +565,7 @@ public:
     {
         return get_theme().prepareimageplace(name);
     }
-    void clearimageplace(const ts::wsptr &name)
-    {
-        return get_theme().clearimageplace(name);
-    }
+    void clearimageplace(const ts::wsptr &name);
 
     const SLANGID &current_lang() const {return m_locale_tag;};
     void load_locale( const SLANGID& lng );
@@ -684,6 +630,12 @@ public:
     mediasystem_c &mediasystem() {return m_mediasystem;};
     av_contacts_c &avcontacts() { return m_avcontacts; };
 
+    folder_share_c * add_folder_share(const contact_key_s &k, const ts::str_c &name, folder_share_s::fstype_e t, uint64 utag);
+    folder_share_c * add_folder_share(const contact_key_s &k, const ts::str_c &name, folder_share_s::fstype_e t, uint64 utag, const ts::wstr_c &path);
+    void remove_folder_share(folder_share_c *sfc);
+    folder_share_c *find_folder_share_by_utag(uint64 utag);
+    bool folder_share_recv_announce_present() const;
+
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
     ts::uint32 base_tid() const { return  m_tasks_executor.base_tid(); }
 
@@ -701,7 +653,9 @@ public:
     file_transfer_s *find_file_transfer( uint64 utag );
     file_transfer_s *find_file_transfer_by_iutag(uint64 i_utag);
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
+    file_transfer_s *find_file_transfer_by_fshutag(uint64 utag);
     file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename, uint64 filesize );
+    file_transfer_s *register_file_hidden_send(const contact_key_s &historian, const contact_key_s &sender, ts::wstr_c filename, ts::str_c fakename); // not saved to db as unfinished
     void unregister_file_transfer(uint64 utag,bool disconnected);
     void cancel_file_transfers( const contact_key_s &historian ); // by historian
 
@@ -725,34 +679,4 @@ public:
     void update_protos_head() { m_post_effect.set(PEF_UPDATE_PROTOS_HEAD); };
 
 };
-
-extern application_c *g_app;
-
-INLINE bool contact_root_c::match_tags(int bitags) const
-{
-    if (bitags & (1 << BIT_ALL)) return true;
-
-    const ts::buf0_c &enabledbits = contacts().get_tags_bits();
-
-    bool bitag = false;
-    if (bitags & (1 << BIT_UNTAGGED))
-    {
-        if (!tags_bits.is_any_bit()) return true;
-        bitag = true;
-    }
-
-    if (bitags & (1 << BIT_ONLINE))
-    {
-        contact_state_e cs = get_meta_state();
-        if (CS_ONLINE == cs || contact_state_check == cs)
-            return true;
-        bitag = true;
-    }
-
-    if (g_app->find_blink_reason(getkey(), false) != nullptr)
-        return true;
-
-    if (enabledbits.size() == 0) return !bitag;
-    return contacts().get_tags_bits().is_any_common_bit(tags_bits);
-}
 

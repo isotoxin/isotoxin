@@ -218,6 +218,11 @@ enum block_type_e // hard order!!!
     BT_INITDECODER,
     BT_VIDEO_FRAME,
 
+    BT_FOLDERSHARE_ANNOUNCE,
+    BT_FOLDERSHARE_TOC,
+    BT_FOLDERSHARE_CTL,
+    BT_FOLDERSHARE_QUERY,
+
     __bt_no_save_end,
 
 };
@@ -424,6 +429,94 @@ public:
         int next_keepalive_packet = 0;
         int keepalive_answer_deadline = 0;
 
+        struct fsh_s
+        {
+            contact_s::fsh_s *prev = nullptr;
+            contact_s::fsh_s *next = nullptr;
+
+            fsh_s(u64 utag, contact_id_s cid, const std::asptr &n, int ver, int sz) :utag(utag), cid(cid), name(n), toc_ver(ver), toc_size(sz)
+            {
+                enlist();
+            }
+            ~fsh_s() { unlist(); }
+
+            void enlist();
+            void unlist();
+            void die();
+
+            u64 utag;
+            std::str_c name;
+            contact_id_s cid;
+            int toc_ver = -1;
+            int toc_size = 0;
+            bool recv = false;
+
+            const void * to_data() const
+            {
+                return this + 1;
+            }
+        };
+
+        struct fsh_ptr_s
+        {
+            fsh_s *sf = nullptr;
+
+            fsh_ptr_s() {}
+            ~fsh_ptr_s() { if (sf) { sf->~fsh_s(); dlfree(sf); } }
+            fsh_ptr_s(fsh_ptr_s &&o)
+            {
+                sf = o.sf;
+                o.sf = nullptr;
+            }
+            fsh_ptr_s(u64 utag, contact_id_s cid, const std::asptr &n, int ver, const void* data, int datasize)
+            {
+                sf = (fsh_s *)dlmalloc(sizeof(fsh_s) + datasize);
+                sf->fsh_s::fsh_s(utag, cid, n, ver, datasize);
+                memcpy(sf+1,data,datasize);
+            }
+            fsh_ptr_s(u64 utag, contact_id_s cid, const std::asptr &n)
+            {
+                sf = (fsh_s *)dlmalloc(sizeof(fsh_s));
+                sf->fsh_s::fsh_s(utag, cid, n, 0, 0);
+                sf->recv = true;
+            }
+            void operator=(fsh_ptr_s &&o)
+            {
+                fsh_s *keep = sf;
+                sf = o.sf;
+                o.sf = keep;
+            }
+
+            void clear_toc()
+            {
+                if (sf->toc_size > 0)
+                {
+                    sf->unlist();
+                    sf = (fsh_s *)dlrealloc(sf, sizeof(fsh_s));
+                    sf->enlist();
+                    sf->toc_size = 0;
+                }
+            }
+
+            void update_toc(const void* data, int datasize)
+            {
+                if (datasize > sf->toc_size)
+                {
+                    sf->unlist();
+                    sf = (fsh_s *)dlrealloc(sf, sizeof(fsh_s) + datasize);
+                    sf->enlist();
+                }
+                memcpy(sf + 1, data, datasize);
+                sf->toc_size = datasize;
+            }
+
+        private:
+            fsh_ptr_s(const fsh_ptr_s &) = delete;
+            void operator=(const fsh_ptr_s &) = delete;
+        };
+
+        std::vector<fsh_ptr_s> sfs;
+
         byte temporary_key[SIZE_KEY]; // crypto key for unauthorized interactions (before accept invite)
         byte authorized_key[SIZE_KEY];
 
@@ -529,6 +622,16 @@ public:
         void stop_call_activity(bool notify_me = true);
         void handle_packet(packet_id_e pid, stream_reader &r );
 
+
+        fsh_s *find_fsh(u64 utag)
+        {
+            for (fsh_ptr_s &x : sfs)
+                if (x.sf->utag == utag)
+                    return x.sf;
+            return nullptr;
+        }
+
+
     };
 private:
     
@@ -595,7 +698,7 @@ private:
             const void *buf = nullptr;
             int size = 0;
 
-            bool set(const file_portion_s *fp);
+            bool set(const file_portion_prm_s *fp);
             void clear();
 
             ~ready_chunk_s() { clear(); }
@@ -620,7 +723,7 @@ private:
         /*virtual*/ void unpause(bool from_self) override;
         /*virtual*/ void tick(int ct) override;
 
-        bool fresh_file_portion(const file_portion_s *fp);
+        bool fresh_file_portion(const file_portion_prm_s *fp);
         /*virtual*/ bool delivered(u64 dtg) override;
     };
 
@@ -629,6 +732,18 @@ private:
     file_transfer_s *find_ftr_by_sid( u64 sid );
     u64 gensid();
     u64 genfutag();
+
+
+    contact_s::fsh_s *first_fsh = nullptr;
+    contact_s::fsh_s *last_fsh = nullptr;
+
+    contact_s::fsh_s *find_fsh(u64 utag)
+    {
+        for (contact_s::fsh_s *x = first_fsh; x; x = x->next)
+            if (x->utag == utag)
+                return x;
+        return nullptr;
+    }
 
 private:
     contact_s *first = nullptr; // first points to zero contact - self

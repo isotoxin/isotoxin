@@ -19,6 +19,9 @@
     <Filter Include="src\video">
       <UniqueIdentifier>{8c9050dd-4b4a-42d5-9699-f8e54441bcbe}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\transfer">
+      <UniqueIdentifier>{b0e5ad5b-eb8e-497f-a482-5265ae3dc327}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="contactlist.cpp">
@@ -114,6 +117,12 @@
     <ClCompile Include="tooldialogs.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
+    <ClCompile Include="foldershare.cpp">
+      <Filter>src\transfer</Filter>
+    </ClCompile>
+    <ClCompile Include="filetransfer.cpp">
+      <Filter>src\transfer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="res\resource.h">
@@ -205,6 +214,12 @@
     </ClInclude>
     <ClInclude Include="tooldialogs.h">
       <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="foldershare.h">
+      <Filter>src\transfer</Filter>
+    </ClInclude>
+    <ClInclude Include="filetransfer.h">
+      <Filter>src\transfer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

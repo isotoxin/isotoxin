@@ -135,7 +135,7 @@ struct load_spellcheckers_s : public ts::task_c
             {
                 if ( prf().is_any_active_ap() )
                 {
-                    gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_WARN_NODICTS ).send();
+                    notice_t<NOTICE_WARN_NODICTS>().send();
                 }
             } else
             {
@@ -490,10 +490,12 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
             grabbuff.save_as_png( saved_image );
 
             ts::wstr_c tmpsave( cfg().temp_folder_sendimg() );
-            path_expand_env( tmpsave, ts::wstr_c() );
+            path_expand_env( tmpsave, nullptr );
             ts::make_path( tmpsave, 0 );
             ts::uint8 hash[ BLAKE2B_HASH_SIZE_SMALL ];
             BLAKE2B( hash, saved_image.data(), saved_image.size() );
+
+            ts::fix_path(tmpsave, FNO_APPENDSLASH);
             tmpsave.append_as_hex( hash, sizeof( hash ) );
             tmpsave.append( CONSTWSTR( ".png" ) );
 
@@ -1048,7 +1050,7 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
 }
 /*virtual*/ void application_c::app_path_expand_env(ts::wstr_c &path)
 {
-    path_expand_env(path, ts::wstr_c(CONSTWSTR("0")));
+    path_expand_env(path, nullptr);
 }
 
 /*virtual*/ void application_c::app_font_par(const ts::str_c&fn, ts::font_params_s&fprm)
@@ -1123,6 +1125,80 @@ bool application_c::update_state()
 
     F_OFFLINE_ICON(OST_ONLINE != st);
     return ooi != F_OFFLINE_ICON();
+}
+
+folder_share_c *application_c::add_folder_share(const contact_key_s &k, const ts::str_c &name, folder_share_s::fstype_e t, uint64 utag)
+{
+    if (contact_root_c *r = contacts().rfind(k))
+        //if (!r->get_share_folder_path().is_empty() || t == folder_share_s::FST_RECV) //FOLDER_SHARE_PATH
+        {
+            for (folder_share_c* sfc : m_foldershares)
+                if (sfc->get_hkey() == k && sfc->is_type(t) && (utag != 0 && sfc->get_utag() == utag))
+                {
+                    sfc->set_name(name);
+                    return sfc;
+                }
+
+            ASSERT(t == folder_share_s::FST_SEND || utag != 0);
+
+            folder_share_c *f = folder_share_c::build(t, k, name, utag);
+            m_foldershares.add(f);
+            return f;
+        }
+    return nullptr;
+}
+
+folder_share_c * application_c::add_folder_share(const contact_key_s &k, const ts::str_c &name, folder_share_s::fstype_e t, uint64 utag, const ts::wstr_c &path)
+{
+    if (contact_root_c *r = contacts().rfind(k))
+        for (folder_share_c* sfc : m_foldershares)
+            if (sfc->get_hkey() == k && sfc->is_type(t) && (utag != 0 && sfc->get_utag() == utag))
+            {
+                sfc->set_name(name, false);
+                sfc->set_path(path);
+                return sfc;
+            }
+
+    ASSERT(t == folder_share_s::FST_SEND || utag != 0);
+
+    folder_share_c *f = folder_share_c::build(t, k, name, utag);
+    m_foldershares.add(f);
+    f->set_path(path,false);
+    return f;
+}
+
+
+folder_share_c *application_c::find_folder_share_by_utag(uint64 utag)
+{
+    for (folder_share_c* sfc : m_foldershares)
+        if (sfc->get_utag() == utag)
+            return sfc;
+    return nullptr;
+
+}
+
+bool application_c::folder_share_recv_announce_present() const
+{
+    for (const folder_share_c* sfc : m_foldershares)
+    {
+        if (sfc->is_type(folder_share_s::FST_RECV) && sfc->is_announce_present())
+            return true;
+    }
+    return false;
+}
+
+void application_c::remove_folder_share(folder_share_c *sfc)
+{
+    for (ts::aint i = m_foldershares.size() - 1; i >= 0; --i)
+    {
+        folder_share_c *sfc1 = m_foldershares.get(i);
+        if (sfc == sfc1)
+        {
+            prf().del_folder_share(sfc->get_utag());
+            m_foldershares.remove_fast(i);
+            return;
+        }
+    }
 }
 
 /*virtual*/ void application_c::app_5second_event()
@@ -1203,6 +1279,17 @@ bool application_c::update_state()
             ap->file_control( ftr->i_utag, FIC_CHECK );
     }
 
+
+    for (ts::aint i = m_foldershares.size() - 1;i>=0;--i)
+    {
+        folder_share_c *shc = m_foldershares.get(i);
+        if (folder_share_c::FSS_SUSPEND == shc->get_state() || folder_share_c::FSS_REJECT == shc->get_state())
+            continue;
+
+        if (!shc->tick5())
+            m_foldershares.remove_fast(i);
+    }
+
     if (prf().manual_cos() == COS_ONLINE)
     {
         contact_online_state_e c = contacts().get_self().get_ostate();
@@ -1219,12 +1306,15 @@ bool application_c::update_state()
                     cnew = COS_AWAY, F_TYPING(false);
             }
 
-            int imins = prf().inactive_time();
-            if (imins > 0)
+            if (!avcontacts().is_any_inprogress())
             {
-                int cimins = ts::master().get_system_info( ts::SINF_LAST_INPUT ) / 60;
-                if (cimins >= imins)
-                    cnew = COS_AWAY, F_TYPING(false);
+                int imins = prf().inactive_time();
+                if (imins > 0)
+                {
+                    int cimins = ts::master().get_system_info(ts::SINF_LAST_INPUT) / 60;
+                    if (cimins >= imins)
+                        cnew = COS_AWAY, F_TYPING(false);
+                }
             }
 
             if (c != cnew)
@@ -1300,6 +1390,12 @@ void application_c::blinking_reason_s::do_recalc_unread_now()
             {
                 if (!g_app->present_file_transfer_by_historian(historian))
                     file_download_remove(0);
+            }
+
+            if (is_folder_share_announce())
+            {
+                if (!g_app->folder_share_recv_announce_present())
+                    folder_share_remove(0);
             }
 
             set_unread(hi->calc_unread());
@@ -1959,7 +2055,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
     ts::wstr_c profname = cfg().profile();
     ts::wstrings_c prfs;
-    ts::find_files(ts::fn_change_name_ext(cfg().get_path(), CONSTWSTR("*.profile")), prfs, ATTR_ANY );
+    ts::find_files(ts::fn_change_name_ext(cfg().get_path(), CONSTWSTR("profile" NATIVE_SLASH_S "*.profile")), prfs, ATTR_ANY );
     for (const ts::wstr_c &fn : prfs)
     {
         ts::wstr_c wfn(fn);
@@ -1974,7 +2070,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         pm.add(TTT("Switch to [b]$[/b]",41) / wfn, mif, handlers::m_switchto, ts::to_utf8(wfn));
     }
 
-    menu_c lng = m.add_sub(loc_text(loc_language));
+    menu_c lng = m.add_sub(LOC_LANGUAGE);
     list_langs(cfg().language(), handlers::m_select_lang, &lng);
 
     m.add(TTT("Settings", 42), 0, handlers::m_settings);
@@ -2182,6 +2278,27 @@ bool application_c::is_inactive(bool do_incoming_message_stuff, const contact_ke
     return inactive;
 }
 
+bool find_config(ts::wstr_c &path);
+
+void autoupdate_params_s::setup_paths()
+{
+    paths[0].set(CONSTWSTR("%TEMP%" NATIVE_SLASH_S "$$$isotoxin" NATIVE_SLASH_S "update"));
+    parse_env(paths[0]);
+    ts::fix_path(paths[0], FNO_APPENDSLASH | FNO_NORMALIZE);
+
+    {
+        REMOVE_CODE_REMINDER(600); // no need to check cfgpath/update folder
+
+        ts::wstr_c p;
+        find_config(p);
+        if (!p.is_empty())
+        {
+            paths[1].setcopy(ts::fn_join(ts::fn_get_path(p), CONSTWSTR("update")));
+            ts::fix_path(paths[1], FNO_NORMALIZE | FNO_APPENDSLASH);
+        }
+    }
+}
+
 bool application_c::b_update_ver(RID, GUIPARAM p)
 {
     if (!prf().is_loaded()) return true;
@@ -2200,8 +2317,8 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
             req = (autoupdate_beh_e)cfg().autoupdate();
 
         w().ver.setcopy(application_c::appver());
-        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfg().get_path()),CONSTWSTR("update")));
-        ts::fix_path(w().path, FNO_APPENDSLASH|FNO_NORMALIZE);
+        w().setup_paths();
+
         if ( prf().useproxyfor() & USE_PROXY_FOR_AUTOUPDATES )
         {
             w().proxy_addr.setcopy(cfg().proxy_addr());
@@ -2224,7 +2341,8 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         if (renotice)
         {
             download_progress = ts::ivec2(0);
-            gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, cfg().autoupdate_newver()).send();
+            bool is64 = false;
+            notice_t<NOTICE_NEWVERSION>(cfg().autoupdate_newver(is64), is64).send();
         }
     }
     return true;
@@ -2430,7 +2548,7 @@ void application_c::capture_device_changed()
 void application_c::update_ringtone( contact_root_c *rt, contact_c *sub, bool play_stop_snd )
 {
     int avcount = avcontacts().get_avringcount();
-    if (rt->is_ringtone() && ASSERT(sub))
+    if (rt->flag_is_ringtone && ASSERT(sub))
         avcontacts().get( rt->getkey() | sub->getkey(), av_contact_s::AV_RINGING );
     else
         avcontacts().del( rt );
@@ -2445,7 +2563,7 @@ void application_c::update_ringtone( contact_root_c *rt, contact_c *sub, bool pl
         if (prf_options().is(UIOPT_SHOW_INCOMING_CALL_BAR))
         {
             contact_c *ccc = nullptr;
-            rt->subiterate([&](contact_c *c) { if (c->is_ringtone()) ccc = c; });
+            rt->subiterate([&](contact_c *c) { if (c->flag_is_ringtone) ccc = c; });
             if (ccc) {
                 MAKE_ROOT<incoming_call_panel_c> xxx(ccc);
             }
@@ -2475,8 +2593,8 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
 
         if (!avmc->getkey().is_conference())
             avmc->subiterate([&](contact_c *c) {
-                if (c->is_av())
-                    gmsg<ISOGM_NOTICE>(avmc, c, NOTICE_CALL_INPROGRESS).send();
+                if (c->flag_is_av)
+                    notice_t<NOTICE_CALL_INPROGRESS>(avmc, c).send();
             });
         r = &avc;
 
@@ -2524,7 +2642,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
         }
 
         avc.core->c->subiterate([&](contact_c *sc) {
-            if (sc->is_av())
+            if (sc->flag_is_av)
                 avc2sendaudio = &avc;
         });
 
@@ -2557,7 +2675,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
         }
         else avc.core->c->subiterate([this](contact_c *sc)
         {
-            if (sc->is_av())
+            if (sc->flag_is_av)
                 if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
                     avformats.set(ap->defaudio());
         });
@@ -2602,6 +2720,14 @@ file_transfer_s *application_c::find_file_transfer_by_msgutag(uint64 utag)
     return nullptr;
 }
 
+file_transfer_s *application_c::find_file_transfer_by_fshutag(uint64 utag)
+{
+    for (file_transfer_s *ftr : m_files)
+        if (ftr->folder_share_utag == utag)
+            return ftr;
+    return nullptr;
+}
+
 file_transfer_s *application_c::find_file_transfer(uint64 utag)
 {
     for(file_transfer_s *ftr : m_files)
@@ -2610,9 +2736,80 @@ file_transfer_s *application_c::find_file_transfer(uint64 utag)
     return nullptr;
 }
 
+file_transfer_s *application_c::register_file_hidden_send(const contact_key_s &historian, const contact_key_s &sender, ts::wstr_c filename, ts::str_c fakename)
+{
+    uint64 utag = prf().getuid();
+    while (nullptr != prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
+        ++utag;
+    while (find_file_transfer(utag) != nullptr)
+        ++utag;
+
+    file_transfer_s *ftr = TSNEW(file_transfer_s);
+    m_files.add(ftr);
+
+    auto d = ftr->data.lock_write();
+
+    ftr->historian = historian;
+    ftr->sender = sender;
+    ftr->filename = ts::from_utf8(fakename);
+    ftr->filename_on_disk = filename;
+    ftr->filesize = 0;
+    ftr->utag = utag;
+    ftr->i_utag = utag;
+    ftr->upload = true;
+    d().handle = ts::f_open(filename);
+
+    if (!d().handle)
+    {
+        m_files.remove_fast(m_files.size() - 1);
+        return nullptr;
+    }
+    ftr->filesize = ts::f_size(d().handle);
+
+    if (active_protocol_c *ap = prf().ap(sender.protoid))
+        ap->send_file(sender.gidcid(), ftr->i_utag, ftr->filename, ftr->filesize);
+
+    d().bytes_per_sec = file_transfer_s::BPSSV_WAIT_FOR_ACCEPT;
+    return ftr;
+}
+
 file_transfer_s * application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename /* filename must be passed as value, not ref! */, uint64 filesize )
 {
     if (utag && find_file_transfer(utag)) return nullptr;
+
+    uint64 folder_share_utag = 0;
+    int folder_share_xtag = 0;
+    folder_share_c *share = nullptr;
+    ts::wstr_c filename_ondisk(filename);
+    if (filename.begins(CONSTWSTR("?sfdn?")))
+    {
+        // looks like file transfer of folder share
+        ts::token<ts::wchar> t(filename.substr(6), '?');
+        if (t)
+        {
+            uint64 fsutag = t->as_num<uint64>(); ++t;
+            if (fsutag && t)
+            {
+                if (nullptr != (share = find_folder_share_by_utag(fsutag)))
+                {
+                    if (share->is_type(folder_share_s::FST_RECV))
+                    {
+                        int xtag = t->as_int();
+                        folder_share_recv_c *rfshare = static_cast<folder_share_recv_c *>(share);
+                        if (rfshare->recv_waiting_file(xtag, filename_ondisk))
+                            folder_share_utag = fsutag, folder_share_xtag = xtag;
+                    }
+
+                    if (!folder_share_utag)
+                    {
+                        // due race condition recv array was cleared
+                        // so, skip this file for now
+                        return nullptr;
+                    }
+                }
+            }
+        }
+    }
 
     if ( utag == 0 )
     {
@@ -2629,13 +2826,19 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
 
     ftr->historian = historian;
     ftr->sender = sender;
+
     ftr->filename = filename;
-    ftr->filename_on_disk = filename;
+    ts::fix_path(ftr->filename, FNO_NORMALIZE);
+
+    ftr->filename_on_disk = filename_ondisk;
+    if (folder_share_utag == 0 && filesize > 0)
+        fix_path(ftr->filename_on_disk, FNO_MAKECORRECTNAME);
+
     ftr->filesize = filesize;
     ftr->utag = utag;
     ftr->i_utag = 0;
-
-    ts::fix_path(ftr->filename, FNO_NORMALIZE);
+    ftr->folder_share_utag = folder_share_utag;
+    ftr->folder_share_xtag = folder_share_xtag;
 
     auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; });
 
@@ -2660,19 +2863,27 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
         if (row == nullptr) ftr->upd_message_item(true);
     }
 
-    if (row)
+    if (folder_share_utag == 0)
     {
-        ASSERT( row->other.filesize == ftr->filesize && row->other.filename.equals(ftr->filename) );
-        ftr->msgitem_utag = row->other.msgitem_utag;
-        row->other = *ftr;
-        ftr->upd_message_item(true);
-    } else
+        if (row)
+        {
+            ASSERT(row->other.filesize == ftr->filesize && row->other.filename.equals(ftr->filename));
+            ftr->msgitem_utag = row->other.msgitem_utag;
+            row->other = *ftr;
+            ftr->upd_message_item(true);
+        }
+        else
+        {
+            auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
+            tft.other = *ftr;
+        }
+        prf().changed();
+    }
+    else if (share)
     {
-        auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
-        tft.other = *ftr;
+        share->update_data();
     }
 
-    prf().changed();
 
     return ftr;
 }
@@ -2893,6 +3104,15 @@ void application_c::reload_fonts()
     gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_FONTSCALE).send();
 }
 
+void application_c::clearimageplace(const ts::wsptr &name)
+{
+    prf().iterate_aps([](active_protocol_c &ap) {
+        ap.clear_icon_cache();
+    });
+
+    return get_theme().clearimageplace(name);
+}
+
 bool application_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal)
 {
     prf().iterate_aps([](active_protocol_c &ap) {
@@ -2988,532 +3208,3 @@ void preloaded_stuff_s::reload()
     smile = th.get_button(CONSTASTR("smile"));
 }
 
-file_transfer_s::file_transfer_s()
-{
-    auto d = data.lock_write();
-
-}
-
-file_transfer_s::~file_transfer_s()
-{
-    dip = true;
-
-    if ( g_app )
-    {
-        // wait for unlock
-        for ( ; data.lock_write()( ).lock > 0; ts::sys_sleep( 1 ) )
-            g_app->m_tasks_executor.tick();
-    }
-
-    if (void *handle = file_handle())
-        ts::f_close(handle);
-}
-
-bool file_transfer_s::confirm_required() const
-{
-    if ( prf().fileconfirm() == 0 )
-    {
-        // required, except...
-        return !file_mask_match( filename, prf().auto_confirm_masks() );
-    } else if (prf().fileconfirm() == 1)
-    {
-        // not required, except...
-        return file_mask_match(filename, prf().manual_confirm_masks());
-    }
-    return true;
-}
-
-bool file_transfer_s::auto_confirm()
-{
-    bool image = image_loader_c::is_image_fn(to_utf8(filename));
-    ts::wstr_c downf = image ? prf().download_folder_images() : prf().download_folder();
-    path_expand_env(downf, ts::wmake<uint>(historian.contactid));
-    ts::make_path(downf, 0);
-    if (!ts::dir_present(downf))
-        return false;
-
-    uint64 freesz = ts::get_free_space( downf );
-    if (freesz < filesize)
-        return false;
-
-    prepare_fn(ts::fn_join(downf, filename), false);
-
-    if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_accept(i_utag, 0);
-
-    return true;
-}
-
-
-void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite )
-{
-    accepted = true;
-    filename_on_disk = path_with_fn;
-    if (!overwrite)
-    {
-        ts::wstr_c origname = ts::fn_get_name(filename_on_disk);
-        int n = 1;
-        while (ts::is_file_exists(filename_on_disk) || ts::is_file_exists(filename_on_disk + CONSTWSTR(".!rcv")))
-            filename_on_disk = ts::fn_change_name(filename_on_disk, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
-    }
-    filename_on_disk.append(CONSTWSTR(".!rcv"));
-    data.lock_write()().deltatime(true);
-    upd_message_item(true);
-
-    if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
-    {
-        row->other.msgitem_utag = msgitem_utag;
-        row->other.filename_on_disk = filename_on_disk;
-        row->changed();
-        prf().changed();
-    }
-}
-
-int file_transfer_s::progress(int &bps, uint64 &cursz) const
-{
-    auto rdata = data.lock_read();
-    cursz = rdata().progrez;
-    bps = rdata().bytes_per_sec;
-    int prc = (int)(cursz * 100 / filesize);
-    if (prc > 100) prc = 100;
-    return prc;
-}
-
-void file_transfer_s::pause_by_remote( bool p )
-{
-    if (p)
-    {
-        data.lock_write()().bytes_per_sec = BPSSV_PAUSED_BY_REMOTE;
-        upd_message_item(true);
-    } else
-    {
-        auto wdata = data.lock_write();
-        wdata().deltatime(true);
-        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
-    }
-}
-
-void file_transfer_s::pause_by_me(bool p)
-{
-    active_protocol_c *ap = prf().ap(sender.protoid);
-    if (!ap) return;
-
-    if (p)
-    {
-        ap->file_control( i_utag, FIC_PAUSE);
-        data.lock_write()().bytes_per_sec = BPSSV_PAUSED_BY_ME;
-        upd_message_item(true);
-    }
-    else
-    {
-        ap->file_control( i_utag, FIC_UNPAUSE);
-        auto wdata = data.lock_write();
-        wdata().deltatime(true);
-        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
-    }
-}
-
-void file_transfer_s::kill( file_control_e fctl, unfinished_file_transfer_s *uft )
-{
-    //DMSG("kill " << utag << fctl << filename_on_disk);
-
-    if ( FIC_UNKNOWN == fctl )
-    {
-        if ( uft )
-            *uft = *this;
-
-        g_app->unregister_file_transfer( utag, false );
-        return;
-    }
-
-    if (!upload && !accepted && (fctl == FIC_NONE || fctl == FIC_DISCONNECT))
-    {
-        // kill without accept - just do nothing
-        g_app->new_blink_reason(historian).file_download_remove(utag);
-
-        if ( uft )
-            *uft = *this;
-
-        g_app->unregister_file_transfer(utag, false);
-        return;
-    }
-
-    if (fctl != FIC_NONE)
-    {
-        if (active_protocol_c *ap = prf().ap(sender.protoid))
-            ap->file_control( i_utag, fctl);
-    }
-
-    auto update_history = [this]()
-    {
-        post_s p;
-        p.sender = sender;
-        p.message_utf8 = ts::refstring_t<char>::build( to_utf8( filename_on_disk ), g_app->global_allocator );
-        p.utag = msgitem_utag;
-        prf().change_history_item( historian, p, HITM_MESSAGE );
-        if ( contact_root_c * h = contacts().rfind( historian ) ) h->iterate_history( [this]( post_s &p )->bool {
-            if ( p.utag == msgitem_utag )
-            {
-                p.message_utf8 = ts::refstring_t<char>::build( to_utf8( filename_on_disk ), g_app->global_allocator );
-                return true;
-            }
-            return false;
-        } );
-    };
-
-    void *handle = file_handle();
-    if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
-    {
-        uint64 fsz = 0;
-        if (!upload)
-        {
-            fsz = ts::f_size(handle);
-            if (fctl == FIC_DONE && fsz != filesize)
-                return;
-        }
-        ts::f_close(handle);
-        data.lock_write()().handle = nullptr;
-        if (filename_on_disk.ends(CONSTWSTR(".!rcv")))
-            filename_on_disk.trunc_length(5);
-        if ( fsz != filesize || upload)
-        {
-            filename_on_disk.insert( 0, fctl != FIC_DISCONNECT ? '*' : '?' );
-            update_history();
-
-            if (!upload && fctl != FIC_DISCONNECT)
-                ts::kill_file(ts::wstr_c(filename_on_disk.as_sptr().skip(1),CONSTWSTR(".!rcv")));
-        } else if (!upload && fctl == FIC_DONE)
-        {
-            ts::ren_or_move_file(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
-            play_sound( snd_file_received, false );
-        }
-    }
-    data.lock_write()().deltatime(true, -60);
-    if (fctl != FIC_REJECT) upd_message_item(true);
-    if (fctl == FIC_DONE)
-    {
-        update_history();
-        done_transfer = true;
-        upd_message_item(true);
-    } else if ( fctl == FIC_DISCONNECT )
-    {
-        bool upd = false;
-        if ( filename_on_disk.get_char( 0 ) != '?' )
-            filename_on_disk.insert( 0, '?' ), upd = true;
-
-        if (upd)
-            update_history();
-    }
-    if ( uft )
-        *uft = *this;
-    g_app->unregister_file_transfer( utag, fctl == FIC_DISCONNECT );
-}
-
-
-/*virtual*/ int file_transfer_s::iterate(ts::task_executor_c *)
-{
-    if ( dip )
-        return R_CANCEL;
-
-    auto rr = data.lock_read();
-
-    ASSERT( rr().lock > 0 );
-
-    if ( rr().query_job.size() == 0 ) // job queue is empty - just do nothing
-    {
-        ++queueemptycounter;
-        if ( queueemptycounter > 10 )
-            return 10;
-        return 0;
-    }
-    queueemptycounter = 0;
-
-    job_s cj = rr().query_job.get(0);
-    rr.unlock();
-
-    auto xx = data.lock_write();
-    void *handler = xx().handle;
-    xx.unlock();
-
-    bool rslt = false;
-
-    if ( handler )
-    {
-        // always set file pointer
-        ts::f_set_pos( handler, cj.offset );
-
-        ts::aint sz = ( ts::aint )ts::tmin<int64, int64>( cj.sz, (int64)( filesize - cj.offset ) );
-        ts::tmp_buf_c b( sz, true );
-
-        if ( sz != ts::f_read( handler, b.data(), sz ) )
-        {
-            read_fail = true;
-            return R_CANCEL;
-        }
-
-        if ( active_protocol_c *ap = prf().ap( sender.protoid ) )
-        {
-            while ( !ap->file_portion( i_utag, cj.offset, b.data(), sz ) )
-            {
-                ts::sys_sleep( 100 );
-
-                if ( dip )
-                    return R_CANCEL;
-            }
-        }
-
-        if ( dip )
-            return R_CANCEL;
-
-        xx = data.lock_write();
-
-        if ( xx().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC )
-        {
-            xx().transfered_last_tick += cj.sz;
-            xx().upduitime += xx().deltatime( true );
-
-            if ( xx().upduitime > 0.3f )
-            {
-                xx().upduitime -= 0.3f;
-
-                ts::Time curt = ts::Time::current();
-                int delta = curt - xx().speedcalc;
-
-                if ( delta >= 500 )
-                {
-                    xx().bytes_per_sec = (int)( (uint64)xx().transfered_last_tick * 1000 / delta );
-
-                    xx().speedcalc = curt;
-                    xx().transfered_last_tick = 0;
-                }
-
-                update_item = true;
-                rslt = true;
-            }
-        }
-
-        xx().progrez = cj.offset;
-        xx().query_job.remove_slow( 0 );
-        xx.unlock();
-
-
-    }
-
-    if (rslt && !dip)
-        return R_RESULT;
-
-    return dip ? R_CANCEL : 0;
-
-}
-/*virtual*/ void file_transfer_s::done(bool canceled)
-{
-    if (canceled || dip)
-    {
-        --data.lock_write()( ).lock;
-        return;
-    }
-
-    if ( read_fail )
-    {
-        --data.lock_write()( ).lock;
-        kill();
-        return;
-    }
-
-    upd_message_item(false);
-}
-
-/*virtual*/ void file_transfer_s::result()
-{
-    upd_message_item(false);
-}
-
-void file_transfer_s::query( uint64 offset_, int sz )
-{
-    auto ww = data.lock_write();
-    ww().query_job.addnew( offset_, sz );
-
-    if ( ww().lock > 0 )
-        return;
-
-    if (file_handle())
-    {
-        ++ww().lock;
-        ww.unlock();
-        g_app->add_task(this);
-    }
-}
-
-void file_transfer_s::upload_accepted()
-{
-    auto wdata = data.lock_write();
-    ASSERT( wdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT );
-        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
-}
-
-void file_transfer_s::resume()
-{
-    ASSERT(file_handle() == nullptr);
-
-    void * h = f_continue(filename_on_disk);
-    if (!h)
-    {
-        kill();
-        return;
-    }
-    auto wdata = data.lock_write();
-    wdata().handle = h;
-
-    uint64 fsz = ts::f_size(wdata().handle);
-    uint64 offset = fsz > 1024 ? fsz - 1024 : 0;
-    wdata().progrez = offset;
-    fsz = offset;
-    ts::f_set_pos(wdata().handle, fsz);
-
-    accepted = true;
-
-    if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_accept( i_utag, offset );
-
-}
-
-void file_transfer_s::save(uint64 offset_, ts::buf0_c&bdata)
-{
-    if (!accepted) return;
-
-    if (file_handle() == nullptr)
-    {
-        play_sound( snd_start_recv_file, false );
-
-        void *h = ts::f_recreate(filename_on_disk);
-        if (!h)
-        {
-            kill();
-            return;
-        }
-        data.lock_write()().handle = h;
-        if (contact_c *c = contacts().find(historian))
-            c->redraw();
-    }
-    if (offset_ + bdata.size() > filesize)
-    {
-        kill();
-        return;
-    }
-
-    if (write_buffer.size() == 0)
-        write_buffer = std::move( bdata ), write_buffer_offset = offset_;
-    else
-    {
-        if ( offset_ != ( write_buffer_offset + write_buffer.size()) )
-        {
-            kill();
-            return;
-        }
-        write_buffer.append_buf( bdata );
-    }
-
-
-    auto wdata = data.lock_write();
-
-    ts::f_set_pos(wdata().handle, write_buffer_offset );
-
-    ts::aint wrslt = ts::f_write( wdata().handle, write_buffer.data(), write_buffer.size() );
-    if (wrslt == ts::FE_WRITE_NO_SPACE)
-    {
-        pause_by_me( true );
-        return;
-    }
-    if (wrslt != write_buffer.size())
-    {
-        kill();
-        return;
-    }
-
-    wdata().progrez += write_buffer.size();
-
-    if (write_buffer.size())
-    {
-        if (wdata().bytes_per_sec >= BPSSV_ALLOW_CALC)
-        {
-            wdata().transfered_last_tick += write_buffer.size();
-            wdata().upduitime += wdata().deltatime(true);
-            if ( wdata().bytes_per_sec == 0 )
-                wdata().bytes_per_sec = 1;
-
-            if (wdata().upduitime > 0.3f)
-            {
-                wdata().upduitime -= 0.3f;
-
-                ts::Time curt = ts::Time::current();
-                int delta = curt - wdata().speedcalc;
-
-                if ( delta >= 500 )
-                {
-                    wdata().bytes_per_sec = (int)( (uint64)wdata().transfered_last_tick * 1000 / delta );
-                    wdata().speedcalc = curt;
-                    wdata().transfered_last_tick = 0;
-                }
-
-                wdata.unlock();
-                upd_message_item(true);
-            }
-        }
-    }
-
-    write_buffer.clear();
-
-}
-
-void file_transfer_s::upd_message_item( unfinished_file_transfer_s &uft )
-{
-    post_s p;
-    p.type = uft.upload ? MTA_SEND_FILE : MTA_RECV_FILE;
-
-    ts::str_c m = to_utf8( uft.filename_on_disk );
-    if ( m.ends( CONSTASTR( ".!rcv" ) ) )
-        m.trunc_length( 5 );
-
-    p.message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
-
-    p.utag = uft.msgitem_utag;
-    p.sender = uft.sender;
-    p.receiver = contacts().get_self().getkey();
-    p.recv_time = ts::now();
-    gmsg<ISOGM_SUMMON_POST>( p, true ).send();
-
-    if ( !uft.upload )
-        g_app->new_blink_reason( uft.historian ).file_download_progress_add( uft.utag );
-
-}
-
-void file_transfer_s::upd_message_item(bool force)
-{
-    if (!force && !update_item) return;
-    update_item = false;
-
-    if (msgitem_utag)
-    {
-        upd_message_item( *this );
-
-    } else if (contact_c *c = contacts().find(sender))
-    {
-        gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE, 0);
-        msg.post.cr_time = ts::now();
-
-        ts::str_c m = to_utf8(filename_on_disk);
-        if (m.ends(CONSTASTR(".!rcv")))
-            m.trunc_length(5);
-
-        msg.post.message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
-
-        msgitem_utag = msg.post.utag;
-        msg.send();
-    }
-}
-
-ts::str_c file_transfer_s::text_for_notice() const
-{
-    TS_STATIC_CHECK( sizeof( filesize ) == 8, "!" );
-    return to_utf8( filename ).append_char( '\1' ).append_as_hex( &filesize, 8 );
-}

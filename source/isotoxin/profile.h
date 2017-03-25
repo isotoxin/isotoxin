@@ -8,6 +8,7 @@
     TAB( contacts ) \
     TAB( history ) \
     TAB( unfinished_file_transfer ) \
+    TAB( folder_share ) \
     TAB( backup_protocol ) \
 
 
@@ -219,6 +220,47 @@ struct unfinished_file_transfer_s
 };
 
 DECLARE_MOVABLE(unfinished_file_transfer_s, true)
+
+struct folder_share_s
+{
+    enum column_e
+    {
+        C_HISTORIAN = 1,
+        C_UTAG,
+        C_NAME,
+        C_PATH,
+        C_OUTBOUND,
+        C_USETIME,
+
+        C_count
+    };
+
+    enum fstype_e
+    {
+        FST_RECV,
+        FST_SEND,
+        FST_UNKNOWN,
+    };
+
+
+
+    contact_key_s historian;
+    uint64 utag = 0;
+    uint64 usetime = 0;
+    ts::str_c name;
+    ts::wstr_c path;
+    fstype_e t = FST_RECV;
+
+    void set(int column, ts::data_value_s& v);
+    void get(int column, ts::data_pair_s& v);
+
+    static const int columns = C_count; // historian, utag, path, outbound
+    static ts::asptr get_table_name() { return CONSTASTR("folder_shares"); }
+    static void get_column_desc(int index, ts::column_desc_s&cd);
+    static ts::data_type_e get_column_type(int index);
+};
+
+DECLARE_MOVABLE(folder_share_s, true)
 
 struct conference_s
 {
@@ -699,9 +741,14 @@ public:
 
     ts::wstr_c get_disabled_dicts();
 
+    void del_folder_share(uint64 utag);
+    void del_folder_share_by_historian(const contact_key_s &h);
+
     ts::aint protogroupsort( const ts::uint16 * set_of_prots, ts::aint cnt );
     bool protogroupsort_up( const ts::uint16 * set_of_prots, ts::aint cnt, bool test );
     bool protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt, bool test );
+
+    ts::wstr_c download_folder_prepared(const contact_root_c *r);
 
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
@@ -714,8 +761,9 @@ public:
 
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
-    TEXTWPAR( download_folder, "%CONFIG%\\download" )
-    TEXTWPAR( download_folder_images, "%CONFIG%\\images\\%CONTACTID%" )
+    TEXTWPAR( download_folder, "{ConfigPath}" NATIVE_SLASH_S "download" )
+    TEXTWPAR( download_folder_images, "{ConfigPath}" NATIVE_SLASH_S "images" NATIVE_SLASH_S "{ContactId}" )
+    TEXTWPAR( download_folder_fshare, "{DownloadPath}" NATIVE_SLASH_S "{ContactName}" )
     TEXTWPAR( last_filedir, "" )
 
     TEXTWPAR( emoticons_pack, "" )

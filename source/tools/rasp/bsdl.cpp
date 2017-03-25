@@ -28,14 +28,18 @@ int proc_bsdl(const wstrings_c & pars)
     if (pars.size() < 2) return 0;
     wstr_c spd = pars.get(1); fix_path(spd, FNO_SIMPLIFY);
 
-    if (!dir_present(spd))
+    if (!is_dir_exists(spd))
     {
         Print(FOREGROUND_RED, "path-to-dictionaries not found: %s", spd.cstr()); return 0;
     }
 
     wstrings_c lst;
     wstrings_c sfiles;
-    fill_dirs_and_files(spd, sfiles, lst);
+
+    scan_dir_t(spd, [&](int lv, ts::scan_dir_file_descriptor_c &fd) {
+        sfiles.add(fd.fullname());
+        return ts::SD_CONTINUE;
+    });
 
     lst.clear();
 

@@ -383,6 +383,17 @@ av_contact_s * av_contacts_c::find_inprogress_any( contact_root_c *c )
     return nullptr;
 }
 
+bool av_contacts_c::is_any_inprogress()
+{
+    SIMPLELOCK(sync);
+
+    for (av_contact_s *avc : m_contacts)
+        if (av_contact_s::AV_INPROGRESS == avc->core->state && !avc->core->c->getkey().is_conference())
+            return true;
+    return false;
+
+}
+
 bool av_contacts_c::is_any_inprogress( contact_root_c *cr )
 {
     SIMPLELOCK( sync );
@@ -484,7 +495,7 @@ void av_contacts_c::del( int tag )
 
 void av_contacts_c::stop_all_av()
 {
-    gmsg<ISOGM_NOTICE>( nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS ).send();
+    notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
 
     ts::tmp_pointers_t< contact_root_c, 0 > tmp;
     for ( av_contact_s *av : m_contacts )

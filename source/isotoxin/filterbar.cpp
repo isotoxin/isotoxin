@@ -345,9 +345,9 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
         {
             contact_root_c *cr = ts::ptr_cast<contact_root_c *>(&c);
 
-            if (cr->is_full_search_result())
+            if (cr->flag_full_search_result)
             {
-                cr->full_search_result(false);
+                cr->flag_full_search_result = false;
                 if (cr->gui_item) cr->gui_item->update_text();
             }
 
@@ -381,7 +381,7 @@ void gui_filterbar_c::apply_full_text_search_result()
     for (found_item_s &itm : found_stuff.items)
         if (contact_root_c *c = contacts().rfind(itm.historian))
         {
-            c->full_search_result(true);
+            c->flag_full_search_result = true;
             if (c->gui_item)
             {
                 c->gui_item->update_text();
@@ -625,12 +625,24 @@ ts::uint32 gui_filterbar_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass == 0 && CFG_LANGUAGE == ch.sp)
     {
+        /*
         if (option1)
         {
             show_options(false);
             show_options(true);
         }
         getengine().redraw();
+        */
+
+        // blink filterbar
+
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+            prf().set_options(0, UIOPT_TAGFILETR_BAR);
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, UIOPT_TAGFILETR_BAR).send();
+
+            prf().set_options(UIOPT_TAGFILETR_BAR, UIOPT_TAGFILETR_BAR);
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, UIOPT_TAGFILETR_BAR).send();
+        DEFERRED_EXECUTION_BLOCK_END(0);
     }
 
     return 0;

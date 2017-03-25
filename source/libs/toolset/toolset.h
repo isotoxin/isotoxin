@@ -8,6 +8,8 @@
 
 #ifdef _WIN32
 #define WINDOWS_ONLY
+#define TS_LENDIAN 1
+#define TS_BENDIAN 0
 #else
 #define WINDOWS_ONLY __error
 #include <stddef.h>
@@ -15,6 +17,14 @@
 #ifdef _NIX
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE 1
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define TS_LENDIAN 1
+#define TS_BENDIAN 0
+#endif
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define TS_LENDIAN 0
+#define TS_BENDIAN 1
+#endif
 #endif // _NIX
 
 #pragma pack (push, 1)
@@ -221,7 +231,9 @@ struct memory_type_setup
 #endif
 
 template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ N ];
+template <size_t N> char(&__STRLENHELPER(const char(&array)[N]))[N];
 #define ARRAY_SIZE( a ) (sizeof(__ARRAYSIZEHELPER(a)))
+#define ASTR_LENGTH( a ) (sizeof(__STRLENHELPER(a))-1)
 #define ARRAY_WRAPPER( a ) ts::array_wrapper_c<const std::remove_reference<decltype(a[0])>::type>(a, ARRAY_SIZE(a))
 
 
@@ -648,6 +660,14 @@ INLINE word as_word(uint64 aa) {return static_cast<word>(aa & 0xFFFF);}
 
 INLINE dword as_dword(uint64 aa) {return static_cast<dword>(aa & 0xFFFFFFFF);}
 
+#if TS_LENDIAN
+template<typename T> INLINE T lendian(T i) { return i; }
+#endif
+#if TS_BENDIAN
+TS_STATIC_CHECK(false, "write b->l functions");
+#endif
+#define LENDIAN(x) ts::lendian(x)
+TS_STATIC_CHECK(TS_LENDIAN + TS_BENDIAN == 1, "something wrong");
 
 template <typename T, aint factor = sizeof(T)>
 class aligned

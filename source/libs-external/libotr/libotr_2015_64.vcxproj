@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\auth.c" />
+    <ClCompile Include="src\b64.c" />
+    <ClCompile Include="src\context.c" />
+    <ClCompile Include="src\context_priv.c" />
+    <ClCompile Include="src\dh.c" />
+    <ClCompile Include="src\instag.c" />
+    <ClCompile Include="src\mem.c" />
+    <ClCompile Include="src\message.c" />
+    <ClCompile Include="src\privkey.c" />
+    <ClCompile Include="src\proto.c" />
+    <ClCompile Include="src\sm.c" />
+    <ClCompile Include="src\tlv.c" />
+    <ClCompile Include="src\userstate.c" />
+    <ClCompile Include="toolkit\aes.c" />
+    <ClCompile Include="toolkit\ctrmode.c" />
+    <ClCompile Include="toolkit\parse.c" />
+    <ClCompile Include="toolkit\readotr.c" />
+    <ClCompile Include="toolkit\sesskeys.c" />
+    <ClCompile Include="toolkit\sha1hmac.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\auth.h" />
+    <ClInclude Include="src\b64.h" />
+    <ClInclude Include="src\context.h" />
+    <ClInclude Include="src\context_priv.h" />
+    <ClInclude Include="src\dh.h" />
+    <ClInclude Include="src\instag.h" />
+    <ClInclude Include="src\mem.h" />
+    <ClInclude Include="src\message.h" />
+    <ClInclude Include="src\privkey-t.h" />
+    <ClInclude Include="src\privkey.h" />
+    <ClInclude Include="src\proto.h" />
+    <ClInclude Include="src\serial.h" />
+    <ClInclude Include="src\sm.h" />
+    <ClInclude Include="src\tlv.h" />
+    <ClInclude Include="src\userstate.h" />
+    <ClInclude Include="src\version.h" />
+    <ClInclude Include="toolkit\aes.h" />
+    <ClInclude Include="toolkit\ctrmode.h" />
+    <ClInclude Include="toolkit\parse.h" />
+    <ClInclude Include="toolkit\readotr.h" />
+    <ClInclude Include="toolkit\sesskeys.h" />
+    <ClInclude Include="toolkit\sha1hmac.h" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{81C7C534-802B-470E-8EA5-6A1EB287E7BD}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>libotr</RootNamespace>
+    <ProjectName>libotr</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\libs.common.2015_64.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)gcrypt;$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

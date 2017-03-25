@@ -148,9 +148,10 @@ contact_root_c *get_historian(contact_c *sender, contact_c * receiver)
     return historian;
 }
 
-contact_c::contact_c( const contact_key_s &key ):key(key)
+contact_c::contact_c( const contact_key_s &key ):key(key), sombits(0)
 {
-    options().unmasked().set(F_ALLOWACCEPTDATA); // see setup
+    state = CS_OFFLINE;
+    flag_allowacceptdata = 1; // see setup
 }
 contact_c::contact_c()
 {
@@ -176,11 +177,10 @@ void contact_c::setup(const contacts_s * c, time_t nowtime)
     set_customname(c->customname);
     set_statusmsg(c->statusmsg);
     set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
-    options().setup(c->options);
+    sombits = (c->options & 0xffff) | (sombits & (~0xffffull));
     protodata = c->protodata;
-    options().unmasked().init(F_ALLOWACCEPTDATA, protodata.size() == 0); // zero data? so, any data from protocol must be accepted
-
-    if (opts.is(F_UNKNOWN))
+    flag_allowacceptdata = protodata.size() == 0; // zero data? so, any data from protocol must be accepted
+    if (is_unknown)
         set_state(CS_UNKNOWN);
 }
 
@@ -190,7 +190,7 @@ bool contact_c::save(contacts_s * c) const
         return false; // do not save unknown contacts from conferences
 
     c->metaid = getmeta()->getkey().contactid;
-    c->options = get_options();
+    c->options = sombits & 0xffff;
     c->name = get_name(false);
     c->customname = get_customname();
     c->statusmsg = get_statusmsg(false);
@@ -205,7 +205,7 @@ void contact_c::prepare4die(contact_root_c *owner)
 {
     if (nullptr == owner || owner == metacontact)
     {
-        opts.unmasked().set(F_DIP);
+        flag_dip = true;
         metacontact = nullptr; // dec ref count
         if (contact_root_c *r = dynamic_cast<contact_root_c *>(this))
             r->subdelall();
@@ -240,7 +240,7 @@ void contact_c::reselect(int options)
 
 void contact_c::rebuild_system_user_avatar( active_protocol_c *ap )
 {
-    ASSERT( get_options().is(F_SYSTEM_USER) );
+    ASSERT( is_system_user );
     ts::blob_c ablob;
     if ( !ap )
         ap = prf().ap( getkey().protoid );
@@ -286,7 +286,7 @@ void contact_c::accept_call(auto_accept_audio_call_e aa, bool video)
         {
             getmeta()->av( this, true, video );
 
-            FPROTOCALL(accept_call);
+            FPROTOCALL(signal, CONS_ACCEPT_CALL);
 
             const post_s *p = get_historian()->fix_history( MTA_INCOMING_CALL, MTA_CALL_ACCEPTED, getkey(), get_historian()->nowtime() );
             if ( p ) gmsg<ISOGM_SUMMON_POST>( *p, true ).send();
@@ -307,7 +307,7 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
     if ( is_meta() )
     {
         ts::ptr_cast<contact_root_c *>( this )->subiterate( [](contact_c *c) {
-            if ( c->is_av() )
+            if ( c->flag_is_av )
                 c->b_hangup( RID(), nullptr );
         } );
         return true;
@@ -320,7 +320,7 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
         TSDEL( ownitm );
     }
 
-    FPROTOCALL(stop_call);
+    FPROTOCALL(signal, CONS_STOP_CALL);
 
     if (CHECK(getmeta()))
     {
@@ -342,11 +342,11 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
 bool contact_c::b_call(RID, GUIPARAM is_video)
 {
     ASSERT( !is_rootcontact() );
-    if (!ASSERT(!is_av())) return true;
+    if (!ASSERT(!flag_is_av)) return true;
 
     FPROTOCALL(call, 60, is_video != nullptr);
 
-    gmsg<ISOGM_NOTICE>( get_historian(), this, NOTICE_CALL ).send();
+    notice_t<NOTICE_CALL>(get_historian(), this).send();
     get_historian()->calltone(this, is_video ? CALLTONE_VIDEO_CALL : CALLTONE_VOICE_CALL);
 
     return true;
@@ -361,7 +361,7 @@ bool contact_c::b_cancel_call(RID, GUIPARAM par)
     TSDEL(ownitm);
 
     if (get_historian()->calltone(this, CALLTONE_HANGUP))
-        FPROTOCALL(stop_call);
+        FPROTOCALL(signal, CONS_STOP_CALL);
 
     return true;
 }
@@ -379,7 +379,7 @@ bool contact_c::b_reject_call(RID, GUIPARAM par)
     if (CHECK(getmeta()))
     {
         if ( getmeta()->ringtone( this, false ) )
-            FPROTOCALL(stop_call);
+            FPROTOCALL(signal, CONS_STOP_CALL);
 
         const post_s *p = get_historian()->fix_history(MTA_INCOMING_CALL, MTA_INCOMING_CALL_REJECTED, getkey(), get_historian()->nowtime());
         if (p) gmsg<ISOGM_SUMMON_POST>( *p, true ).send();
@@ -399,9 +399,9 @@ bool contact_c::b_accept(RID, GUIPARAM par)
         TSDEL(ownitm);
     }
 
-    FPROTOCALL(accept);
+    FPROTOCALL(signal, CONS_ACCEPT_INVITE);
 
-    opts.unmasked().set(F_JUST_ACCEPTED);
+    flag_just_accepted = true;
 
     get_historian()->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST, getkey());
     get_historian()->reselect(0);
@@ -411,7 +411,7 @@ bool contact_c::b_accept(RID, GUIPARAM par)
 }
 bool contact_c::b_reject(RID, GUIPARAM par)
 {
-    FPROTOCALL( reject );
+    FPROTOCALL(signal, CONS_REJECT_INVITE);
 
     contacts().kill( get_historian()->getkey() );
 
@@ -458,17 +458,17 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
 
     if (file_transfer_s *ft = g_app->find_file_transfer_by_iutag(utag))
     {
-        ts::wstr_c downf = prf().download_folder();
-        path_expand_env(downf, get_historian()->contactidfolder());
+        ts::wstr_c downf = prf().download_folder_prepared(get_historian());
         ts::make_path(downf, 0);
 
         ts::wstr_c title(TTT("Save file",179));
         ts::extensions_s exts;
-        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(downf, ft->filename, exts, title);
+        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(g_app->file_save_as_path.is_empty() ? downf : g_app->file_save_as_path, ft->filename, exts, title);
 
         if (!fn.is_empty())
         {
-            uint64 avaspace = ts::get_free_space( ts::fn_get_path( fn ) );
+            ts::wstr_c path(ts::fn_get_path(fn));
+            uint64 avaspace = ts::get_free_space(path);
             if ( ft->filesize > avaspace )
             {
                 struct handlers
@@ -510,8 +510,11 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
                 TSDEL( ownitm );
 
                 ft->prepare_fn( fn, true );
-                if (active_protocol_c *ap = prf().ap( ft->sender.protoid ))
-                    ap->file_accept( ft->i_utag, 0 );
+                if (active_protocol_c *ap = prf().ap(ft->sender.protoid))
+                {
+                    g_app->file_save_as_path = path;
+                    ap->file_accept(ft->i_utag, 0);
+                }
             }
 
         }
@@ -540,7 +543,7 @@ bool contact_c::b_refuse_file(RID, GUIPARAM par)
 
 bool contact_c::set_protodata(const ts::blob_c &d)
 {
-    if (options().unmasked().is(F_ALLOWACCEPTDATA) && d != protodata)
+    if (flag_allowacceptdata && d != protodata)
     {
         // accept only of data already sent to protocol
         protodata = d;
@@ -698,10 +701,10 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_PROTO_CRASHED>&crashed )
         {
             if ( c->get_state() == CS_ONLINE && c->getkey().protoid == (unsigned)crashed.id )
             {
-                if ( c->is_av() )
+                if ( c->flag_is_av )
                 {
                     c->get_historian()->stop_av();
-                    gmsg<ISOGM_NOTICE>( nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS ).send();
+                    notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
                 }
 
                 c->set_state( CS_OFFLINE );
@@ -741,7 +744,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROTO_LOADED>&l)
                 if (c->getkey().protoid == (unsigned)l.id)
                 {
                     ap->send_proto_data(c->getkey().gidcid(), c->get_protodata());
-                    c->options().unmasked().set( contact_c::F_ALLOWACCEPTDATA );
+                    c->flag_allowacceptdata = true;
                 }
             }
         }
@@ -946,7 +949,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&msg)
             g->set_name( row.other.name );
             g->set_readtime( row.other.readtime );
             g->set_state( CS_OFFLINE );
-            g->options().unmasked().set( contact_c::F_HISTORY_NEED_LOAD );
+            g->flag_history_need_load = true;
             g->set_imnb( row.other.flags.is(conference_s::F_SUPPRESS_NOTIFICATIONS) ? IMB_DONT_NOTIFY : IMB_DEFAULT );
             g->set_comment( row.other.comment );
             g->set_tags( row.other.tags );
@@ -1004,6 +1007,26 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&msg)
             return false;
         })) { if (row->deleted()) prf().changed(); }
 
+        return 0;
+    }
+
+    if (msg.tabi == pt_folder_share)
+    {
+        //uint64 nowminusweek = ts::now() - SEC_PER_DAY * 7; // keep unused recv shares 7 days
+        // cleanup shares
+        TS_STATIC_CHECK(pt_folder_share > pt_contacts, "folder share table must be loaded after contacts");
+        while (auto *row = prf().get_table_folder_share().find<true>([/*nowminusweek*/](folder_share_s &fsh) {
+
+            contact_root_c *c = contacts().rfind(fsh.historian);
+            if (c == nullptr) return true;
+
+            //if (fsh.usetime < nowminusweek && fsh.t == folder_share_s::FST_RECV)
+              //  return true;
+
+            return false;
+        })) {
+            if (row->deleted()) prf().changed();
+        }
         return 0;
     }
 
@@ -1111,6 +1134,7 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
 
         });
         prf().kill_history( cc->getkey() );
+        prf().del_folder_share_by_historian(cc->getkey());
         killcc = true;
     } else
     {
@@ -1233,9 +1257,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
         if ( prf().misc_flags() & PMISCF_SAVEAVATARS )
         {
             ts::wstr_c downf = prf().download_folder_images();
-            path_expand_env( downf, c->get_historian()->contactidfolder() );
+            path_expand_env( downf, c->get_historian() );
             ts::make_path( downf, 0 );
-            if ( ava.data.size() && ts::dir_present( downf ) )
+            if ( ava.data.size() && ts::is_dir_exists( downf ) )
                 ava.data.save_to_file( ts::fn_join( downf, CONSTWSTR( "avatar_" ) ).append_as_uint( ava.tag ).append( CONSTWSTR( ".png" ) ) );
         }
     }
@@ -1281,7 +1305,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 HOLD(g_app->main).engine().redraw( &ir );
 
                 iterate_proto_contacts( [&]( contact_c *c )->bool {
-                    if ( c->get_options().is( contact_c::F_SYSTEM_USER ) && c->getkey().protoid == contact.apid )
+                    if ( c->is_system_user && c->getkey().protoid == contact.apid )
                         c->rebuild_system_user_avatar(ap);
                     return true;
                 } );
@@ -1347,7 +1371,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
             c_confa = c->confa;
 
             bool audio = contact.key.audio != 0;
-            if ( c_confa->is_av() != audio )
+            if ( (bool)c_confa->flag_is_av != audio )
             {
                 c_confa->av( nullptr, audio, false );
                 refilter = true;
@@ -1361,18 +1385,22 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
             if ( 0 != ( contact.mask & CDM_NAME ) )
             {
-                bool name_changed = false;
-
-                if ( !contact.name.is_empty() )
-                    c_confa->set_name( contact.name ), name_changed = true;
-                else if ( c_confa->get_name().is_empty() )
-                    c_confa->set_name( CONSTASTR( "Conference #" ) + ts::amake<int>( calc_conferences_amount() ) ), name_changed = true;
-
-                if (name_changed)
-                    c->update_name();
-
                 contact.mask &= ~CDM_NAME;
+
+                if (!contact.name.is_empty())
+                {
+                    c_confa->set_name(contact.name);
+                    c->update_name();
+                } else if (c_confa->get_name().is_empty())
+                    goto set_confa_autoname;
             }
+            else if (c_confa->name.is_empty())
+            {
+                set_confa_autoname:
+                c_confa->set_name(CONSTASTR("Conference #") + ts::amake<int>(calc_conferences_amount()));
+                c->update_name();
+            }
+
 
             if ( 0 != ( contact.mask & CDM_MEMBERS ) )
             {
@@ -1395,7 +1423,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 if ( wasmembers > 0 && !c_confa->subcount() )
                     play_sound( snd_hangup, false );
 
-                if ( c_confa->subcount() && c_confa->is_av() )
+                if ( c_confa->subcount() && c_confa->flag_is_av )
                     c_confa->av(nullptr, true, false); // update av for members
 
                 refilter |= wasmembers != c_confa->subcount();
@@ -1487,8 +1515,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     h->subadd( c_sub );
                     refilter = true;
 
-                    if (contact.key.allowinvite )
-                        c_sub->options().set( contact_c::F_ALLOW_INVITE );
+                    if (contact.key.allowinvite)
+                        c_sub->is_allow_invite = true;;
 
                     prf().purifycontact( c_sub->getkey() );
                     serious_change = contact.apid;
@@ -1517,7 +1545,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 c_confa = ts::ptr_cast<contact_root_c *>(c_sub);
                 c_sub = nullptr;
 
-            } else if (c_sub->get_options().is(contact_c::F_UNKNOWN))
+            } else if (c_sub->is_unknown)
             {
 
             } else
@@ -1530,15 +1558,15 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if ( contact.key.sysuser && c_sub )
     {
         contact.state = CS_OFFLINE; // to keep this contact in db
-        c_sub->options().clear( contact_c::F_ALLOW_INVITE );
-        c_sub->get_historian()->options().set( contact_c::F_SYSTEM_USER );
+        c_sub->is_allow_invite = false;
+        c_sub->get_historian()->is_system_user = true;
 
         active_protocol_c *ap = prf().ap( c_sub->getkey().protoid );
         if (ap) c_sub->set_name( ap->get_name() );
 
-        if ( !c_sub->get_options().is( contact_c::F_SYSTEM_USER ) || c_sub->avatar_tag() != 1 )
+        if ( !c_sub->is_system_user || c_sub->avatar_tag() != 1 )
         {
-            c_sub->options().set( contact_c::F_SYSTEM_USER );
+            c_sub->is_system_user = true;
             c_sub->rebuild_system_user_avatar(ap);
         }
         RESETFLAG( contact.mask, CDM_AVATAR_TAG );
@@ -1600,6 +1628,12 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if (0 != (contact.mask & CDM_DETAILS) && c_sub)
         c_sub->set_details(contact.details);
 
+    if (0 != (contact.mask & CDM_CAPS) && c_sub)
+    {
+        c_sub->flag_caps_received = 1;
+        c_sub->flag_support_folder_share = (contact.caps & CCAPS_SUPPORT_SHARE_FOLDER) != 0;
+    }
+
     if (0 != (contact.mask & CDM_STATE) && c_confa && c_confa->get_state() != contact.state)
     {
         if ( c_confa->get_state() == CS_ONLINE && contact.state == CS_OFFLINE )
@@ -1609,8 +1643,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
         } else if ( c_confa->get_state() == CS_OFFLINE && contact.state == CS_ONLINE )
         {
-            DEFERRED_EXECUTION_BLOCK_BEGIN( 0 )
-                gmsg<ISOGM_NOTICE>( (contact_root_c *)param, (contact_c *)param, NOTICE_CONFERENCE ).send();
+            DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+                notice_t<NOTICE_CONFERENCE>((contact_root_c *)param).send();
             DEFERRED_EXECUTION_BLOCK_END( c_confa );
         }
 
@@ -1673,16 +1707,51 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
                             DEFERRED_EXECUTION_BLOCK_END(c_sub);
                         }
+                        if (metaoffline)
+                        {
+                            DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+
+                                contact_c *c_sub = (contact_c *)param;
+                                contact_root_c *hst = c_sub->get_historian();
+
+                                if (auto *row = prf().get_table_folder_share().find<true>([hst](folder_share_s &fsh) {
+
+                                    if (fsh.t != folder_share_s::FST_SEND)
+                                        return false;
+
+                                    if (g_app->find_folder_share_by_utag(fsh.utag))
+                                        return false;
+
+                                    if (fsh.historian == hst->getkey())
+                                    {
+                                        g_app->add_folder_share(fsh.historian, fsh.name, folder_share_s::FST_SEND, fsh.utag, fsh.path);
+                                        notice_t<NOTICE_FOLDERSHARE>(fsh.utag).send();
+                                        return true;
+                                    }
+
+                                    return false;
+                                }))
+                                {
+                                    row->other.usetime = ts::now();
+                                    row->changed();
+                                    prf().changed();
+
+                                }
+
+                            DEFERRED_EXECUTION_BLOCK_END(c_sub);
+
+                        }
+
                     }
 
                 if ( oldst == CS_ONLINE )
                     if (contact.state == CS_OFFLINE || contact.state == CS_UNKNOWN)
                     {
                         play_sound(snd_friend_offline, false);
-                        if (c_sub->is_av())
+                        if (c_sub->flag_is_av)
                         {
                             c_sub->get_historian()->stop_av();
-                            gmsg<ISOGM_NOTICE>(nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS).send();
+                            notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
                         }
                     }
             }
@@ -1718,11 +1787,11 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     c_sub->set_statusmsg( ts::str_c() );
                 else if ( oldst == CS_INVITE_SEND )
                 {
-                    c_sub->options().unmasked().set( contact_c::F_JUST_REJECTED );
-                    gmsg<ISOGM_NOTICE>( c_sub->get_historian(), c_sub, NOTICE_FRIEND_REQUEST_SEND_OR_REJECT ).send();
+                    c_sub->flag_just_rejected = true;
+                    notice_t<NOTICE_FRIEND_REQUEST_SEND_OR_REJECT>(c_sub).send();
                 }
             } else
-                c_sub->options().unmasked().clear( contact_c::F_JUST_REJECTED );
+                c_sub->flag_just_rejected = false;
 
             if ( CS_UNKNOWN == oldst && c_sub->getmeta() == nullptr )
             {
@@ -1760,7 +1829,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 prf().set_avatar(c_sub->getkey(), ts::blob_c(), 0);
             }
             else if (active_protocol_c *ap = prf().ap(c_sub->getkey().protoid))
-                ap->avatar_data_request( contact.key );
+                ap->signal(contact.key, REQS_AVATAR);
 
             c_sub->redraw();
             if (!is_self) contact_activity(c_sub->get_historian()->getkey());
@@ -1803,9 +1872,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     self->redraw();
     if ( g_app->F_NEWVERSION() )
     {
-        ts::str_c nvs( nv.ver );
-        if ( nv.version64 ) nvs.append( CONSTASTR("/64") );
-        gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nvs ).send();
+        notice_t<NOTICE_NEWVERSION>(nv.ver, nv.version64).send();
     }
 
     play_sound( snd_new_version, false );
@@ -1867,7 +1934,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             {
                 // query
                 if (file_transfer_s *ft = g_app->find_file_transfer_by_iutag(ifl.i_utag))
-                    ft->query(ifl.offset, (int)ifl.filesize);
+                    ft->query(ifl.offset, static_cast<int>(ifl.filesize));
                 return 0;
             }
 
@@ -1875,11 +1942,15 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             if (sender == nullptr) return 0; // sender. no sender - no message
             contact_root_c *historian = get_historian(sender, &get_self());
 
+            ts::wstr_c fnc(ifl.filename);
+            fix_path(fnc, FNO_MAKECORRECTNAME);
+
             if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool
                 {
                     if (uftr.upload) return false;
                     if (ifl.sender != sender->getkey()) return false;
-                    return ifl.filename.equals( uftr.filename ) && ifl.filesize == uftr.filesize;
+
+                    return fnc.equals( uftr.filename ) && ifl.filesize == uftr.filesize;
                 }))
             {
                 // resume
@@ -1896,9 +1967,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                 tft.other.utag = prf().getuid();
                 tft.other.msgitem_utag = guiitm_utag;
                 tft.other.filesize = ifl.filesize;
-                tft.other.filename = ifl.filename;
+                tft.other.filename = fnc;
 
-                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, 0, ifl.filename, ifl.filesize))
+                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, 0, fnc, ifl.filesize))
                 {
                     g_app->new_blink_reason(historian->getkey()).file_download_progress_add(ft->utag);
 
@@ -1916,16 +1987,21 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                 not_resume:
                 if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, 0, ifl.filename, ifl.filesize))
                 {
-                    g_app->new_blink_reason(historian->getkey()).file_download_request_add(ft->utag);
                     ft->i_utag = ifl.i_utag;
+
+                    if (ft->folder_share_utag)
+                    {
+                        ft->auto_confirm();
+                        break;
+                    }
+
+                    g_app->new_blink_reason(historian->getkey()).file_download_request_add(ft->utag);
 
                     if (ft->confirm_required())
                     {
                     confirm_req:
                         play_sound(snd_incoming_file, false);
-                        gmsg<ISOGM_NOTICE> n( historian, sender, NOTICE_FILE, ft->text_for_notice() );
-                        n.utag = ifl.i_utag;
-                        n.send();
+                        notice_t<NOTICE_FILE>(historian, sender, ft->filename, ft->filesize, ifl.i_utag).send();
                     } else if (!ft->auto_confirm())
                         goto confirm_req;
                 }
@@ -1954,13 +2030,22 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
         break;
     case FIC_DISCONNECT:
     case FIC_UNKNOWN:
+    case FIC_STUCK:
     case FIC_DONE:
         DMSG("fkill " << ifl.i_utag << (int)ifl.fctl );
         if ( file_transfer_s *ft = g_app->find_file_transfer_by_iutag( ifl.i_utag ) )
         {
-            unfinished_file_transfer_s uft;
-            ft->kill( ifl.fctl, &uft );
-            file_transfer_s::upd_message_item(uft);
+            if (ft->folder_share_utag == 0)
+            {
+                unfinished_file_transfer_s uft;
+                ft->kill(ifl.fctl, &uft);
+                file_transfer_s::upd_message_item(uft);
+            }
+            else
+            {
+                ft->kill(ifl.fctl, nullptr);
+            }
+
         }
         break;
     }
@@ -2047,12 +2132,12 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     switch (imsg.mt)
     {
     case MTA_CALL_STOP:
-        if (historian->is_ringtone())
+        if (historian->flag_is_ringtone)
         {
             const post_s * p = historian->fix_history(MTA_INCOMING_CALL, MTA_INCOMING_CALL_CANCELED, sender->getkey(), historian->nowtime());
             if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
             historian->ringtone( sender, false );
-        } else if (sender->is_av())
+        } else if (sender->flag_is_av)
         {
             // hangup by remote peer
 
@@ -2067,17 +2152,66 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
             const post_s * p = historian->fix_history(MTA_CALL_ACCEPTED, MTA_HANGUP, sender->getkey(), historian->nowtime(), times.is_empty() ? nullptr : &times);
             if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
             historian->av( sender, false, false );
-        } else if (sender->is_calltone())
+        } else if (sender->flag_is_calltone)
         {
             historian->calltone( sender, CALLTONE_HANGUP );
         }
         return 0;
     case MTA_CALL_ACCEPTED__:
         play_sound(snd_call_accept, false);
-        if (!sender->is_calltone()) // ignore this message if no calltone
+        if (!sender->flag_is_calltone) // ignore this message if no calltone
             return 0;
         imsg.mt = MTA_CALL_ACCEPTED; // replace type of message here
         break;
+    case MTA_FOLDER_SHARE_ANNONUCE__:
+        play_sound(snd_folder_share, false);
+
+        {
+            folder_share_c *fsh = g_app->add_folder_share(historian->getkey(), imsg.msgutf8, folder_share_s::FST_RECV, imsg.utag);
+
+            auto &rd = fsh->getcreate(imsg.apid);
+
+            auto &tbl = prf().get_table_folder_share();
+            auto *row = tbl.find<true>([&](const folder_share_s &sh) {
+                return sh.utag == imsg.utag;
+            });
+
+            if (row)
+            {
+                ASSERT(row->other.t == folder_share_s::FST_RECV);
+                ASSERT(row->other.historian == fsh->get_hkey());
+
+                if (ts::is_dir_exists(row->other.path))
+                {
+                    row->other.usetime = ts::now();
+                    row->changed();
+                    prf().changed();
+
+                    fsh->set_path(row->other.path, false);
+                    fsh->set_name(row->other.name, false);
+
+                    static_cast<folder_share_recv_c *>(fsh)->accept(row->other.path);
+                }
+                else
+                {
+                    row->deleted();
+                    prf().changed();
+                    goto notsaved;
+                }
+
+            }
+            else
+            {
+                notsaved:
+                rd.announced = 1;
+                g_app->new_blink_reason(historian->getkey()).folder_share(imsg.utag);
+            }
+
+            notice_t<NOTICE_FOLDERSHARE>(imsg.utag).send();
+
+        }
+
+        return 0;
     case MTA_SYSTEM_MESSAGE:
         format_system_message( imsg.msgutf8 );
         if ( imsg.msgutf8.is_empty() )
@@ -2353,6 +2487,36 @@ void contact_root_c::toggle_tag(const ts::asptr &t)
     contacts().rebuild_tags_bits();
 }
 
+bool contact_root_c::match_tags(int bitags) const
+{
+    if (bitags & (1 << BIT_ALL)) return true;
+
+    const ts::buf0_c &enabledbits = contacts().get_tags_bits();
+
+    bool bitag = false;
+    if (bitags & (1 << BIT_UNTAGGED))
+    {
+        if (!tags_bits.is_any_bit()) return true;
+        bitag = true;
+    }
+
+    if (bitags & (1 << BIT_ONLINE))
+    {
+        contact_state_e cs = get_meta_state();
+        if (CS_ONLINE == cs || contact_state_check == cs)
+            return true;
+        bitag = true;
+    }
+
+    if (g_app->find_blink_reason(getkey(), false) != nullptr)
+        return true;
+
+    if (enabledbits.size() == 0) return !bitag;
+    return contacts().get_tags_bits().is_any_common_bit(tags_bits);
+}
+
+
+
 void contact_root_c::rebuild_tags_bits(const ts::astrings_c &allhts)
 {
     tags_bits.clear();
@@ -2424,7 +2588,7 @@ void contact_root_c::subdelall()
 contact_c * contact_root_c::subget_only_marked_defaul() const
 {
     for (contact_c *c : subcontacts)
-        if (c->options().is(contact_c::F_DEFALUT))
+        if (c->is_default)
             return c;
     return nullptr;
 }
@@ -2446,14 +2610,14 @@ contact_c * contact_root_c::subget_smart(why_this_subget_e &why) const
     }
 
     for (contact_c *c : subcontacts)
-        if (c->options().is(contact_c::F_DEFALUT) && c->get_state() == CS_ONLINE)
+        if (c->is_default && c->get_state() == CS_ONLINE)
         {
             why = WTS_MARKED_DEFAULT;
             return c;
         }
 
     for (contact_c *c : subcontacts)
-        if (c->options().unmasked().is(contact_c::F_LAST_ACTIVITY) && c->get_state() == CS_ONLINE)
+        if (c->flag_last_activity && c->get_state() == CS_ONLINE)
         {
             why = WTS_BY_LAST_ACTIVITY;
             return c;
@@ -2463,7 +2627,7 @@ contact_c * contact_root_c::subget_smart(why_this_subget_e &why) const
     int prior = 0;
     contact_state_e st = contact_state_check;
     bool real_offline_messaging = false;
-    bool is_default = false;
+    bool is_default1 = false;
 
     for (contact_c *c : subcontacts)
     {
@@ -2484,7 +2648,7 @@ contact_c * contact_root_c::subget_smart(why_this_subget_e &why) const
                     if (rom && !real_offline_messaging)
                         return true;
 
-                    if (c->options().is(contact_c::F_DEFALUT) && !is_default)
+                    if (c->is_default && !is_default1)
                         return true;
 
                     if (ap->get_priority() > prior)
@@ -2493,7 +2657,7 @@ contact_c * contact_root_c::subget_smart(why_this_subget_e &why) const
 
                 if (CS_ONLINE == st && CS_ONLINE == c->get_state())
                 {
-                    ASSERT(!c->options().is(contact_c::F_DEFALUT)); // because default + online the best choice
+                    ASSERT(!c->is_default); // because default + online the best choice
 
                     if (ap->get_priority() > prior)
                         return true;
@@ -2508,20 +2672,20 @@ contact_c * contact_root_c::subget_smart(why_this_subget_e &why) const
                 prior = ap->get_priority();
                 st = c->get_state();
                 real_offline_messaging = 0 != (ap->get_features() & PF_OFFLINE_MESSAGING);
-                is_default = c->options().is(contact_c::F_DEFALUT);
+                is_default1 = c->is_default;
             }
         }
     }
 
     ASSERT(target_contact);
 
-    why = is_default ? WTS_MARKED_DEFAULT : WTS_ONLY_ONE;
+    why = is_default1 ? WTS_MARKED_DEFAULT : WTS_ONLY_ONE;
     return target_contact;
 }
 
 ts::str_c contact_root_c::compile_pubid() const
 {
-    ASSERT(is_meta());
+    ASSERT(is_meta() || getkey().is_conference());
     ts::str_c x;
     for (contact_c *c : subcontacts)
         x.append('~', c->get_pubid_desc());
@@ -2551,6 +2715,14 @@ ts::str_c contact_root_c::compile_statusmsg() const
         if (x.find_pos(c->get_statusmsg(false)) < 0)
             x.append_char('~').append(c->get_statusmsg(false));
     return x;
+}
+
+ts::wstr_c contact_root_c::showname() const
+{
+    ts::str_c n = get_customname();
+    if (n.is_empty()) n = get_name();
+    text_adapt_user_input(n);
+    return ts::from_utf8(n);
 }
 
 contact_state_e contact_root_c::get_meta_state() const
@@ -2600,7 +2772,7 @@ void contact_root_c::subactivity(const contact_key_s &ck)
     why_this_subget_e why;
     contact_c *old = subget_smart(why);
     for (contact_c *c : subcontacts)
-        c->options().unmasked().init(contact_c::F_LAST_ACTIVITY, c->getkey() == ck);
+        c->flag_last_activity = c->getkey() == ck;
 
     if (old != subget_smart(why))
         g_app->update_protos_head();
@@ -2926,9 +3098,9 @@ void contact_root_c::load_history( ts::aint n_last_items )
     if ( getkey().is_conference() && pubid.is_empty() )
         return;
 
-    if ( n_last_items < 0 )
+    if (n_last_items < 0)
     {
-        if ( !options().unmasked().is( F_HISTORY_NEED_LOAD ) )
+        if (!flag_history_need_load)
             return;
 
         // WHOLE! WHOLE HISTORY!!!
@@ -2956,10 +3128,10 @@ void contact_root_c::load_history( ts::aint n_last_items )
         l.mt = getkey().is_conference() ? message_type_app_values : 0;
 
         prf().load_history( getkey(), loader::alcpost, &l );
-        options().unmasked().clear( F_HISTORY_NEED_LOAD );
+        flag_history_need_load = false;
         return;
     }
-    options().unmasked().clear( F_HISTORY_NEED_LOAD );
+    flag_history_need_load = false;
     time_t before = 0;
     if (history.size()) before = history.get(0)->recv_time;
     ts::tmp_tbuf_t<int> ids;
@@ -3013,9 +3185,9 @@ const avatar_s *contact_root_c::get_avatar() const
     const avatar_s * r = nullptr;
     for (const contact_c *c : subcontacts)
     {
-        if (c->get_options().is(contact_c::F_AVA_DEFAULT) && c->get_avatar())
+        if (c->is_ava_default && c->get_avatar())
             return c->get_avatar();
-        if (c->get_avatar() && (c->get_options().is(contact_c::F_DEFALUT) || r == nullptr))
+        if (c->get_avatar() && (c->is_default || r == nullptr))
             r = c->get_avatar();
     }
     return r;
@@ -3103,7 +3275,7 @@ void contact_root_c::execute_message_handler( const ts::asptr &utf8msg )
     } // str ref should be decremented now
 
     mhr->tmpp = cfg().temp_folder_handlemsg();
-    path_expand_env( mhr->tmpp, contactidfolder() );
+    path_expand_env( mhr->tmpp, this );
     ts::make_path( mhr->tmpp, 0 );
 
     mhr->tag = gui->get_free_tag();
@@ -3121,10 +3293,6 @@ bool contact_root_c::keep_history() const
     return prf_options().is(MSGOP_KEEP_HISTORY);
 }
 
-ts::wstr_c contact_root_c::contactidfolder() const
-{
-    return ts::wmake<uint>(getkey().contactid);
-}
 
 void contact_root_c::send_file(ts::wstr_c fn)
 {
@@ -3165,7 +3333,7 @@ bool contact_root_c::ringtone( contact_c *sub, bool activate, bool play_stop_snd
 {
     if (!activate && get_aaac())
     {
-        ASSERT(!is_ringtone());
+        ASSERT(!flag_is_ringtone);
         return false;
     }
 
@@ -3173,8 +3341,8 @@ bool contact_root_c::ringtone( contact_c *sub, bool activate, bool play_stop_snd
     {
         if ( CS_ROTTEN != c->get_state() )
         {
-            bool wasrt = c->get_options().unmasked().is( F_RINGTONE );
-            c->options().unmasked().init( F_RINGTONE, activate );
+            bool wasrt = c->flag_is_ringtone;
+            c->flag_is_ringtone = activate;
             if ( wasrt && !activate )
             {
                 gmsg<ISOGM_CALL_STOPED>(c).send();
@@ -3190,11 +3358,11 @@ bool contact_root_c::ringtone( contact_c *sub, bool activate, bool play_stop_snd
     else for ( contact_c *c : subcontacts )
         was_stoped |= subringtone( c );
 
-    opts.unmasked().clear(F_RINGTONE);
+    flag_is_ringtone = false;
     for (contact_c *c : subcontacts)
-        if (c->is_ringtone())
+        if (c->flag_is_ringtone)
         {
-            opts.unmasked().set(F_RINGTONE);
+            flag_is_ringtone = true;
             break;
         }
 
@@ -3209,7 +3377,7 @@ void contact_root_c::av( contact_c *sub, bool f, bool camera_ )
     if (getkey().is_conference())
     {
         ASSERT( getkey().temp_type == TCT_CONFERENCE );
-        opts.unmasked().init( F_AV_INPROGRESS, f );
+        flag_is_av = f;
 
         if ( f )
         {
@@ -3231,8 +3399,8 @@ void contact_root_c::av( contact_c *sub, bool f, bool camera_ )
 
     auto subrav = [&]( contact_c *c )
     {
-        bool wasav = c->get_options().unmasked().is( F_AV_INPROGRESS );
-        c->options().unmasked().init( F_AV_INPROGRESS, f );
+        bool wasav = c->flag_is_av;
+        c->flag_is_av = f;
         if ( wasav && !f )
             gmsg<ISOGM_CALL_STOPED>( c ).send();
     };
@@ -3242,17 +3410,17 @@ void contact_root_c::av( contact_c *sub, bool f, bool camera_ )
     else for ( contact_c *c : subcontacts )
         subrav( c );
 
-    bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
-    opts.unmasked().init(F_AV_INPROGRESS, false);
-    for (contact_c *c : subcontacts) if (c->is_av())
+    bool wasav = flag_is_av;
+    flag_is_av = false;
+    for (contact_c *c : subcontacts) if (c->flag_is_av)
     {
-        opts.unmasked().set(F_AV_INPROGRESS);
+        flag_is_av = true;
         break;
     }
 
-    g_app->update_av( this, sub, opts.unmasked().is( F_AV_INPROGRESS ), camera_ );
+    g_app->update_av( this, sub, flag_is_av, camera_ );
 
-    if (wasav && opts.unmasked().is(F_AV_INPROGRESS) != wasav)
+    if (wasav && (bool)flag_is_av != wasav)
         play_sound(snd_hangup, false);
 }
 
@@ -3263,24 +3431,24 @@ bool contact_root_c::calltone( contact_c *sub, calltone_e ctt )
 
     if (sub)
     {
-        vc = sub->options().unmasked().is(F_VIDEOCALL);
-        sub->options().unmasked().init(F_CALLTONE, f);
-        sub->options().unmasked().init(F_VIDEOCALL, ctt == CALLTONE_VIDEO_CALL);
+        vc = sub->flag_is_videocall;
+        sub->flag_is_calltone = f;
+        sub->flag_is_videocall = (ctt == CALLTONE_VIDEO_CALL);
     } 
     else for (contact_c *c : subcontacts)
-        c->options().unmasked().init(F_CALLTONE, ctt == CALLTONE_VOICE_CALL || ctt == CALLTONE_VIDEO_CALL),
-        c->options().unmasked().init(F_VIDEOCALL, ctt == CALLTONE_VIDEO_CALL);
+        c->flag_is_calltone = (ctt == CALLTONE_VOICE_CALL || ctt == CALLTONE_VIDEO_CALL),
+        c->flag_is_videocall = (ctt == CALLTONE_VIDEO_CALL);
 
-    bool wasct = opts.unmasked().is(F_CALLTONE);
-    opts.unmasked().clear(F_CALLTONE);
+    bool wasct = flag_is_calltone;
+    flag_is_calltone = false;
     for (contact_c *c : subcontacts)
-        if (c->is_calltone())
+        if (c->flag_is_calltone)
         {
-            opts.unmasked().set(F_CALLTONE);
+            flag_is_calltone = true;
             break;
         }
 
-    if (opts.unmasked().is(F_CALLTONE) != wasct)
+    if ((bool)flag_is_calltone != wasct)
     {
         if (wasct)
             stop_sound(snd_calltone);
@@ -3371,9 +3539,15 @@ void contact_root_c::setup(const contacts_s * c, time_t nowtime)
 
     ASSERT( !getkey().is_conference() );
 
-    options().unmasked().set( F_HISTORY_NEED_LOAD );
+    flag_history_need_load = true;
 
-    ASSERT(!options().is(F_UNKNOWN));
+    ASSERT(!is_unknown);
+
+    //FOLDER_SHARE_PATH
+    //if (!get_share_folder_path().is_empty())
+    //{
+    //    g_app->add_folder_share(getkey(), ts::str_c(CONSTASTR("default")), folder_share_s::FST_SEND, 0);
+    //}
 }
 
 bool contact_root_c::save(contacts_s * c) const
@@ -3382,7 +3556,7 @@ bool contact_root_c::save(contacts_s * c) const
         return false; // conferences never saved as contact; see table conferences
 
     c->metaid = 0;
-    c->options = get_options() | (get_keeph() << 16) | (get_aaac() << 19) | ( get_mhtype() << 21 ) | ( get_imnb() << 24 );
+    c->options = (sombits & 0xffff) | (get_keeph() << 16) | (get_aaac() << 19) | (get_mhtype() << 21) | (get_imnb() << 24);
     c->name = get_name(false);
     c->customname = get_customname();
     c->comment = get_comment();

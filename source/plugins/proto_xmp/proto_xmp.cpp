@@ -305,7 +305,7 @@ class xmpp :
             u64 offset = 0;
             int size = 0;
 
-            bool set( const file_portion_s *fp )
+            bool set( const file_portion_prm_s *fp )
             {
                 if ( nullptr == buf && fp->offset == offset )
                 {
@@ -329,7 +329,7 @@ class xmpp :
 
         void resume_from( u64 offset );
 
-        bool portion( const file_portion_s *fp )
+        bool portion( const file_portion_prm_s *fp )
         {
             ASSERT( fp->size == FILE_TRANSFER_CHUNK || ( fp->offset + fp->size ) == fsz );
 
@@ -2063,16 +2063,7 @@ void xmpp::letsconnect()
     }
 }
 
-void xmpp::call(contact_id_s id, const call_info_s *ci)
-{
-}
-
-
-void xmpp::stop_call(contact_id_s id)
-{
-}
-
-void xmpp::accept_call(contact_id_s id)
+void xmpp::call(contact_id_s id, const call_prm_s *ci)
 {
 }
 
@@ -2080,7 +2071,7 @@ void xmpp::stream_options(contact_id_s id, const stream_options_s * so)
 {
 }
 
-int xmpp::send_av(contact_id_s id, const call_info_s * ci)
+int xmpp::send_av(contact_id_s id, const call_prm_s * ci)
 {
     return SEND_AV_OK;
 }
@@ -2105,8 +2096,8 @@ void xmpp::tick(int *sleep_time_ms)
     {
         hf->operation_result(LOP_ONLINE, CR_OK);
 
-        app_signal(APPS_OFFLINE);
-        app_signal(APPS_ONLINE);
+        signal(contact_id_s(), APPS_OFFLINE);
+        signal(contact_id_s(), APPS_ONLINE);
         *sleep_time_ms = 1;
         reconnect = false;
         return;
@@ -2219,7 +2210,7 @@ void xmpp::tick(int *sleep_time_ms)
     if ( auth_failed )
     {
         hf->operation_result( LOP_ONLINE, CR_AUTHENTICATIONFAILED );
-        app_signal(APPS_OFFLINE);
+        signal(contact_id_s(), APPS_OFFLINE);
     }
 
     *sleep_time_ms = 20;
@@ -2615,7 +2606,7 @@ void xmpp::set_config(const void*data, int isz)
     hf->operation_result( LOP_SETCONFIG, cfg_jid.full().empty() || auth_failed ? CR_AUTHENTICATIONFAILED : CR_OK );
 }
 
-void xmpp::app_signal(app_signal_e s)
+void xmpp::signal(contact_id_s id, signal_e s)
 {
     switch (s)
     {
@@ -2653,6 +2644,84 @@ void xmpp::app_signal(app_signal_e s)
         cm.reset();
         fm.reset();
         j.reset();
+
+#ifdef _WIN32
+        WSACleanup();
+#endif // _WIN32
+
+        break;
+    case CONS_ACCEPT_INVITE:
+        if (contact_descriptor_s *c = find(id))
+        {
+            if (c->slv_from_other() == 0)
+                return; // hm. no invite received; nothing to accept
+
+            j->rosterManager()->ackSubscriptionRequest(c->jid, true);
+
+            if (gloox::RosterItem *ritm = j->rosterManager()->getRosterItem(c->jid))
+                c->setup_subscription(*ritm);
+
+            if (c->slv_from_other() == 1)
+                c->slv_up_from_other();
+
+            c->fix_bad_subscription_state();
+
+            if (c->init_state(c->st == CS_ONLINE))
+                update_contact(c, true);
+            hf->save();
+        }
+        break;
+    case CONS_REJECT_INVITE:
+        if (contact_descriptor_s *c = find(id))
+        {
+            j->rosterManager()->ackSubscriptionRequest(c->jid, false);
+            j->rosterManager()->remove(c->jid);
+            del(c);
+            hf->save();
+        }
+        break;
+    case CONS_DELETE:
+        if (contact_descriptor_s *c = find(id))
+        {
+            if (c->st != CS_UNKNOWN && !c->jid.username().empty())
+                j->rosterManager()->remove(c->jid);
+            del(c);
+            hf->save();
+        }
+        break;
+    case CONS_TYPING:
+        if (id.is_conference())
+        {
+            // group typing notification...
+            return;
+        }
+
+        if (contact_descriptor_s *c = find(id))
+        {
+            if (c->st == CS_ONLINE)
+            {
+                if (self_typing_contact.is_empty())
+                {
+                    self_typing_contact = id;
+                    c->chat_state(this, gloox::ChatStateComposing);
+                    self_typing_start_time = time_ms();
+                }
+                else if (self_typing_contact == id)
+                    self_typing_start_time = time_ms();
+            }
+
+        }
+        break;
+    case REQS_DETAILS:
+        break;
+    case REQS_AVATAR:
+        if (contact_descriptor_s *c = find(id))
+        {
+            if (c->gavatar.size())
+                hf->avatar_data(id, c->gavatar_tag, c->gavatar.data(), static_cast<int>(c->gavatar.size()));
+            else
+                c->getavatar = true;
+        }
         break;
     }
 }
@@ -2765,37 +2834,6 @@ int xmpp::add_contact(const char* public_id, const char* invite_message_utf8)
     return CR_OK;
 }
 
-void xmpp::request(contact_id_s id, request_entity_e re)
-{
-    switch (re)
-    {
-    case RE_DETAILS:
-        break;
-    case RE_AVATAR:
-        if (contact_descriptor_s *c = find(id))
-        {
-            if (c->gavatar.size())
-                hf->avatar_data(id, c->gavatar_tag, c->gavatar.data(), static_cast<int>(c->gavatar.size()));
-            else
-                c->getavatar = true;
-        }
-        break;
-    case RE_EXPORT_DATA:
-        break;
-    }
-}
-
-void xmpp::del_contact(contact_id_s id)
-{
-    if ( contact_descriptor_s *c = find( id ) )
-    {
-        if ( c->st != CS_UNKNOWN && !c->jid.username().empty() )
-            j->rosterManager()->remove( c->jid );
-        del(c);
-        hf->save();
-    }
-}
-
 void xmpp::send_message(contact_id_s id, const message_s *msg)
 {
     if ( contact_descriptor_s *c = find( id ) )
@@ -2806,41 +2844,7 @@ void xmpp::del_message( u64 utag )
 {
 }
 
-void xmpp::accept(contact_id_s id)
-{
-    if ( contact_descriptor_s *c = find( id ) )
-    {
-        if ( c->slv_from_other() == 0 )
-            return; // hm. no invite received; nothing to accept
-
-        j->rosterManager()->ackSubscriptionRequest( c->jid, true );
-
-        if ( gloox::RosterItem *ritm = j->rosterManager()->getRosterItem( c->jid ) )
-            c->setup_subscription( *ritm );
-
-        if (c->slv_from_other() == 1)
-            c->slv_up_from_other();
-
-        c->fix_bad_subscription_state();
-
-        if (c->init_state(c->st == CS_ONLINE))
-            update_contact(c, true);
-        hf->save();
-    }
-}
-
-void xmpp::reject(contact_id_s id)
-{
-    if ( contact_descriptor_s *c = find( id ) )
-    {
-        j->rosterManager()->ackSubscriptionRequest( c->jid, false );
-        j->rosterManager()->remove( c->jid );
-        del( c );
-        hf->save();
-    }
-}
-
-void xmpp::file_send(contact_id_s cid, const file_send_info_s *finfo)
+void xmpp::file_send(contact_id_s cid, const file_send_info_prm_s *finfo)
 {
     for ( incoming_file_s *f = if_first; f; f = f->next )
         if ( f->utag == finfo->utag )
@@ -2947,13 +2951,27 @@ void xmpp::file_control(u64 utag, file_control_e fctl)
     }
 
 }
-bool xmpp::file_portion(u64 utag, const file_portion_s *portion)
+bool xmpp::file_portion(u64 utag, const file_portion_prm_s *portion)
 {
     for ( transmitting_file_s *f = of_first; f; f = f->next )
         if ( f->utag == utag )
             return f->portion( portion );
 
     return false;
+}
+
+void xmpp::folder_share_ctl(u64 utag, const folder_share_control_e ctl)
+{
+
+}
+
+void xmpp::folder_share_toc(contact_id_s cid, const folder_share_prm_s *sfd)
+{
+}
+
+void  xmpp::folder_share_query(u64, const folder_share_query_prm_s *prm)
+{
+
 }
 
 void xmpp::create_conference(const char *groupaname, const char *options)
@@ -2973,29 +2991,6 @@ void xmpp::enter_conference( const char *conference_id )
 }
 void xmpp::leave_conference(contact_id_s /*gid*/, int /*keep_leave*/ )
 {
-}
-void xmpp::typing( contact_id_s cid )
-{
-    if ( cid.is_conference() )
-    {
-        // group typing notification...
-        return;
-    }
-
-    if ( contact_descriptor_s *c = find( cid ) )
-    {
-        if ( c->st == CS_ONLINE )
-        {
-            if ( self_typing_contact.is_empty() )
-            {
-                self_typing_contact = cid;
-                c->chat_state( this, gloox::ChatStateComposing );
-                self_typing_start_time = time_ms();
-            } else if ( self_typing_contact == cid )
-                self_typing_start_time = time_ms();
-        }
-
-    }
 }
 void xmpp::logging_flags(unsigned int /*f*/)
 {

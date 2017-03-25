@@ -247,6 +247,11 @@ bool dialog_msgbox_c::checkboxes1( RID b, GUIPARAM v )
     return 0;
 }
 
+/*virtual*/ ts::ivec2 dialog_msgbox_c::get_min_size() const
+{
+    return ts::ivec2(520, height);
+}
+
 /*virtual*/ bool dialog_msgbox_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (SQ_DRAW == qp && rid == getrid())
@@ -711,21 +716,21 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
     {
-        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + loc_text(loc_connection_failed));
+        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>"), maketag_color<ts::wchar>(get_default_text_color(0)), loc_text(loc_connection_failed)));
         if (RID no = find(CONSTASTR("upd")))
             MODIFY(no).visible(true);
         return 0;
     }
 
-    if (nv.ver.is_empty() || !nv.is_ok())
+    if (!new_version(application_c::appver(), nv.ver, false) && nv.is_ok())
     {
-        set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Update not found",355) );
+        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>"), maketag_color<ts::wchar>(get_default_text_color(1)), (TTT("Latest available version: $; Update isn't required",176) / ts::to_wstr(nv.ver.as_sptr()))));
         if (RID no = find(CONSTASTR("upd")))
             MODIFY(no).visible(true);
         return 0;
     }
 
-    set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(1)) + (TTT("New version detected: $",357) / ts::to_wstr(nv.ver.as_sptr())) );
+    set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>"), maketag_color<ts::wchar>(get_default_text_color(1)), (TTT("New version detected: $",357) / ts::to_wstr(nv.ver.as_sptr())) ));
     if (RID yes = find(CONSTASTR("upd")))
         MODIFY(yes).visible(true);
 

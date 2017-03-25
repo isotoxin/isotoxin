@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 18
+#define PLGHOST_IPC_PROTOCOL_VERSION 20
 
 enum commands_e
 {
@@ -43,12 +43,7 @@ enum commands_e
     AQ_LEAVE_CONFERENCE, // just leave conference, don't delete
 
     AQ_ADD_CONTACT,
-    AQ_DEL_CONTACT,
     HQ_UPDATE_CONTACT,
-    AQ_REFRESH_DETAILS,
-
-    AQ_ACCEPT,
-    AQ_REJECT,
 
     AQ_MESSAGE,
     AQ_DEL_MESSAGE, // delete undelivered message
@@ -56,8 +51,6 @@ enum commands_e
     HQ_MESSAGE,
     HA_DELIVERED,
 
-    AQ_STOP_CALL,
-    AQ_ACCEPT_CALL,
     AQ_CALL,
     AQ_SEND_AUDIO,
     HQ_AUDIO,
@@ -69,18 +62,21 @@ enum commands_e
 
     AQ_FILE_SEND,           // application initiate file send
     HQ_INCOMING_FILE,       // remote peer initiate send file
-    AQ_CONTROL_FILE,        // reject / break transfer
+    XX_CONTROL_FILE,        // reject / break transfer
     AQ_ACCEPT_FILE,
     HQ_FILE_PORTION,        // remote peer's file portion received
     HQ_QUERY_FILE_PORTION,
     AA_FILE_PORTION,        // application provides file portion
 
-    AQ_GET_AVATAR_DATA,
     HQ_AVATAR_DATA,
     AQ_SET_AVATAR, // set self avatar
 
+    AQ_FOLDER_SHARE_ANNOUNCE,
+    HA_FOLDER_SHARE_TOC,
+    XX_FOLDER_SHARE_CONTROL,
+    XX_FOLDER_SHARE_QUERY,
+
     // typing event sent every 1 second. receiver should show typing notification 1.5 (0.5 time overlap to avoid flickering) second after last event received
-    AQ_TYPING, // me typing
     HQ_TYPING, // other typing
 
     HA_CMD_STATUS,
@@ -89,7 +85,6 @@ enum commands_e
     XX_PING,
     XX_PONG,
 
-    AQ_EXPORT_DATA,
     HQ_EXPORT_DATA,
 
     HQ_TELEMETRY,
@@ -115,8 +110,8 @@ struct ipcr // reader
 {
     const char *d;
     int sz;
-    int ptr = sizeof(data_header_s);
-    ipcr(const void *dd, int sz) :d((const char *)dd), sz(sz) {}
+    int ptr;
+    ipcr(const void *dd, int sz, int ptr = sizeof(data_header_s)) :d((const char *)dd), sz(sz), ptr(ptr) {}
 
     const data_header_s&header() const { return *(data_header_s *)d; }
     template<typename T> const T& get() { int rptr = ptr; ptr += sizeof(T); ASSERT(ptr <= sz); return *(T *)(d + ptrdiff_t(rptr)); }
@@ -144,8 +139,8 @@ struct ipcr // reader
     }
 
 #ifdef STRTYPE
-    STRTYPE(char) getastr() { int l = get<unsigned short>(); const char *s = d + ptrdiff_t(ptr); ptr += l; ASSERT(ptr <= sz); return MAKESTRTYPE(char, s, l); }
-    STRTYPE(WIDECHAR) getwstr() { int l = get<unsigned short>(); const WIDECHAR *s = (const WIDECHAR *)(d + ptrdiff_t(ptr)); ptr += l * sizeof(WIDECHAR); ASSERT(ptr <= sz); return MAKESTRTYPE(WIDECHAR, s, l); }
+    STRTYPE(char) getastr() { int l = LENDIAN(get<unsigned short>()); const char *s = d + ptrdiff_t(ptr); ptr += l; ASSERT(ptr <= sz); return MAKESTRTYPE(char, s, l); }
+    STRTYPE(WIDECHAR) getwstr() { int l = LENDIAN(get<unsigned short>()); const WIDECHAR *s = (const WIDECHAR *)(d + ptrdiff_t(ptr)); ptr += l * sizeof(WIDECHAR); ASSERT(ptr <= sz); return MAKESTRTYPE(WIDECHAR, s, l); }
 #endif
 };
 

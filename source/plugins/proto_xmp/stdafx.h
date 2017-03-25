@@ -4,7 +4,10 @@
 
 #include "../plgcommon/plgcommon.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <Mmsystem.h>
 #include <Windns.h>
+#endif
+
 #include "../plgcommon/proto_interface.h"

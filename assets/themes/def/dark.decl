@@ -15,7 +15,7 @@ colors {
 	mark_bg=#64a7ff
 	smilesel_edge=#d9840f
 	smilesel_bg=#000000
-	achtung=#002973
+	achtung=#000000
 	text_appname=#d2fbc3
 	text_link=#00ff00
 	text_placeholder=#5e7083
@@ -24,7 +24,7 @@ colors {
 	text_detail=#00bfc0
 	text_imp=#ff8c00
 	text_bad=#ff5d00
-	text_ok=#009000
+	text_ok=#00dd00
 	text_info=#ffcd56
 	text_info_bg=#3f3e22bb
 	msg_mine_text=#a2ffa6
@@ -76,6 +76,7 @@ colors {
 	notice_confa_new=#00ff00
 	notice_confa_rotten=#ff4700
 	notice_found_bg=#545358
+	notice_fsh_bg=#797856
 	notice_warning_bg=#ff6600
 	menu_item_text=#d0d1d2
 	menu_item_text_h=#000000
@@ -158,6 +159,8 @@ colors {
 	btn_text_normal=#ecebec
 	btn_text_hover=#ffffff
 	btn_text_press=#ffffff
+	gen_shf=#c05634
+	gen_shf1=#ffffff
 	gen_z=#4b5662
 	gen_z_border=#000000
 	gen_grey_border=#7f837e

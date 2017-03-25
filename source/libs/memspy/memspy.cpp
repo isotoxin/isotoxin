@@ -253,7 +253,7 @@ block_header_s *block_header_s::ma(const char *fn, int line, int typ, size_t sz)
     size_t real_alloc_size = sz + sizeof(block_header_s) + preblock_size + MEMSPY_CORRUPT_CHECK_ZONE_END;
     char *p = (char *)MEMSPY_SYS_ALLOC(real_alloc_size);
     block_header_s *self = (block_header_s *)(p + preblock_size);
-    if (preblock_size)
+    if (preblock_size > 0)
         memset(p, 0xBB, preblock_size);
 #if MEMSPY_CORRUPT_CHECK_ZONE_END
     memset(p + preblock_size + sizeof(block_header_s) + sz, 0xEE, MEMSPY_CORRUPT_CHECK_ZONE_END);
@@ -277,7 +277,7 @@ block_header_s *block_header_s::mr(const char *fn, int line, int typ, void *p, s
     if (new_p != real_p)
     {
         me = (block_header_s *)(new_p + preblock_size);
-        if (preblock_size)
+        if (preblock_size > 0)
             memset(new_p, 0xBB, preblock_size);
     }
 #if MEMSPY_CORRUPT_CHECK_ZONE_END

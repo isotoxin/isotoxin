@@ -325,6 +325,9 @@ void common_videocall_stuff_s::create_buttons( gui_notice_callinprogress_c *owne
         avc.update_btn_face_camera(b_cam);
         b_cam.set_handler(DELEGATE(owner, b_camera_switch), nullptr);
 
+        if (ts::wstrmap_c(cfg().device_camera()).set(CONSTWSTR("id")).equals(CONSTWSTR("off")))
+            b_cam.disable();
+
         gui_button_c &b_extra = MAKE_CHILD<gui_button_c>(parent);
         b_options = &b_extra;
         b_extra.set_face_getter(BUTTON_FACE(extra));

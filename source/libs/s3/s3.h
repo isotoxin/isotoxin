@@ -16,9 +16,13 @@
 	SG(SG_VOICE, 16, false)
 #endif
 
-#define MY_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
-        const GUID name \
-                = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
+#ifdef _WIN32
+#define CORE_WIN32
+#elif defined __linux__
+#define CORE_NIX
+#else
+#error
+#endif
 
 namespace s3
 {
@@ -67,6 +71,8 @@ class Source //базовый класс для источников звука (лучше использовать сразу MSou
 {
 	friend class Slot;
     friend class Player;
+    friend void slot_coredata_update(Slot *slot, Player *player, bool full);
+
 	Source &operator=(const Source &) = delete;//запрещаем присваивание
 	static s3int readFunc(char *dest, s3int size, void *userPtr) {return ((Source*)userPtr)->read(dest, size);}
 	static Source *firstSourceToDelete;
@@ -121,13 +127,13 @@ public:
 	void stop(float time = 0) {startPlayOnInit = -1; Source::stop(time);}
 };
 
-class PSource : public Source//базовый класс для пользовательских источников звука с prefetch-ем (для подгружаемых звуков, напр. музыки)
+class PSource : public Source // base class for prefetched sounds (for stream sounds, eg music)
 {
-	char *prefetchBuffer, *buf[2];//0 - текущий буфер, 1 - следующий
+	char *prefetchBuffer, *buf[2]; // 0 - current buffer, 1 - next
 	int bufPos, actualDataSize[2], curBuf, prBuf, eofPos[2], prefetchBytes;
 	float startPlayOnPrefetchComplete;
 	bool waitingForPrefetchComplete, active, eof,
-		looped;//зацикленность звука с префетчем нужно задавать заранее, т.к. prefetch делается заранее, еще до вызова play()
+		looped;// loop flag should be set before play
 	/*virtual*/ s3int read(char *dest, s3int size) override;
 	/*virtual*/ void rewind(bool start) override;
 
@@ -144,14 +150,14 @@ public:
 	bool update();//эту функцию нужно вызывать где-то в главном цикле приложения; функция возвращает true, если звук остановлен
 };
 
-class RawSource : public Source//базовый класс для пользовательских источников звука, данные которых уже распакованы (т.е. представлены в виде RAW-семплов без заголовка)
+class RawSource : public Source // base class for user RAW sounds
 {
 	int readStage = 0;
 	/*virtual*/ s3int read(char *dest, s3int size) override;
 	/*virtual*/ void rewind(bool start) override;
 
 public:
-	//Эти параметры нужно заполнить перед началом проигрывания
+	//fill this params before play
     Format format;
 
 	RawSource(Player *player, SoundGroup soundGroup) : Source(player, soundGroup) {}
@@ -175,17 +181,22 @@ struct SoundGroupSlots
 	void initialize(const struct SlotInitParams &sip);
 };
 
-#ifndef GUID_DEFINED
-typedef struct _GUID {
+
+#ifdef CORE_WIN32
+struct WIN32GUID {
     unsigned long  Data1;
     unsigned short Data2;
     unsigned short Data3;
     unsigned char  Data4[ 8 ];
-} GUID;
+};
 #endif
 
-struct DEVICE : public GUID
+struct DEVICE
 {
+#ifdef CORE_WIN32
+    WIN32GUID guid;
+#endif
+
     DEVICE()
     {
         memset( this, 0, sizeof(DEVICE) );
@@ -201,9 +212,8 @@ struct DEVICE : public GUID
 struct InitParams
 {
     DEVICE device = DEFAULT_DEVICE;
-    void *hwnd = nullptr; // HWND not defined yet
     int channels = 2, sampleRate = 44100, bitsPerSample = 16, prefetchBytes = 512 * 1024;
-    float bufferLength = .25f; //длительность звуковых буферов для всех слотов (в секундах)
+    float bufferLength = .25f; //length of sound buffers (in seconds)
 	bool useHW = false, ctrlFrequency = false, rightHandedCS = false;
 };
 
@@ -220,7 +230,7 @@ public:
 #else
     enum { player_data_size = 64 };
 #endif
-    unsigned char data[ player_data_size ]; // its public, but you should not modify it - internal data
+    char data[ player_data_size ]; // its public, but you should not modify it - internal data
     InitParams params;
 
     Player( const Player& ) = delete;
@@ -229,7 +239,6 @@ public:
     Player();
     ~Player();
 
-    void run_thread();
     void operator=( Player &&p );
 
     bool Initialize(const SlotInitParams slotsIP[] = defaultSlotsInitParams, const int sgCount = SG_COUNT);
@@ -256,9 +265,9 @@ typedef char16_t wchar;
 #define S3CALL
 #endif
 
-typedef bool S3CALL device_enum_callback(DEVICE *lpGuid, const wchar *lpcstrDescription, const wchar *lpcstrModule, void *lpContext);
+typedef bool S3CALL device_enum_callback(DEVICE *device, const wchar *lpcstrDescription, void *lpContext); // return true to continue enum
 
-void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, void * lpContext);
+void enum_sound_play_devices(device_enum_callback *cb, void * lpContext);
 
 }
 

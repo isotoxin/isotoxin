@@ -111,7 +111,7 @@
 111=Enter key
 112=Enter - send message, Shift+Enter or Ctrl+Enter - new line
 113=Enter - new line, Shift+Enter or Ctrl+Enter - send message
-114=Language
+114=Disable video capture
 115=Choice
 116=Run!
 117=Continue
@@ -163,7 +163,7 @@
 163=New version available: $
 164=Current version: $
 165=Load
-166=-loading-
+166=loading
 167=New version has been downloaded. Restart required.
 168=Restart
 169=Connection settings
@@ -173,9 +173,9 @@
 173=Show protocol name
 174=Default download folder
 175=Incoming file[br]Name: $[br]Size: $
-176=Save
-177=Save as...
-178=No
+176=Latest available version: $; Update isn't required
+177=Waiting
+178=Offline
 179=Save file
 180=Send files
 181=Upload canceled: $
@@ -262,7 +262,7 @@
 262=Your status on this network
 263=Untagged
 264=Allow UDP
-265=Server port. If 0, the server is disabled.
+265=Listen port (0 - don't listen)
 266=Connection [b]$[/b] will be deleted![br]Are you sure?
 267=Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?
 268=Insert emoticon ($)
@@ -352,7 +352,6 @@
 352=Initialization...
 353=Probably camera already used.[br]You have to stop using camera by another application.
 354=Check for update
-355=Update not found
 356=About
 357=New version detected: $
 358=Enable video receive
@@ -533,6 +532,18 @@
 533=Autoselect by last activity
 534=Allow hole punching
 535=Allow local discovery
+536=Select share path
+537=Share folder
+538=Incoming folder share
+539=Outgoing folder share
+540=Default folder for shares
+541=Wait for accept
+542=Transferring $
+543=Scan folder
+544=Idle
+545=Receiving $
+548=Folder share was rejected
+549=Select path for incoming folder
 900=information
 901=warning
 902=error
@@ -571,3 +582,4 @@
 1011=File received
 1012=Contact online
 1013=Contact offline
+1014=Incoming folder share

@@ -324,26 +324,26 @@ public:
     }
 
 
-    strtype    join( TCHARACTER separator, aint begin = 0, aint end = -1 ) const
+    strtype    join( TCHARACTER separator, aint begin = 0, aint end = -1, aint skipch = 0 ) const
     {
         strtype str;
         const aint sz = (end < 0) ? super::size() : end;
         for (aint k = begin; k<sz; ++k)
         {
-            str.append( super::get(k) );
+            str.append( super::get(k).substr(static_cast<ts::ZSTRINGS_SIGNED>(skipch)) );
             if (k < (sz-1)) str.append_char( separator );
         }
         return str;
     }
 
-    strtype    join( const sptr<TCHARACTER> &joincharz ) const
+    strtype    join(const sptr<TCHARACTER> &joincharz) const
     {
         strtype str;
         aint sz = super::size();
-        for (aint k = 0; k<sz; ++k)
+        for (aint k = 0; k < sz; ++k)
         {
-            str.append( super::get(k) );
-            if (k < (sz-1)) str.append( joincharz );
+            str.append(super::get(k));
+            if (k < (sz - 1)) str.append(joincharz);
         }
         return str;
     }
@@ -811,7 +811,7 @@ public:
     {
         aint msz = tmin( super::size(), m.size() );
         for(aint i=0;i<msz;++i)
-            super::get(i) = ((super &)m).get(i);
+            super::get(i) = ((super &)m).get(i); //-V573
         if (m.size() > msz)
         {
             aint cnt = m.size();

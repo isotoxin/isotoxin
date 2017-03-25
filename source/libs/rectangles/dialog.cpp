@@ -674,7 +674,7 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
     gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
     ts::wstr_c curp = tf.get_text();
     gui->app_path_expand_env(curp);
-    while (!curp.is_empty() && !ts::dir_present(curp))
+    while (!curp.is_empty() && !ts::is_dir_exists(curp))
     {
         int cutit = curp.find_last_pos_of(CONSTWSTR("/\\"));
         if (cutit < 0) break;
@@ -1615,9 +1615,14 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 }
 /*virtual*/ bool gui_dialog_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if ( qp == SQ_KEYDOWN && data.kbd.scan == ts::SSK_ESC && data.kbd.casw == 0 )
+    if ( qp == SQ_KEYDOWN && data.kbd.casw == 0 )
     {
-        on_close();
+        if (data.kbd.scan == ts::SSK_ESC)
+            on_close();
+
+        if (data.kbd.scan == ts::SSK_ENTER)
+            on_confirm();
+
         return true;
     }
 

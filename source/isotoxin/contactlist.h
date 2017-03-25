@@ -346,6 +346,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
 
 
     static const ts::flags32_s::BITS F_NO_LEECH_CHILDREN = F_VSCROLLFREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_KEEP_SCROLL_POS = F_VSCROLLFREEBITSTART << 1; // will be set on first manual scroll
 
     int sort_tag = 0;
     contact_list_role_e role = CLR_MAIN_LIST;
@@ -366,6 +367,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     /*virtual*/ bool i_leeched( guirect_c &to ) override;
     bool filter_proc(system_query_e qp, evt_data_s &data);
 
+    /*virtual*/ void on_manual_scroll(manual_scroll_e ms) override;
     /*virtual*/ void children_repos_info(cri_s &info) const override;
     /*virtual*/ bool test_under_point( const guirect_c &r, const ts::ivec2& screenpos ) const override;
 

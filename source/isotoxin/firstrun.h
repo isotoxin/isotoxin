@@ -31,6 +31,7 @@ class dialog_firstrun_c : public gui_isodialog_c
     int mode = 0; // 0 noob, 1 portable, 2 setup
     bool is_autostart = true;
     bool is_crbackup = true;
+    bool is_portable = false;
     path_choice_e choice0 = PCH_PROGRAMFILES;
     path_choice_e choice1 = PCH_APPDATA;
 

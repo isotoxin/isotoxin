@@ -2460,7 +2460,7 @@ void gui_vscrollgroup_c::on_add_child(RID id)
 
 void gui_vscrollgroup_c::scroll_to_begin( bool repos_now )
 {
-    on_manual_scroll();
+    on_manual_scroll(MS_OTHER);
     sbhelper.shift = 0;
     flags.clear( F_SCROLL_TO_KEEP_POS );
     if ( repos_now ) gui->repos_children(this);
@@ -2468,7 +2468,7 @@ void gui_vscrollgroup_c::scroll_to_begin( bool repos_now )
 
 void gui_vscrollgroup_c::scroll_to_end( bool repos_now )
 {
-    on_manual_scroll();
+    on_manual_scroll(MS_OTHER);
     flags.set(F_SCROLL_TO_END);
     flags.clear( F_SCROLL_TO_KEEP_POS );
     if ( repos_now ) gui->repos_children(this);
@@ -2476,7 +2476,7 @@ void gui_vscrollgroup_c::scroll_to_end( bool repos_now )
 
 void gui_vscrollgroup_c::scroll_to_child(rectengine_c *reng, scroll_to_e stt, bool repos_now)
 {
-    on_manual_scroll();
+    on_manual_scroll(MS_OTHER);
     flags.init( F_SCROLL_TO_MAX_TOP, stt == ST_MAX_TOP );
     flags.init( F_SCROLL_TO_KEEP_POS, stt == ST_KEEP_CURRENT );
     scroll_target = reng;
@@ -2543,7 +2543,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         sbhelper.shift += MWHEELPIXELS * 2;
     case SQ_MOUSE_WHEELDOWN:
         sbhelper.shift -= MWHEELPIXELS;
-        on_manual_scroll();
+        on_manual_scroll(MS_BY_MOUSE);
         gui->repos_children(this);
         break;
     case SQ_MOUSE_OUT:
@@ -2591,7 +2591,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
             if (sbhelper.scroll(opd->rect.lt.y + dmouse, info.area.height()))
             {
-                on_manual_scroll();
+                on_manual_scroll(MS_BY_MOUSE);
                 gui->repos_children(this);
             }
         }

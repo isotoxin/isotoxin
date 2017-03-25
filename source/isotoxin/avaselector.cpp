@@ -379,7 +379,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
         szgen = avgen->size, generate = CONSTWSTR( "face=avgen" );
 
     dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0,ctlopen).sethint( loc_text(loc_loadimagefromfile) );
-    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(loc_text(loc_pasteimagefromclipboard));
+    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(LOC_PASTEIMAGEFROMCLIPBOARD);
     dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( loc_text(loc_capturecamera) );
     dm().button( ts::wstr_c(), generate, DELEGATE( this, generate_identicon ) ).width( szgen.x ).height( szgen.y ).subctl( 3, ctlcam ).sethint( TTT("Generate random identicon",470) );
     dm().button(ts::wstr_c(), b ? CONSTWSTR("face=save") : CONSTWSTR("save"), DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(4,savebtn1);

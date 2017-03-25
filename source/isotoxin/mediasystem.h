@@ -6,6 +6,7 @@
     SND( incoming_message ) \
     SND( incoming_message2 ) \
     SND( incoming_file ) \
+    SND( folder_share ) \
     SND( start_recv_file ) \
     SND( file_received ) \
     SND( friend_online ) \

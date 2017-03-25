@@ -22,6 +22,7 @@ void dialog_firstrun_c::set_defaults()
     choice1 = PCH_APPDATA;
     is_autostart = true;
     is_crbackup = true;
+    is_portable = false;
 }
 
 void dialog_firstrun_c::set_portable()
@@ -34,6 +35,7 @@ void dialog_firstrun_c::set_portable()
     choice1 = PCH_INSTALLPATH;
     is_autostart = false;
     is_crbackup = false;
+    is_portable = true;
 }
 
 
@@ -237,7 +239,7 @@ void dialog_firstrun_c::go2page(int page_)
 
         vspace(25);
 
-        label( ts::wstr_c(CONSTWSTR("<l>"), TTT("Language",114), CONSTWSTR("</l>")) );
+        label( ts::wstr_c(CONSTWSTR("<l>"), LOC_LANGUAGE, CONSTWSTR("</l>")) );
         combik( list_langs(deflng, DELEGATE(this, select_lang)) );
 
         vspace(5);
@@ -494,7 +496,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     {
         ts::wstr_c n = profilename;
         cfg().profile(n);
-        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), nullptr, g_app->F_READONLY_MODE());
+        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, ts::wstr_c(CONSTWSTR("profile" NATIVE_SLASH_S), n, CONSTWSTR(".profile"))), nullptr, g_app->F_READONLY_MODE());
     }
 
     cfg().language( deflng );
@@ -505,6 +507,13 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     int misc_flags = cfg().misc_flags();
     INITFLAG( misc_flags, MISCF_DONT_BACKUP_PROFILE, !is_crbackup );
     cfg().misc_flags( misc_flags );
+
+    if (is_portable)
+    {
+        cfg().folder_backup(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "backup")));
+        cfg().temp_folder_sendimg(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "temp" NATIVE_SLASH_S "sendimg")));
+        cfg().temp_folder_handlemsg(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "temp" NATIVE_SLASH_S "handlemsg")));
+    }
 
     if (exit) 
     {

@@ -299,6 +299,11 @@ rects
     c=2,2,2,2,##notice_found_bg
     clientborder=4,4,4,4
   }
+  notice.fsh=sb
+  {
+    c=2,2,2,2,##notice_fsh_bg
+    clientborder=4,4,4,4
+  }
   notice.warning=sb
   {
     c=2,2,2,2,##notice_warning_bg
@@ -2001,6 +2006,147 @@ buttons
     }
   }
 
+
+  fsh_accept
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_shf1" stroke="none" d="M 75.603516 35 L 47.318359 63.285156 L 33.056641 49.023438 L 28.814453 53.265625 L 47.318359 71.771484 L 48.025391 71.0625 L 51.5625 67.527344 L 79.845703 39.244141 L 75.603516 35 z " />
+			</g>
+		</svg>`
+
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+    }
+  }
+  fsh_accept_sel
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_shf1" stroke="none" d="M 63.957379,35 35.672222,63.285156 21.410504,49.023438 17.168316,53.265625 35.672222,71.771484 36.379254,71.0625 39.916363,67.527344 68.199566,39.244141 63.957379,35 Z" />
+				<path fill="##gen_shf1" stroke="none" d="m 59.587876,60.781524 a 3.5,3.5 0 0 0 0,4.949748 3.5,3.5 0 0 0 4.949748,0 3.5,3.5 0 0 0 0,-4.949748 3.5,3.5 0 0 0 -4.949748,0 z m 7.071068,-7.071068 a 3.5,3.5 0 0 0 0,4.949748 3.5,3.5 0 0 0 4.949748,0 3.5,3.5 0 0 0 0,-4.949748 3.5,3.5 0 0 0 -4.949748,0 z m 7.071068,-7.071068 a 3.5,3.5 0 0 0 0,4.949748 3.5,3.5 0 0 0 4.949748,0 3.5,3.5 0 0 0 0,-4.949748 3.5,3.5 0 0 0 -4.949748,0 z" />
+			</g>
+		</svg>`
+
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+    }
+  }
+  fsh_again
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_shf1" stroke="none" d="m 48.270098,21.669965 -15.883379,-1.621137 3.410156,5.865234 C 27.261929,30.937726 22.015697,40.096351 22,50 22,65.463973 34.536027,78 50,78 65.463973,78 78,65.463973 78,50 77.986563,40.105408 72.75191,30.952562 64.230469,25.923828 c -0.99913,1.729568 -1.99749,3.459581 -2.996094,5.189453 C 67.900042,35.072214 71.989922,42.247312 72,50 72,62.150264 62.150264,72 50,72 37.849736,72 28,62.150264 28,50 28.01357,42.233007 32.121633,35.048722 38.808594,31.097656 l 3.193359,5.490235 z" />
+			</g>
+		</svg>`
+
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+    }
+  }
+
+  fsh_refresh
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_shf1" stroke="none" d="M 50 22 A 28 28 0 0 0 22 50 A 28 28 0 0 0 22.003906 50.085938 L 28.003906 50.085938 A 22 22 0 0 1 28 50 A 22 22 0 0 1 50 28 A 22 22 0 0 1 66.267578 35.255859 L 58.380859 43.140625 L 77.966797 43.140625 L 77.966797 23.556641 L 70.517578 31.005859 A 28 28 0 0 0 50 22 z M 71.998047 50.023438 A 22 22 0 0 1 50 72 A 22 22 0 0 1 34.097656 65.160156 L 41.828125 57.429688 L 22.242188 57.429688 L 22.242188 77.013672 L 29.855469 69.400391 A 28 28 0 0 0 50 78 A 28 28 0 0 0 78 50.023438 L 71.998047 50.023438 z " />
+			</g>
+		</svg>`
+
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+    }
+  }
+
+  fsh_dismiss
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_shf1" stroke="none" d="M 65.556349,30.20101 50,45.757359 34.443651,30.20101 30.20101,34.443651 45.757359,50 30.20101,65.556349 34.443651,69.79899 50,54.242641 65.556349,69.79899 69.79899,65.556349 54.242641,50 69.79899,34.443651 65.556349,30.20101 Z" />
+			</g>
+		</svg>`
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+
+    }
+  }
+
+
   explore
   {
     gen 
@@ -2215,19 +2361,19 @@ fonts
   caption.bold=arialbd.ttf,13,0,0,0.15,0.1
   caption.light=arial.ttf,12,0,0,0.15,0.1
 
-  conv_name=OpenSans-Regular.ttf,12,0,0,0.15,0.1
-  conv_name.bold=OpenSans-Bold.ttf,12,0,0,0.15,0.1
-  conv_name.italic=OpenSans-Italic.ttf,12,0,0,0.15,0.1
-  conv_name.bold.italic=OpenSans-BoldItalic.ttf,12,0,0,0.15,0.1
+  conv_name=OpenSans-Regular.ttf,14,0,0,0.15,0.1
+  conv_name.bold=OpenSans-Bold.ttf,14,0,0,0.15,0.1
+  conv_name.italic=OpenSans-Italic.ttf,14,0,0,0.15,0.1
+  conv_name.bold.italic=OpenSans-BoldItalic.ttf,14,0,0,0.15,0.1
 
-  conv_text=OpenSans-Regular.ttf,12,4096,0,0.15,0.1
-  conv_text.bold=OpenSans-Bold.ttf,12,4096,0,0.15,0.1
-  conv_text.italic=OpenSans-Italic.ttf,12,4096,0,0.15,0.1
-  conv_text.bold.italic=OpenSans-BoldItalic.ttf,12,4096,0,0.15,0.1
+  conv_text=OpenSans-Regular.ttf,14,4096,0,0.15,0.1
+  conv_text.bold=OpenSans-Bold.ttf,14,4096,0,0.15,0.1
+  conv_text.italic=OpenSans-Italic.ttf,14,4096,0,0.15,0.1
+  conv_text.bold.italic=OpenSans-BoldItalic.ttf,14,4096,0,0.15,0.1
 
-  conv_time=OpenSans-Regular.ttf,10,4096,0,0.15,0.1
+  conv_time=OpenSans-Regular.ttf,12,4096,0,0.15,0.1
 
-  msg_edit=OpenSans-Regular.ttf,13,4096,0,0.15,0.1
+  msg_edit=OpenSans-Regular.ttf,14,4096,0,0.15,0.1
 }
 
 corrections

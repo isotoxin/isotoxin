@@ -116,51 +116,46 @@ namespace
     };
 }
 
-bool find_config(ts::wstr_c &path);
 void get_downloaded_ver( dnver_s &dnver )
 {
     dnver.ver.clear();
 
-    if ( auparams().lock_read()().path.is_empty() )
+    if ( auparams().lock_read()().need_setup_paths() )
+        auparams().lock_write()().setup_paths();
+
+    for (int pin = 0;pin < autoupdate_params_s::NUM_PATHS;++pin)
     {
-        auto w = auparams().lock_write();
-        ts::wstr_c cfgpath = cfg().get_path();
-        if (cfgpath.is_empty()) find_config(cfgpath);
-        if ( cfgpath.is_empty() ) return;
-        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update")));
-        ts::fix_path(w().path, FNO_NORMALIZE|FNO_APPENDSLASH);
-    }
-
-    ts::buf_c bbb;
-    bbb.load_from_disk_file(ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ));
-    if ( bbb.size() > 0 )
-    {
-        int signi = ver_ok(bbb.cstr());
-        if (!signi) return;
-        ts::str_c latest(bbb.cstr().part(signi));
-
-        ts::wstr_c wurl(from_utf8( getss(latest,CONSTASTR("url")) ));
-        ts::wstr_c fn = ts::fn_join( auparams().lock_read()( ).path, ts::fn_get_name_with_ext( wurl ) );
-        bbb.load_from_disk_file( fn );
-        if (blake2b_ok( bbb, latest, false ) )
+        ts::buf_c bbb;
+        bbb.load_from_disk_file(ts::fn_join(auparams().lock_read()().paths[pin], CONSTWSTR("latest.txt")));
+        if (bbb.size() > 0)
         {
-            dnver.ver = getss( latest, CONSTASTR( "ver" ) );
-            dnver.fn32 = fn;
-        }
+            int signi = ver_ok(bbb.cstr());
+            if (!signi) return;
+            ts::str_c latest(bbb.cstr().part(signi));
 
-        wurl = from_utf8( getss( latest, CONSTASTR( "url-64" ) ) );
-        if ( !wurl.is_empty() )
-        {
-            fn = ts::fn_join( auparams().lock_read()( ).path, ts::fn_get_name_with_ext( wurl ) );
-            bbb.load_from_disk_file( fn );
-            if (blake2b_ok( bbb, latest, true ) )
+            ts::wstr_c wurl(from_utf8(getss(latest, CONSTASTR("url"))));
+            ts::wstr_c fn = ts::fn_join(auparams().lock_read()().paths[pin], ts::fn_get_name_with_ext(wurl));
+            bbb.load_from_disk_file(fn);
+            if (blake2b_ok(bbb, latest, false))
             {
-                if ( dnver.ver.is_empty() )
-                    dnver.ver = getss( latest, CONSTASTR( "ver" ) );
-                dnver.fn64 = fn;
+                dnver.ver = getss(latest, CONSTASTR("ver"));
+                dnver.fn32 = fn;
+            }
+
+            wurl = from_utf8(getss(latest, CONSTASTR("url-64")));
+            if (!wurl.is_empty())
+            {
+                fn = ts::fn_join(auparams().lock_read()().paths[pin], ts::fn_get_name_with_ext(wurl));
+                bbb.load_from_disk_file(fn);
+                if (blake2b_ok(bbb, latest, true))
+                {
+                    if (dnver.ver.is_empty())
+                        dnver.ver = getss(latest, CONSTASTR("ver"));
+                    dnver.fn64 = fn;
+                    break;
+                }
             }
         }
-
     }
 }
 
@@ -292,12 +287,14 @@ void autoupdater()
     if (!curl) return;
     ts::buf_c d;
 
+    ts::str_c latest_ver_available;
+
 next_address:
     if (addri >= addresses.size())
     {
         curl.send_newver = true;
         if (ok_sign)
-            curl.newver.clear();
+            curl.newver = latest_ver_available;
         else
             curl.error_num = gmsg<ISOGM_NEWVERSION>::E_NETWORK;
         return;
@@ -381,11 +378,18 @@ next_address:
 #endif
 
     r = auparams().lock_read();
-    if (!new_version( r().ver, getss(latests, CONSTASTR("ver")), same64 ))
+    const ts::str_c aver1( getss(latests, CONSTASTR("ver")) );
+    if (!new_version( r().ver, aver1, same64 ))
     {
+        if (new_version(latest_ver_available, aver1, false))
+            latest_ver_available.set(aver1);
+
         ++addri;
+        r.unlock();
         goto next_address;
     }
+
+    r.unlock();
 
     bool downloaded = false;
     dnver_s dnver;
@@ -394,6 +398,7 @@ next_address:
     if (dnver.ver == aver && dnver.check( update64 ))
         downloaded = true;
 
+    r = auparams().lock_read();
     if (downloaded || r().autoupdate == AUB_ONLY_CHECK)
     {
         r.unlock();
@@ -437,14 +442,14 @@ next_address:
         goto next_address;
     }
 
-    ts::make_path( auparams().lock_read()().path, 0 );
-    if (!latest.save_to_file( ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ), 0, true ))
+    ts::make_path( auparams().lock_read()().paths[0], 0 );
+    if (!latest.save_to_file( ts::fn_join( auparams().lock_read()().paths[0], CONSTWSTR("latest.txt") ), 0, true ))
     {
         curl.error_num = gmsg<ISOGM_NEWVERSION>::E_DISK;
         return;
     }
 
-    if (!d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ), 0, true ))
+    if (!d.save_to_file( ts::fn_join( auparams().lock_read()().paths[0], pakname ), 0, true ))
     {
         curl.error_num = gmsg<ISOGM_NEWVERSION>::E_DISK;
         return;
@@ -536,13 +541,17 @@ bool check_autoupdate()
         {
             // just cleanup
 
-            ts::wstr_c ff( auparams().lock_read()( ).path );
-            if ( dir_present( ff ) )
-                del_dir( ff );
+            for (int pin = 0; pin < autoupdate_params_s::NUM_PATHS; ++pin)
+            {
 
-            ff = ts::fn_join( path_exe, CONSTWSTR( "old" ) );
-            if ( dir_present( ff ) && check_write_access( ff ) )
-                del_dir( ff );
+                ts::wstr_c ff(auparams().lock_read()().paths[pin]);
+                if (is_dir_exists(ff))
+                    del_dir(ff);
+
+                ff = ts::fn_join(path_exe, CONSTWSTR("old"));
+                if (is_dir_exists(ff) && check_write_access(ff))
+                    del_dir(ff);
+            }
 
             return true;
         }

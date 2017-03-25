@@ -102,6 +102,8 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "prepareimage.h"
 #include "tooldialogs.h"
 #include "avcontact.h"
+#include "filetransfer.h"
+#include "foldershare.h"
 
 #include "res/resource.h"
 #include "application.h"

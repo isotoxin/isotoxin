@@ -1,5 +1,8 @@
 #pragma once
 
+#define WM_NOTIFICATION_ICON_CALLBACK (WM_USER + 7213)
+#define WM_NOTIFICATION_ICON_EVENT (WM_USER + 7214)
+
 struct master_internal_stuff_s
 {
     struct icon_cache_s : public movable_flag<true>
@@ -32,6 +35,28 @@ struct master_internal_stuff_s
         icon_cache_s &operator = ( const icon_cache_s& ) UNUSED;
     };
 
+    struct spystate_s
+    {
+        struct maintenance_s : public movable_flag<true>
+        {
+            safe_ptr<folder_spy_handler_s> h;
+            DWORD threadid = 0;
+            bool started = false;
+            bool finished = false;
+            bool stop = false;
+            bool energized = false;
+        };
+
+        ts::array_inplace_t< maintenance_s, 0 > threads;
+
+        void stop(DWORD threadid);
+        const maintenance_s *find(DWORD threadid) const;
+        maintenance_s *find(DWORD threadid);
+    };
+
+    spinlock::syncvar< spystate_s > fspystate;
+
+
     array_safe_t< wnd_c, 2 > activewnds;
     bool actwnd( wnd_c *w, bool a );
     bool isactwnd( wnd_c *w );
@@ -52,6 +77,7 @@ struct master_internal_stuff_s
     bool looper = false;
     bool looper_staring = false;
     bool looper_allow_tick = true;
+    bool folder_spy_evt = false;
 };
 
 class win32_wnd_c;
