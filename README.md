@@ -49,8 +49,8 @@ Multiprotocol messenger for windows XP and later with tox support
 - sometimes you have to run **5-update-libs.cmd** to update toxcore or/and download new external libs. Don't forget to run **2_build_libs.cmd** again.<br>
 <br>
 - If you want to build 64-bit version of Isotoxin, just run **2-build-libs-2015.cmd** and **3-build-isotoxin-2015.cmd** with **64** parameter:<br>
-`2-build-libs-2015.cmd 64`<br>
-`3-build-isotoxin-2015.cmd 64`
+**2-build-libs-2015.cmd 64**<br>
+**3-build-isotoxin-2015.cmd 64**
 
 ### Linux
 (work in progress)
