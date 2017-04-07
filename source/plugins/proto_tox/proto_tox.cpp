@@ -1510,6 +1510,13 @@ void tox_c::node_accept_handler(const uint8_t *public_key)
 {
     const public_key_s &pk = *(const public_key_s *)public_key;
     auto x = std::lower_bound(cl.nodes.begin(), cl.nodes.end(), pk);
+    if (&*x == nullptr)
+    {
+        cl.nodes.emplace_back(pk, 0, 0);
+        std::sort(cl.nodes.begin(), cl.nodes.end());
+        x = std::lower_bound(cl.nodes.begin(), cl.nodes.end(), pk);
+    }
+
     if (x->pubid == pk)
     {
         x->accept_count += 2;
