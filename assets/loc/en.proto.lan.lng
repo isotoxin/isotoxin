@@ -1,0 +1,10 @@
+video_codec=Video codec
+hint_video_codec=vp8 currently is best choice
+video_bitrate=Video bitrate
+hint_video_bitrate=In kilobits per second. 0 - use default (5000)
+video_quality=Video quality
+hint_video_quality=Changes in this value influences, among others, the encoder's selection of motion estimation methods. Values greater than 0 will increase encoder speed at the expense of quality.<br>Valid range for vp8: [-16..16].<br>Valid range for vp9: [-8..8].
+video_telemetry=Enable video calls telemetry
+hint_video_telemetry=When enabled, lan plugin sends debug telemetry to Isotoxin GUI. Isotoxin shows telemetry info in video frame.
+
+

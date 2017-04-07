@@ -780,7 +780,15 @@ public:
         return hwnd == WindowFromPoint( (POINT &)screenpos );
     }
 
-    virtual void make_hole( const ts::irect &holerect ) override
+    /*virtual*/ void special_border(bool on) override
+    {
+        if (!on)
+            kill_border();
+        else
+            recreate_border();
+    }
+
+    /*virtual*/ void make_hole( const ts::irect &holerect ) override
     {
         if (holerect)
         {

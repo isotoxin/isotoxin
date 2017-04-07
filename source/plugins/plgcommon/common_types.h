@@ -48,10 +48,10 @@ enum info_string_e // hard order
     IS_PROTO_AUTHOR,
 
     IS_PROTO_ICON,
-    
+
+    IS_ADVANCED_SETTINGS,
+
     IS_AUDIO_FMT, // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
-    IS_AUDIO_CODECS, // unused
-    IS_VIDEO_CODECS,
 
     IS_IDNAME,
 
@@ -69,8 +69,6 @@ enum info_string_e // hard order
 #define CONN_OPTIONS \
     COPDEF( ipv6_enable, 1 ) \
     COPDEF( udp_enable, 1 ) \
-    COPDEF( hole_punch, 1 ) \
-    COPDEF( local_discovery, 1 ) \
     COPDEF( enc_only, 1 ) \
     COPDEF( trust_only, 1 ) \
 
@@ -89,7 +87,6 @@ enum connection_features_e
     CF_PROXY_SUPPORT_HTTPS  = 2,
     CF_PROXY_SUPPORT_SOCKS4 = 4,
     CF_PROXY_SUPPORT_SOCKS5 = 8,
-    CF_SERVER_OPTION        = 16,
     
 #define COPDEF( n, dv ) CF_##n = 65536 << auto_co_##n,
     CONN_OPTIONS
@@ -135,9 +132,9 @@ enum connection_bits_e
 {
     CB_ENCRYPTED = 1 << 0,
     CB_TRUSTED = 1 << 1,
-    CP_UDP_USED = 1 << 2,
-    CP_TCP_USED = 1 << 3,
-    CP_IPv6_USED = 1 << 4,
+    //CP_UDP_USED = 1 << 2,
+    //CP_TCP_USED = 1 << 3,
+    //CP_IPv6_USED = 1 << 4,
 };
 
 enum cmd_result_e
@@ -362,15 +359,11 @@ enum config_flags_e
 // app stores values of these field in db
 #define CFGF_LOGIN          "login"
 #define CFGF_PASSWORD       "password"
-#define CFGF_VIDEO_CODEC    "vcodec"
-#define CFGF_VIDEO_BITRATE  "vbitrate"
-#define CFGF_VIDEO_QUALITY  "vquality"
 
 // known configurable fields, handled by protocol
 // app will wait values of these fields from protocol
 #define CFGF_PROXY_TYPE     "proxy_type"
 #define CFGF_PROXY_ADDR     "proxy_addr"
-#define CFGF_SERVER_PORT    "server_port"
 // other options see CONN_OPTIONS
 
 // conference options
@@ -400,4 +393,3 @@ enum config_flags_e
 
 #define DEBUG_OPT_FULL_DUMP "full_dump"
 #define DEBUG_OPT_LOGGING   "logging"
-#define DEBUG_OPT_TELEMETRY "tlm"

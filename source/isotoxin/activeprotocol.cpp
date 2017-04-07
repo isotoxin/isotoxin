@@ -90,17 +90,18 @@ struct config_maker_s : public ipcw
             par( CONSTASTR( CFGF_PROXY_ADDR ), c.proxy.proxy_addr );
         }
 
-        if ( 0 != ( conn_features & CF_SERVER_OPTION ) )
-        {
-            par( CONSTASTR( CFGF_SERVER_PORT ), ts::amake<int>( c.server_port ) );
-        }
-
 #define COPDEF( nnn, dv ) if ( 0 != ( conn_features & CF_##nnn ) ) \
         { \
             par(CONSTASTR(#nnn), (c.nnn ? CONSTASTR("1") : CONSTASTR("0"))); \
         }
         CONN_OPTIONS
 #undef COPDEF
+
+        for (auto &a : c.advanced)
+        {
+            if (!a.v.is_empty())
+                par(a.k, a.v);
+        }
 
         if ( 0 != ( features & PF_NEW_REQUIRES_LOGIN ) )
         {
@@ -438,37 +439,61 @@ bool active_protocol_c::cmdhandler(ipcr r)
             }
         }
         break;
-    case HA_CONFIGURABLE:
+    case XX_PROTO_FILE:
         {
-            auto w = syncdata.lock_write();
-            w().flags.set(F_CONFIGURABLE_RCVD);
-            if (w().data.configurable.initialized)
-            {
-                configurable_s oldc = std::move(w().data.configurable);
-                w.unlock();
-                set_configurable(oldc,true);
-            } else
-            {
-                int n = r.get<int>();
-                for (int i = 0; i < n; ++i)
-                {
-                    ts::str_c f = r.getastr();
-                    ts::str_c v = r.getastr();
-                    if (f.equals(CONSTASTR(CFGF_PROXY_TYPE)))
-                        w().data.configurable.proxy.proxy_type = v.as_int();
-                    else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
-                        w().data.configurable.proxy.proxy_addr = v;
-                    else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
-                        w().data.configurable.proxy.proxy_addr = v;
-                    else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
-                        w().data.configurable.server_port = v.as_int();
+            ts::str_c fn = r.getastr();
+            int fid = r.get<int>();
 
-#define COPDEF( nnn, dv ) else if (f.equals(CONSTASTR(#nnn))) { w().data.configurable.nnn = v.as_int() != 0; }
-        CONN_OPTIONS
-#undef COPDEF
-                    w().data.configurable.initialized = true;
+            ts::wstr_c wfn = ts::fn_join(CONSTWSTR("protocols"), ts::from_utf8(fn));
+            if (void *f = ts::f_open(wfn))
+            {
+                uint64 sz = ts::f_size(f);
+                if (sz < 65536)
+                {
+                    ts::blob_c b;
+                    b.set_size(static_cast<ts::aint>(sz), false);
+                    ts::f_read(f, b.data(), sz);
+                    ts::f_close(f);
+
+                    ipcp->send(ipcw(XX_PROTO_FILE) << fid << b);
                 }
             }
+        }
+        break;
+    case HA_CONFIGURABLE:
+        {
+            gmsg<ISOGM_CONFIGURABLE> *pcfg = TSNEW(gmsg<ISOGM_CONFIGURABLE>, id);
+
+            ts::str_c as(get_infostr(IS_ADVANCED_SETTINGS));
+            auto isadv = [&](const ts::asptr &s)
+            {
+                for (ts::token<char> t(as, '/'); t; ++t)
+                {
+                    if (t->substr(0, t->find_pos(':')).equals(s))
+                        return true;
+                }
+                return false;
+            };
+
+            int n = r.get<int>();
+            for (int i = 0; i < n; ++i)
+            {
+                ts::str_c f = r.getastr();
+                ts::str_c v = r.getastr();
+                if (f.equals(CONSTASTR(CFGF_PROXY_TYPE)))
+                    pcfg->configurable.proxy.proxy_type = v.as_int();
+                else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
+                    pcfg->configurable.proxy.proxy_addr = v;
+                else if (isadv(f.as_sptr()))
+                    pcfg->configurable.advanced.set(f) = v;
+
+#define COPDEF( nnn, dv ) else if (f.equals(CONSTASTR(#nnn))) { pcfg->configurable.nnn = v.as_int() != 0; }
+                CONN_OPTIONS
+#undef COPDEF
+                pcfg->configurable.initialized = true;
+            }
+
+            pcfg->send_to_main_thread();
         }
         break;
     case HQ_AUDIO:
@@ -1012,9 +1037,6 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
             if (0 != (ch.bits & UIOPT_PROTOICONS) && !prf_options().is(UIOPT_PROTOICONS))
                 icons_cache.clear(); // FREE MEMORY
             break;
-        case PP_VIDEO_ENCODING_SETTINGS:
-            apply_encoding_settings();
-            break;
         case CFG_DEBUG:
             push_debug_settings();
             break;
@@ -1287,6 +1309,30 @@ void active_protocol_c::save_config(bool wait)
     }
 }
 
+ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CONFIGURABLE>& c)
+{
+    if (c.protoid != id)
+        return 0;
+
+    auto w = syncdata.lock_write();
+    w().flags.set(F_CONFIGURABLE_RCVD);
+
+    if (w().data.configurable.initialized)
+    {
+        configurable_s oldc = std::move(w().data.configurable);
+        w.unlock();
+        oldc.advanced.merge(c.configurable.advanced);
+        set_configurable(oldc, true);
+    }
+    else
+    {
+        w.unlock();
+        set_configurable(c.configurable, false);
+    }
+
+    return 0;
+}
+
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
 {
     if ( r.networkid == id )
@@ -1477,24 +1523,12 @@ void active_protocol_c::send_audio(contact_id_s cid, const void *data, int size,
 
 void active_protocol_c::call(contact_id_s cid, int seconds, bool videocall)
 {
-    apply_encoding_settings();
     ipcp->send(ipcw(AQ_CALL) << cid << seconds << static_cast<ts::int32>(videocall ? 1 : 0));
 }
 
 void active_protocol_c::set_stream_options(contact_id_s cid, int so, const ts::ivec2 &vr)
 {
     ipcp->send(ipcw(AQ_STREAM_OPTIONS) << cid << so << vr.x << vr.y);
-}
-
-void active_protocol_c::apply_encoding_settings()
-{
-    config_maker_s cm;
-
-    cm.par( CONSTASTR( CFGF_VIDEO_CODEC ), ts::astrmap_c( prf().video_codec() ).get( get_tag(), ts::str_c() ) )
-        .par( CONSTASTR( CFGF_VIDEO_BITRATE ), ts::amake<int>( prf().video_bitrate() ) )
-        .par( CONSTASTR( CFGF_VIDEO_QUALITY ), ts::amake<int>( prf().video_enc_quality() ) );
-
-    ipcp->send( cm );
 }
 
 void active_protocol_c::send_configurable(const configurable_s &c)
@@ -1781,7 +1815,7 @@ void active_protocol_c::draw_telemtry( rectengine_c&e, const uint64& uid, const 
         d.size = rr.size();
 
         text_draw_params_s tdp;
-        ts::TSCOLOR col( ts::ARGB(0,255,0) );
+        ts::TSCOLOR col( ts::ARGB(255, 0, 255) );
         tdp.forecolor = &col;
         e.draw( text, tdp );
 

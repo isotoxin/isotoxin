@@ -161,9 +161,9 @@ namespace ts
 
     INLINE void sincos_r(const float angle, const float r, float & vsin, float & vcos)
     {
-        float cis, sis;
 
 #if defined (_MSC_VER) && !defined(MODE64)
+        float cis, sis;
         _asm
         {
             fld angle
@@ -176,11 +176,10 @@ namespace ts
         vsin = sis;
         vcos = cis;
 #elif defined (_MSC_VER) && defined(MODE64)
-        UPAR( cis );
-        UPAR( sis );
         vsin = sinf( angle ) * r;
         vcos = cosf( angle ) * r;
 #elif defined __GNUC__
+        float cis, sis;
         ::sincosf( angle, &cis, &sis );
         vsin = sis * r;
         vcos = cis * r;

@@ -42,7 +42,7 @@ public:
     // protocol fields
     // protocol will handle these fields itself
     proxy_settings_s proxy;
-    int server_port = 0;
+    ts::astrmap_c advanced;
 
 #define COPDEF( n, dv ) unsigned n : 1;
     CONN_OPTIONS
@@ -52,7 +52,7 @@ public:
 
     bool operator != (const configurable_s &o) const
     {
-        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port ||
+        return initialized != o.initialized || proxy != o.proxy || advanced != o.advanced ||
             
 #define COPDEF( n, dv ) n != o.n ||
         CONN_OPTIONS
@@ -62,15 +62,19 @@ public:
     }
     configurable_s()
     {
-#define COPDEF( n, dv ) n = dv;
-        CONN_OPTIONS
-#undef COPDEF
-            
+        set_defaults();
         initialized = 0;
     }
     configurable_s(const configurable_s &c):initialized(0)
     {
         *this = c;
+    }
+    void set_defaults()
+    {
+        advanced.clear();
+#define COPDEF( n, dv ) n = dv;
+        CONN_OPTIONS
+#undef COPDEF
     }
     configurable_s &operator=(const configurable_s &c)
     {
@@ -80,7 +84,7 @@ public:
 
         if (!c.initialized) return *this;
         proxy = c.proxy;
-        server_port = c.server_port;
+        advanced = c.advanced;
 
 #define COPDEF( n, dv ) n = c.n;
         CONN_OPTIONS
@@ -95,6 +99,13 @@ public:
     void set_password_as_is( const ts::asptr&p ) { password = p; }
     bool get_password_decoded( ts::str_c& rslt ) const;
 
+};
+
+template<> struct gmsg<ISOGM_CONFIGURABLE> : public gmsgbase
+{
+    gmsg(int protoid) :gmsgbase(ISOGM_CONFIGURABLE), protoid(protoid) {}
+    configurable_s configurable;
+    int protoid;
 };
 
 struct active_protocol_data_s
@@ -157,6 +168,8 @@ class active_protocol_c : public ts::safe_object
     GM_RECEIVER(active_protocol_c, GM_HEARTBEAT);
     GM_RECEIVER(active_protocol_c, ISOGM_CMD_RESULT);
     GM_RECEIVER(active_protocol_c, GM_UI_EVENT);
+    GM_RECEIVER(active_protocol_c, ISOGM_CONFIGURABLE);
+    
 
     int id;
     int priority = 0;
@@ -338,7 +351,6 @@ public:
 
     void refresh_details( const contact_key_s &ck );
 
-    void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
     void send_video_frame(contact_id_s cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );
     void send_audio(contact_id_s cid, const void *data, int size, uint64 timestamp );
     void call(contact_id_s cid, int seconds, bool videocall);

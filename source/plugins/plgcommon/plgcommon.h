@@ -49,10 +49,7 @@ enum logging_flags_e
 };
 
 extern unsigned int g_logging_flags;
-extern unsigned int g_telemetry_flags;
 extern HINSTANCE g_module;
-
-#define IS_TLM( t ) (0!=(g_telemetry_flags & ( 1 << t )))
 
 typedef unsigned long u32;
 typedef unsigned char byte;

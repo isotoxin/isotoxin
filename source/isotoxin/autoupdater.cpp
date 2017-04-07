@@ -7,9 +7,6 @@
 //#include <winsock2.h> // ntol
 #include "curl/include/curl/curl.h"
 #pragma pop_macro("ERROR")
-#include <WinSock2.h>
-#include <windows.h>
-#include <Iphlpapi.h>
 #pragma warning (push)
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"

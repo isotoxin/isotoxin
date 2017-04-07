@@ -262,7 +262,7 @@
 262=Din status på detta nätverk
 263=Otaggad
 264=Tillåt UDP
-265=Lyssna port (0 - inte lyssna)
+265=Avancerat
 266=Anslutningen [b]$[/b] kommer att tas bort![br]Är du säker?
 267=Anslutningen [b]$[/b] används! Alla kontakter på denna anslutning kommer att tas bort. Historiken för dessa kontakter tas också bort. Är du verkligen säker?
 268=Infoga känsloikon ($)
@@ -352,7 +352,7 @@
 352=Uppstart...
 353=Kameran används troligen redan.[br]Du måste avbryta kameraanvändningen i annat program.
 354=Sök efter uppdateringar
-355=Inga uppdateringar hittades
+355=Sök hela fraser
 356=Om
 357=Ny version upptäckt: $
 358=Aktivera videomottagning
@@ -394,7 +394,7 @@
 394=Avancerat
 395=Felsök
 396=Jag är avancerad användare. Visa avancerade inställningar.
-397=Videosamtal
+397=ingen fil
 398=Videokodningskvalitet (0 - auto)
 399=Kvalitet: $
 400=Aktivera stavningskontroll
@@ -569,6 +569,8 @@
 921=Byt namn på tagg
 922=Avatar
 923=Gruppchattsegenskaper
+924=Ordböcker
+925=Avancerade anslutningsmöjligheter
 1000=Inkommande meddelande
 1001=Inkommande fil
 1002=Filmottagning startad

@@ -1,0 +1,20 @@
+listen_port=Listen TCP port
+hint_listen_port=0 - dont't listen. Type 1..65535 to enable. When enabled, your Tox instance can act as a TCP relay for other Tox instance. This leads to increased traffic.
+allow_hole_punch=Allow UDP hole-punching
+hint_allow_hole_punch=UDP hole punching is a method for establishing bidirectional UDP connections between Internet hosts in private networks using network address translators.
+allow_local_discovery=Enable local network peer discovery
+hint_allow_local_discovery=Disabling this will cause Tox to not look for peers on the local network.
+restart_on_zero_online=Restart on zero-online
+hint_restart_on_zero_online=Restart plghost process with tox plugin if no peers online during 10 min
+disable_video_ex=Disable extented video support
+hint_disable_video_ex=This leads to decrease video calls quality for Isotoxin-Isotoxin connections.
+video_codec=Video codec
+hint_video_codec=vp8 currently is best choice
+video_bitrate=Video bitrate
+hint_video_bitrate=In kilobits per second. 0 - use default (5000)
+video_quality=Video quality
+hint_video_quality=Changes in this value influences, among others, the encoder's selection of motion estimation methods. Values greater than 0 will increase encoder speed at the expense of quality.<br>Valid range for vp8: [-16..16].<br>Valid range for vp9: [-8..8].
+nodes_list_file=Nodes list file
+hint_nodes_list_file=Put list file into {executable}/protocols folder.<br>List format: every line is one node:<br>IPv4/IPv6/Port/PublicKey
+pinned_list_file=Pinned ToxDNS servers
+hint_pinned_list_file=Put list file into {executable}/protocols folder.<br>List format: every line is one server:<br>ServerAddress=PublicKey

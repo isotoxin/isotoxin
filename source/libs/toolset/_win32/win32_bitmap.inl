@@ -478,7 +478,7 @@ void    drawable_bitmap_c::save_to_bitmap( bitmap_c &bmp, const ivec2 & pos_from
         uint32 pal[ 256 ];
     } b;
 
-    memset( &b, 0, sizeof( BITMAPV4HEADER ) );
+    memset( &b, 0, sizeof( BITMAPV4HEADER ) ); //-V512
     b.bmi.bmiHeader.bV4Size = sizeof( BITMAPINFOHEADER );
     if ( GetDIBits( d.m_mem_dc, d.m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS ) == 0 ) return;
 
@@ -522,7 +522,7 @@ void drawable_bitmap_c::save_to_bitmap( bitmap_c &bmp, bool save16as32 )
         uint32 pal[ 256 ];
     } b;
 
-    memset( &b, 0, sizeof( BITMAPV4HEADER ) );
+    memset( &b, 0, sizeof( BITMAPV4HEADER ) ); //-V512
     b.bmi.bmiHeader.bV4Size = sizeof( BITMAPINFOHEADER );
     if ( GetDIBits( d.m_mem_dc, d.m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS ) == 0 ) return;
 

@@ -250,7 +250,7 @@ void config_c::load( const ts::wstr_c &path_override )
         build(application_c::appbuild());
 
         int mf = misc_flags();
-        gui->disable_special_border( ( mf & MISCF_DISABLEBORDER ) != 0 );
+        gui->enable_special_border( ( mf & MISCF_DISABLEBORDER ) == 0 );
         g_app->F_SPLIT_UI(0 != (mf & MISCF_SPLIT_UI));
         g_app->F_BACKUP_PROFILE(0 == (mf & MISCF_DONT_BACKUP_PROFILE));
     }

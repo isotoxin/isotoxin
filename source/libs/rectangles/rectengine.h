@@ -430,6 +430,7 @@ public:
     void set_system_focus(bool bring_to_front = false);
     void flash();
 
+    void special_border(bool on);
     void make_hole( const ts::irect &holerect );
 
     bool is_foreground() const

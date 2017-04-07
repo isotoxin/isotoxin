@@ -845,7 +845,7 @@ template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts
         for (; j < cnt; ++j)
         {
             ts::wchar c = message.get_char(j);
-            if (ts::CHARz_find(WIDE2(" \\<>\r\n\t!"), c) >= 0 || in_quote == c) break;
+            if (ts::CHARz_find(WIDE2(" \\<>\r\n\t"), c) >= 0 || in_quote == c) break;
         }
 
         rslt.r0 = i;

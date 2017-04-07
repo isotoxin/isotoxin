@@ -302,14 +302,17 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     if (n.just_created == this) return 0;
     
     if (sender == nullptr)
-        if (!same_historian(n.pars->get_owner(),historian)) return 0;
-    else 
+    {
+        if (!same_historian(n.pars->get_owner(), historian)) return 0;
+    }
+    else {
         if (n.pars->get_sender() != sender) return 0;
+    }
 
     bool die = false;
     if (n.pars->n == notice)
     {
-        if (unique_notice(notice))
+        if (unique_notice(notice) || is_recreate(n.pars))
             die = true;
     }
     if (NOTICE_CALL_INPROGRESS == n.pars->n && (NOTICE_INCOMING_CALL == notice || NOTICE_CALL == notice))
@@ -1189,6 +1192,9 @@ void gui_notice_conference_c::setup(notice_s *pars)
 
 /*virtual*/ contact_root_c *notice_t<NOTICE_FOLDERSHARE>::get_owner()
 {
+    if (hist)
+        return hist;
+
     if (folder_share_c *fsh = g_app->find_folder_share_by_utag(utag))
         return contacts().rfind(fsh->get_hkey());
     return nullptr;
@@ -1236,16 +1242,15 @@ bool gui_notice_foldershare_c::runidlecn(bool idlemodenow)
         idlecdn = 5; // 5sec
         return false;
     }
-    else
-    {
-        if (!flags.is(F_IDLECN) && idlecdn > 0)
-        {
-            flags.set(F_IDLECN);
-            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, idlecountdown), 0);
 
-        } else if (idlecdn > 0)
-            return false;
-    }
+    if (!flags.is(F_IDLECN) && idlecdn > 0)
+    {
+        flags.set(F_IDLECN);
+        DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, idlecountdown), 0);
+
+    } else if (idlecdn > 0)
+        return false;
+
     return idlemodenow;
 }
 
@@ -1267,8 +1272,10 @@ bool gui_notice_foldershare_c::idlecountdown(RID, GUIPARAM)
         flags.set(F_IDLECN);
         DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, idlecountdown), 0);
     }
-    else
+    else {
+        lastfn.clear();
         runcheck();
+    }
 
     return true;
 }
@@ -1337,11 +1344,27 @@ void gui_notice_foldershare_c::update(folder_share_c *share)
                     newtext.append(CONSTWSTR("<ee>")).append(TTT("Receiving $", 545) / ts::wstr_c(CONSTWSTR("<b>"),
                         tr->filename_on_disk.psubstr([](const ts::wstr_c &me, ts::ZSTRINGS_SIGNED &start, ts::ZSTRINGS_SIGNED &end) { if (me.ends(CONSTWSTR(TRANSFERING_EXT))) end = me.get_length() - ASTR_LENGTH(TRANSFERING_EXT); }),
                         CONSTWSTR("</b>"))).append(CONSTWSTR("<br>"));
-                }
-                else
-                    newtext.append(LOC_IDLE), addrefresh = true;
 
-                addrefresh = runidlecn(addrefresh);
+                    runidlecn(false);
+                    runidlecn(true);
+                    
+                }
+                else {
+                    addrefresh = runidlecn(true);
+                    if (addrefresh || lastfn.is_empty())
+                    {
+                        newtext.append(LOC_IDLE);
+                        lastfn.clear();
+                    }
+                    else
+                    {
+                        newtext.append(CONSTWSTR("<ee>")).append(TTT("Receiving $", 545) / ts::wstr_c(CONSTWSTR("<b>"),
+                            lastfn.psubstr([](const ts::wstr_c &me, ts::ZSTRINGS_SIGNED &start, ts::ZSTRINGS_SIGNED &end) { if (me.ends(CONSTWSTR(TRANSFERING_EXT))) end = me.get_length() - ASTR_LENGTH(TRANSFERING_EXT); }),
+                            CONSTWSTR("</b>"))).append(CONSTWSTR("<br>"));
+                    }
+                }
+
+                
 
                 ba(this)
                     .add(addrefresh, BUTTON_FACE(fsh_refresh), DELEGATE(this, b_refresh))
@@ -1425,6 +1448,12 @@ void gui_notice_foldershare_c::update(folder_share_c *share)
 
 ts::uint32 gui_notice_foldershare_c::gm_handler(gmsg<ISOGM_FOLDER_SHARE_UPDATE> &p)
 {
+    if (p.utag != utag)
+        return 0;
+
+    if (file_transfer_s *tr = g_app->find_file_transfer_by_fshutag(utag))
+        lastfn = tr->filename_on_disk;
+
     flags.set(F_DIRTY);
     runcheck();
         
@@ -1539,11 +1568,17 @@ bool gui_notice_foldershare_c::b_refresh(RID, GUIPARAM par)
     return true;
 }
 
+/*virtual*/ bool gui_notice_foldershare_c::is_recreate(notice_s *pars)
+{
+    notice_t<NOTICE_FOLDERSHARE> *p = static_cast<notice_t<NOTICE_FOLDERSHARE> *>(pars);
+    return p->utag == utag;
+}
+
 void gui_notice_foldershare_c::setup(notice_s *pars)
 {
     notice_t<NOTICE_FOLDERSHARE> *p = static_cast<notice_t<NOTICE_FOLDERSHARE> *>(pars);
     utag = p->utag;
-    historian = pars->get_owner();
+    historian = p->get_owner();
     name = p->name;
     type = p->type;
     if (folder_share_c *sh = get())
@@ -3435,16 +3470,14 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 });
 
 
-            prf().get_table_folder_share().find<true>([&](folder_share_s &fsh) {
-
-                if (fsh.historian == historian->getkey())
+            for (auto &row : prf().get_table_folder_share())
+            {
+                if (row.other.historian == historian->getkey())
                 {
-                    notice_t<NOTICE_FOLDERSHARE> pars(fsh.utag, fsh.name, fsh.t);
+                    notice_t<NOTICE_FOLDERSHARE> pars(historian, row.other.utag, row.other.name, row.other.t);
                     create_notice(&pars);
                 }
-
-                return false;
-            });
+            }
 
             if ( historian->flag_full_search_result)
             {
@@ -6496,9 +6529,7 @@ namespace
             if ( avprots && avprots->loaded )
             {
                 dialog_protosetup_params_s prms(avprots.get(), &prf().get_table_active_protocol(), DELEGATE(&prf(), addeditnethandler));
-                prms.configurable.ipv6_enable = true;
-                prms.configurable.udp_enable = true;
-                prms.configurable.server_port = 0;
+                prms.configurable.set_defaults();
                 prms.configurable.initialized = true;
                 prms.connect_at_startup = true;
                 prms.watch = getrid();
@@ -6848,7 +6879,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
             notice_t<NOTICE_FRIEND_REQUEST_RECV>(sender, ts::str_c(p.post.message_utf8->cstr())).send();
             break;
         case MTA_INCOMING_CALL:
-            if (!historian->get_aaac())
+            if (historian->get_aaac() == AAAC_NOT)
                 notice_t<NOTICE_INCOMING_CALL>(historian, sender).send();
             break;
         default:
@@ -7806,7 +7837,7 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
                 ts::str_c n(ts::to_utf8(ts::fn_get_name(path)));
                 if (n.is_empty()) n.set(CONSTASTR("default"));
                 folder_share_c *fsh = g_app->add_folder_share(h->getkey(), n, folder_share_s::FST_SEND, 0, path);
-                notice_t<NOTICE_FOLDERSHARE>(fsh->get_utag()).send();
+                notice_t<NOTICE_FOLDERSHARE>(h, fsh->get_utag()).send();
             }
         }
 

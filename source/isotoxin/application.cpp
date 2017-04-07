@@ -603,6 +603,12 @@ ts::uint32 application_c::gm_handler(gmsg<GM_UI_EVENT> & e)
         });
     }
 
+    if (UE_ACTIVATE == e.evt)
+    {
+        if (!is_disabled_special_border())
+            enable_special_border(true);
+    }
+
     return 0;
 }
 
@@ -2799,15 +2805,15 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
                         if (rfshare->recv_waiting_file(xtag, filename_ondisk))
                             folder_share_utag = fsutag, folder_share_xtag = xtag;
                     }
-
-                    if (!folder_share_utag)
-                    {
-                        // due race condition recv array was cleared
-                        // so, skip this file for now
-                        return nullptr;
-                    }
                 }
             }
+        }
+
+        if (!folder_share_utag)
+        {
+            // due race condition recv array was cleared
+            // so, skip this file for now
+            return nullptr;
         }
     }
 

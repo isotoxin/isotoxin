@@ -65,6 +65,7 @@ static void PROTOCALL folder_share_ctl(u64 utag, folder_share_control_e ctl);
 static void PROTOCALL folder_share_query(u64 utag, const char *tocname, int tocname_len, const char *fakename, int fakename_len);
 static void PROTOCALL typing(contact_id_s gid, contact_id_s cid);
 static void PROTOCALL telemetry( telemetry_e k, const void *data, int datasize );
+static void PROTOCALL get_file(const char *fn, int fn_len, int tag);
 
 static void fix_pf( proto_info_s &pi )
 {
@@ -98,7 +99,6 @@ struct protolib_s
             {
                 functions = handshake( &hostfunctions );
                 functions->logging_flags(g_logging_flags);
-                functions->telemetry_flags( g_telemetry_flags );
                 use_id(0); // make 0 cid unusable 
 
             } else
@@ -153,6 +153,7 @@ struct protolib_s
         telemetry,
         find_free_id,
         use_id,
+        get_file,
     },
     nullptr, // protolib
     nullptr, // functions
@@ -1029,6 +1030,16 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             IPCW(XX_PONG) << bytes(data, sz);
         }
         break;
+    case XX_PROTO_FILE:
+        {
+            ipcr r(d->get_reader());
+            int fid = r.get<i32>();
+            file_portion_prm_s fp;
+            fp.offset = 0;
+            fp.data = r.get_data(fp.size);
+            protolib.functions->proto_file(fid, &fp);
+        }
+        break;
     case AQ_VIDEO:
         {
             struct inf_s
@@ -1065,7 +1076,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     case AQ_DEBUG_SETTINGS:
         {
             g_logging_flags = 0;
-            g_telemetry_flags = 0;
             if (protolib.functions) protolib.functions->logging_flags(0);
 #if defined _DEBUG || defined _CRASH_HANDLER
             MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
@@ -1085,15 +1095,9 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 {
                     g_logging_flags = (unsigned)v.as_int();
                 }
-                else if ( k.equals(STD_ASTR(DEBUG_OPT_TELEMETRY)))
-                {
-                    g_telemetry_flags = (unsigned)v.as_int();
-                }
             });
 
             if ( protolib.functions ) protolib.functions->logging_flags( g_logging_flags );
-            if ( protolib.functions ) protolib.functions->telemetry_flags( g_telemetry_flags );
-
 
 #if defined _DEBUG || defined _CRASH_HANDLER
             exception_operator_c::set_dump_type(dump_type);
@@ -1419,4 +1423,9 @@ static void PROTOCALL typing(contact_id_s gid, contact_id_s cid)
 static void PROTOCALL telemetry( telemetry_e k, const void *data, int datasize )
 {
     IPCW( HQ_TELEMETRY ) << static_cast<int>(k) << bytes(data, datasize);
+}
+
+static void PROTOCALL get_file(const char *fn, int fn_len, int tag)
+{
+    IPCW(XX_PROTO_FILE) << std::asptr(fn, fn_len) << static_cast<int>(tag);
 }

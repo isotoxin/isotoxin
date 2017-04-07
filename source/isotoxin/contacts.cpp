@@ -1262,6 +1262,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
             if ( ava.data.size() && ts::is_dir_exists( downf ) )
                 ava.data.save_to_file( ts::fn_join( downf, CONSTWSTR( "avatar_" ) ).append_as_uint( ava.tag ).append( CONSTWSTR( ".png" ) ) );
         }
+
+        c->redraw();
     }
 
     prf().set_avatar( ava.contact, ava.data, ava.tag );
@@ -1714,29 +1716,28 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                                 contact_c *c_sub = (contact_c *)param;
                                 contact_root_c *hst = c_sub->get_historian();
 
-                                if (auto *row = prf().get_table_folder_share().find<true>([hst](folder_share_s &fsh) {
-
-                                    if (fsh.t != folder_share_s::FST_SEND)
-                                        return false;
-
-                                    if (g_app->find_folder_share_by_utag(fsh.utag))
-                                        return false;
-
-                                    if (fsh.historian == hst->getkey())
-                                    {
-                                        g_app->add_folder_share(fsh.historian, fsh.name, folder_share_s::FST_SEND, fsh.utag, fsh.path);
-                                        notice_t<NOTICE_FOLDERSHARE>(fsh.utag).send();
-                                        return true;
-                                    }
-
-                                    return false;
-                                }))
+                                bool ch = false;
+                                for (auto &row : prf().get_table_folder_share())
                                 {
-                                    row->other.usetime = ts::now();
-                                    row->changed();
-                                    prf().changed();
+                                    if (row.other.t != folder_share_s::FST_SEND)
+                                        continue;
 
+                                    if (g_app->find_folder_share_by_utag(row.other.utag))
+                                        continue;
+
+                                    if (row.other.historian == hst->getkey())
+                                    {
+                                        row.other.usetime = ts::now();
+                                        row.changed();
+                                        ch = true;
+
+                                        g_app->add_folder_share(row.other.historian, row.other.name, folder_share_s::FST_SEND, row.other.utag, row.other.path);
+                                        notice_t<NOTICE_FOLDERSHARE>(hst, row.other.utag).send();
+                                    }
                                 }
+
+                                if (ch)
+                                    prf().changed();
 
                             DEFERRED_EXECUTION_BLOCK_END(c_sub);
 
@@ -2207,7 +2208,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
                 g_app->new_blink_reason(historian->getkey()).folder_share(imsg.utag);
             }
 
-            notice_t<NOTICE_FOLDERSHARE>(imsg.utag).send();
+            notice_t<NOTICE_FOLDERSHARE>(historian, imsg.utag).send();
+            fsh->update_data();
 
         }
 

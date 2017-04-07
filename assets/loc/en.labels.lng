@@ -262,7 +262,7 @@
 262=Your status on this network
 263=Untagged
 264=Allow UDP
-265=Listen port (0 - don't listen)
+265=Advanced
 266=Connection [b]$[/b] will be deleted![br]Are you sure?
 267=Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?
 268=Insert emoticon ($)
@@ -352,6 +352,7 @@
 352=Initialization...
 353=Probably camera already used.[br]You have to stop using camera by another application.
 354=Check for update
+355=Search entire phrases
 356=About
 357=New version detected: $
 358=Enable video receive
@@ -393,17 +394,11 @@
 394=Advanced
 395=Debug
 396=I'm power user. Please, show me advanced settings.
-397=Video calls
-398=Video encoding quality (0 - auto)
-399=Quality: $
+397=no file
 400=Enable spell checker
 401=Notifications
 402=Notifications settings
 403=Allow insistent notification of incoming call
-404=Codecs
-405=Automatic quality adjust
-406=Disable extended video support
-407=Video bitrate (0 - auto)
 408=Dictionaries...
 409=List of spelling dictionaries is being loaded
 410=Active dictionaries: $ of $
@@ -530,8 +525,6 @@
 531=Clear history
 532=Video call
 533=Autoselect by last activity
-534=Allow hole punching
-535=Allow local discovery
 536=Select share path
 537=Share folder
 538=Incoming folder share
@@ -541,6 +534,7 @@
 542=Transferring $
 543=Scan folder
 544=Idle
+545=Receiving $
 545=Receiving $
 548=Folder share was rejected
 549=Select path for incoming folder
@@ -568,6 +562,8 @@
 921=Rename tag
 922=Avatar
 923=Conference properties
+924=Dictionaries
+925=Advanced connection options
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

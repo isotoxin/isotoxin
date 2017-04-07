@@ -176,6 +176,14 @@ gui_c::~gui_c()
     gui = nullptr;
 }
 
+void gui_c::enable_special_border(bool v)
+{
+    m_flags.init(F_DISABLESPECIALBORDER, !v);
+    for (RID rid : roots())
+        if (rectengine_root_c *root = HOLD(rid)().getroot())
+            root->special_border(v);
+}
+
 void gui_c::reload_fonts()
 {
     m_theme.reload_fonts( DELEGATE(this, font_par) );

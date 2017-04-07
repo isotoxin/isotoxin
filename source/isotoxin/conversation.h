@@ -153,9 +153,10 @@ template<> struct notice_t<NOTICE_FOLDERSHARE> : public notice_s
 {
     ts::str_c name;
     uint64 utag;
+    contact_root_c *hist = nullptr;
     folder_share_s::fstype_e type = folder_share_s::FST_UNKNOWN;
-    notice_t(uint64 utag) :notice_s(NOTICE_FOLDERSHARE), utag(utag) {}
-    notice_t(uint64 utag, const ts::str_c &name, folder_share_s::fstype_e type) :notice_s(NOTICE_FOLDERSHARE), name(name), utag(utag), type(type) {}
+    notice_t(contact_root_c *hist, uint64 utag) :notice_s(NOTICE_FOLDERSHARE), hist(hist), utag(utag) {}
+    notice_t(contact_root_c *hist, uint64 utag, const ts::str_c &name, folder_share_s::fstype_e type) :notice_s(NOTICE_FOLDERSHARE), hist(hist), name(name), utag(utag), type(type) {}
     /*virtual*/ contact_root_c *get_owner() override;
     /*virtual*/ gui_notice_c &build(RID lstrid) override;
 };
@@ -285,6 +286,8 @@ protected:
         void operator=(const ba&) UNUSED;
         void operator=(ba &&) UNUSED;
     };
+
+    virtual bool is_recreate(notice_s *par) { return false; };
 
 public:
     gui_notice_c() {}
@@ -474,6 +477,7 @@ class gui_notice_foldershare_c : public gui_notice_c
     bool check(RID, GUIPARAM);
     bool idlecountdown(RID, GUIPARAM);
 
+    ts::wstr_c lastfn;
     ts::str_c name;
     folder_share_s::fstype_e type;
     int idlecdn = 5;
@@ -488,6 +492,7 @@ class gui_notice_foldershare_c : public gui_notice_c
     bool b_tryagain(RID, GUIPARAM par);
     bool b_refresh(RID, GUIPARAM par);
     
+    /*virtual*/ bool is_recreate(notice_s *par) override;
 
 public:
     gui_notice_foldershare_c(MAKE_CHILD<gui_notice_foldershare_c> &data);

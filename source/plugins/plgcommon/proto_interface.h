@@ -257,8 +257,9 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     void(PROTOCALL *av_stream_options)(contact_id_s gid, contact_id_s cid, const stream_options_s *so);
 
     /*
-        plugin tells to Isotoxin its current values
+        plugin tells to Isotoxin its current config values
         see known configurable fields (eg CFGF_PROXY_TYPE)
+        see IS_ADVANCED_SETTINGS
     */
     void(PROTOCALL *configurable)(int n, const char **fields, const char **values);
 
@@ -323,6 +324,9 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
     //mark id used
     void (PROTOCALL *use_id)(int);
+
+    void (PROTOCALL *get_file)(const char *fn, int fn_len, int tag);
+    
 };
 
 /*
@@ -361,8 +365,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC1( void, enter_conference,  const char * ) \
     FUNC2( void, leave_conference,  contact_id_s, int ) \
     FUNC1( void, logging_flags,     unsigned int ) \
-    FUNC1( void, telemetry_flags,   unsigned int ) \
-    
+    FUNC2( void, proto_file,        i32, const file_portion_prm_s *) \
 
 struct proto_functions_s
 {

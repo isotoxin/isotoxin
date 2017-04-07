@@ -70,12 +70,13 @@ class dialog_setup_network_c : public gui_isodialog_c
     bool login_edit( const ts::wstr_c &t, bool );
     bool password_edit( const ts::wstr_c &t, bool );
 
+    bool b_advanced(RID, GUIPARAM);
+
 #define COPDEF( nnn, dv ) bool network_##nnn(RID, GUIPARAM p);
     CONN_OPTIONS
 #undef COPDEF
 
     bool network_importfile(const ts::wstr_c & t, bool );
-    bool network_serverport(const ts::wstr_c & t, bool );
     bool network_connect(RID, GUIPARAM p);
     void set_proxy_type_handler(const ts::str_c&);
     bool set_proxy_addr_handler(const ts::wstr_c & t, bool );
@@ -96,6 +97,11 @@ protected:
 public:
     dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c> &data);
     ~dialog_setup_network_c();
+
+    ts::str_c get_advanced();
+    ts::str_c adv_param(const ts::asptr &pn) const;
+    void adv_param(const ts::asptr &pn, const ts::str_c &pv);
+    ts::wstr_c prototag() const;
 
     /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -151,7 +157,6 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_ADVANCED_TOOLS         = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_ADVANCED_MISC          = SETBIT( NUMGEN_NEXT( ctlm ) ),
 
@@ -187,17 +192,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int tools_bits = 0;
     bool advt_handler(RID, GUIPARAM);
 
-    ts::astrmap_c video_codecs;
-    bool disable_video_ex = false;
-    int encoding_quality = 0;
-    int video_bitrate = 0;
-    bool encoding_quality_set(RID, GUIPARAM);
     bool advv_handler(RID, GUIPARAM);
-
-    void videocodecs_tab_selected();
-    menu_c codecctxmenu(const ts::str_c& param, bool activation);
-    void codecselected(const ts::str_c& prm);
-    bool set_bitrate(const ts::wstr_c &, bool );
 
     ts::buf_c testrec;
     s3::Format recfmt;
@@ -311,7 +306,6 @@ private:
 
     bool is_video_tab_selected = false;
     bool is_networks_tab_selected = false;
-    bool is_video_codecs_tab_selected = false;
     bool proto_list_loaded = false;
 
     bool profile_selected = false;

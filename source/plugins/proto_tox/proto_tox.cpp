@@ -89,6 +89,31 @@
 #define DEFAULT_AUDIO_BITRATE 32
 #define DEFAULT_VIDEO_BITRATE 5000
 
+#define FILE_TAG_NODES 1
+#define FILE_TAG_PINNED 2
+
+#define ADVSET \
+    ASI( listen_port ) \
+    ASI( allow_hole_punch ) \
+    ASI( allow_local_discovery ) \
+    ASI( restart_on_zero_online ) \
+    ASI( nodes_list_file ) \
+    ASI( pinned_list_file ) \
+    ASI( disable_video_ex ) \
+    ASI( video_codec ) \
+    ASI( video_bitrate ) \
+    ASI( video_quality ) \
+
+#define ADVSETSTRING "listen_port:int:0/allow_hole_punch:bool:1/allow_local_discovery:bool:1/restart_on_zero_online:bool:0/nodes_list_file:file/pinned_list_file:file/disable_video_ex:bool:0/video_codec:enum(vp8,vp9):0/video_bitrate:int:0/video_quality:int:0"
+
+enum advset_e
+{
+#define ASI(aa) adv_##aa##_e,
+    ADVSET
+#undef ASI
+    adv_count
+};
+
 enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
 {
     chunk_tox_data,
@@ -116,6 +141,13 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_use_ipv6,
     chunk_use_hole_punching,
     chunk_use_local_discovery,
+    chunk_video_codec,
+    chunk_video_quality,
+    chunk_video_bitrate,
+    chunk_restart_on_zero_online,
+    chunk_disable_video_ex,
+    chunk_nodes_list_fn,
+    chunk_pinned_list_fn,
 
     chunk_nodes = 101,
     chunk_node,
@@ -573,7 +605,7 @@ struct tox3dns_s
     }
 };
 
-struct dht_node_s
+struct tox_node_s
 {
     public_key_s pubid;
     std::string addr4;
@@ -585,12 +617,16 @@ struct dht_node_s
     uint16_t port = 0;
     bool accepted = false;
 
-    dht_node_s(const std::asptr& addr4, const std::asptr& addr6, uint16_t port, const std::asptr& pubid_) :addr4(addr4), addr6(addr6), port(port)
+    tox_node_s(const std::asptr& addr4, const std::asptr& addr6, uint16_t port, const std::asptr& pubid_) :addr4(addr4), addr6(addr6), port(port)
     {
         std::pstr_c(pubid_).hex2buf<32>(pubid.key);
     }
 
-    bool operator<(const dht_node_s&n) const
+    tox_node_s(const public_key_s &pk, int push_count, int accept_count):pubid(pk), push_count(push_count), accept_count(accept_count)
+    {
+    }
+
+    bool operator<(const tox_node_s&n) const
     {
         return memcmp(pubid.key, n.pubid.key, TOX_PUBLIC_KEY_SIZE) < 0;
     }
@@ -600,7 +636,7 @@ struct dht_node_s
     }
 };
 
-static void operator<<(chunk &chunkm, const dht_node_s &n)
+static void operator<<(chunk &chunkm, const tox_node_s &n)
 {
     chunk mm(chunkm.b, chunk_node);
 
@@ -710,7 +746,9 @@ class tox_c
             return 0;
     }
 
-    std::vector<dht_node_s> nodes;
+    std::string nodes_fn;
+    std::string pinned_fn;
+    std::vector<tox_node_s> nodes;
     byte_buffer buf_tox_config; // saved on offline; PURE TOX-SAVE DATA, aka native data
 
 public:
@@ -854,6 +892,8 @@ public:
 
     uint16_t tox_proxy_port = 0;
 
+    bool restart_on_zero_online = false;
+    bool disabled_video_ex = false;
     bool reconnect = false;
     bool restart_module = false;
     bool use_vp9_codec = false;
@@ -916,24 +956,6 @@ public:
         options.udp_enabled = true;
         options.hole_punching_enabled = true;
         options.local_discovery_enabled = true;
-
-        nodes.clear();
-        nodes.reserve(32);
-
-#define CONSTASTR STD_ASTR
-#include "dht_nodes.inl"
-#undef CONSTASTR
-
-        std::sort(nodes.begin(), nodes.end());
-
-        //nodes.emplace_back( STD_ASTR("isotoxin.im"), 33445, STD_ASTR("5823FB947FF24CF83DDFAC3F3BAA18F96EA2018B16CC08429CB97FA502F40C23") );
-
-        pinnedservs.clear();
-        pinnedservs.reserve(4);
-#define PINSERV(a, b) pinnedservs.emplace_back( STD_ASTR(a), STD_ASTR(b) );
-#include "pinned_srvs.inl"
-#undef PINSERV
-
     }
 
 
@@ -941,7 +963,7 @@ public:
     {
         zero_online_connect_cnt = 0;
         accepted_nodes = 0;
-        for (dht_node_s &n : nodes)
+        for (tox_node_s &n : nodes)
             n.accepted = false;
 
         next_check_accept_nodes_time = time_ms() + 60000;
@@ -985,6 +1007,8 @@ public:
         self.avatar_tag = 0;
         hf->update_contact(&self);
     }
+
+    void restore_core_contacts();
 
     void add_to_callstate(contact_descriptor_s *d);
 
@@ -1050,9 +1074,10 @@ public:
 
     }
 
-    TOX_ERR_NEW prepare()
+    TOX_ERR_NEW prepare(bool kill_descs)
     {
-        delete_all_descs();
+        if (kill_descs)
+            delete_all_descs();
 
         reconnect = false;
         if (tox) tox_kill(tox);
@@ -1159,22 +1184,25 @@ public:
         toxav_callback_audio_receive_frame(toxav, cb_toxav_audio, nullptr);
         toxav_callback_video_receive_frame(toxav, cb_toxav_video, nullptr);
 
+        if (!kill_descs)
+            restore_core_contacts();
+
         return TOX_ERR_NEW_OK;
     }
 
-    dht_node_s& get_node()
+    tox_node_s& get_node()
     {
-        dht_node_s *n2r = nullptr;
+        tox_node_s *n2r = nullptr;
         uint32_t prevrnd = 0;
 
         int minpc = INT_MAX;
-        for (dht_node_s &node : nodes)
+        for (tox_node_s &node : nodes)
         {
             if (node.push_count < minpc)
                 minpc = node.push_count;
         }
 
-        for (dht_node_s &node : nodes)
+        for (tox_node_s &node : nodes)
         {
             if (node.push_count != minpc)
                 continue;
@@ -1203,7 +1231,14 @@ public:
         size_t n = min(nodes.size(), 4);
         for (size_t i = 0; i < n; ++i)
         {
-            dht_node_s &node = get_node();
+            tox_node_s &node = get_node();
+            if (node.port == 0)
+            {
+                ++n;
+                if (n > nodes.size() && i >= nodes.size()) break;
+                continue;
+            }
+
             ++node.push_count;
             if (!node.accepted) --node.accept_count; if (node.accept_count < 0) node.accept_count = 0;
             if (node.push_count > 1 && node.accept_count == 0)
@@ -1246,20 +1281,155 @@ public:
         do_on_offline_stuff();
     }
 
+
+    std::string adv_get_listen_port()
+    {
+        std::string s;
+        s.set_as_int(options.tcp_port);
+        return s;
+    }
+    void adv_set_listen_port(const std::pstr_c &val)
+    {
+        int new_server_port = val.as_int();
+        if (new_server_port != options.tcp_port)
+            options.tcp_port = static_cast<uint16_t>(new_server_port), reconnect = true;
+    }
+
+    std::string adv_get_allow_hole_punch()
+    {
+        std::string s;
+        s.set(options.hole_punching_enabled ? STD_ASTR("1") : STD_ASTR("0"));
+        return s;
+    }
+    void adv_set_allow_hole_punch(const std::pstr_c &val)
+    {
+        bool v = val.as_int() != 0;
+        if (options.hole_punching_enabled != v)
+            options.hole_punching_enabled = v, reconnect = true;
+    }
+
+    std::string adv_get_allow_local_discovery()
+    {
+        std::string s;
+        s.set(options.local_discovery_enabled ? STD_ASTR("1") : STD_ASTR("0"));
+        return s;
+    }
+    void adv_set_allow_local_discovery(const std::pstr_c &val)
+    {
+        bool v = val.as_int() != 0;
+        if (options.local_discovery_enabled != v)
+            options.local_discovery_enabled = v, reconnect = true;
+    }
+
+    std::string adv_get_restart_on_zero_online()
+    {
+        std::string s;
+        s.set(restart_on_zero_online ? STD_ASTR("1") : STD_ASTR("0"));
+        return s;
+    }
+    void adv_set_restart_on_zero_online(const std::pstr_c &val)
+    {
+        restart_on_zero_online = val.as_int() != 0;
+    }
+
+    std::string adv_get_disable_video_ex()
+    {
+        std::string s;
+        s.set(disabled_video_ex ? STD_ASTR("1") : STD_ASTR("0"));
+        return s;
+    }
+    void adv_set_disable_video_ex(const std::pstr_c &val)
+    {
+        disabled_video_ex = val.as_int() != 0;
+    }
+
+    std::string adv_get_video_codec()
+    {
+        std::string s;
+        s.set(use_vp9_codec ? STD_ASTR("vp9") : STD_ASTR("vp8"));
+        return s;
+    }
+    void adv_set_video_codec(const std::pstr_c &val)
+    {
+        use_vp9_codec = val.equals(STD_ASTR("vp9"));
+    }
+
+    std::string adv_get_video_bitrate()
+    {
+        std::string s;
+        s.set_as_int(video_bitrate);
+        return s;
+    }
+    void adv_set_video_bitrate(const std::pstr_c &val)
+    {
+        video_bitrate = val.as_int();
+    }
+
+    std::string adv_get_video_quality()
+    {
+        std::string s;
+        s.set_as_int(video_quality);
+        return s;
+    }
+    void adv_set_video_quality(const std::pstr_c &val)
+    {
+        video_quality = val.as_int();
+    }
+
+    std::string adv_get_nodes_list_file()
+    {
+        return nodes_fn.is_empty() ? std::string(STD_ASTR("tox_nodes.txt")) : nodes_fn;
+    }
+    void adv_set_nodes_list_file(const std::pstr_c &val)
+    {
+        std::string oldf = nodes_fn;
+        nodes_fn.set(val);
+        nodes_fn = adv_get_nodes_list_file();
+
+        if (!oldf.equals(nodes_fn))
+            hf->get_file(nodes_fn.cstr(), nodes_fn.get_length(), FILE_TAG_NODES);
+    }
+
+    std::string adv_get_pinned_list_file()
+    {
+        return pinned_fn.is_empty() ? std::string(STD_ASTR("tox_pinned.txt")) : pinned_fn;
+    }
+    void adv_set_pinned_list_file(const std::pstr_c &val)
+    {
+        std::string oldf = pinned_fn;
+        pinned_fn.set(val);
+        pinned_fn = adv_get_pinned_list_file();
+
+        if (!oldf.equals(pinned_fn))
+            hf->get_file(pinned_fn.cstr(), pinned_fn.get_length(), FILE_TAG_PINNED);
+    }
+
     void send_configurable()
     {
-        const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, copname<auto_co_ipv6_enable>::name().s, copname<auto_co_udp_enable>::name().s, copname<auto_co_hole_punch>::name().s, copname<auto_co_local_discovery>::name().s, CFGF_SERVER_PORT };
-        std::string svalues[7];
+        static const int copts = 4;
+        const char * fields[copts + adv_count] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, copname<auto_co_ipv6_enable>::name().s, copname<auto_co_udp_enable>::name().s,
+        
+#define ASI(aa) #aa,
+            ADVSET
+#undef ASI
+
+        };
+        std::string svalues[copts + adv_count];
         svalues[0].set_as_int(tox_proxy_type);
         if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
         svalues[2].set_as_int(options.ipv6_enabled ? 1 : 0);
         svalues[3].set_as_int(options.udp_enabled ? 1 : 0);
-        svalues[4].set_as_int(options.hole_punching_enabled ? 1 : 0);
-        svalues[5].set_as_int(options.local_discovery_enabled ? 1 : 0);
-        svalues[6].set_as_int(options.tcp_port);
-        const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr(), svalues[4].cstr(), svalues[5].cstr(), svalues[6].cstr() };
+        const char * values[copts + adv_count];
 
         static_assert(ARRAY_SIZE(fields) == ARRAY_SIZE(values) && ARRAY_SIZE(values) == ARRAY_SIZE(svalues), "check len");
+
+        int i = copts;
+#define ASI(aa) svalues[i++] = adv_get_##aa();
+        ADVSET
+#undef ASI
+
+        i = 0;
+        for (const std::string &s : svalues) values[i++] = s.cstr();
 
         hf->configurable(ARRAY_SIZE(fields), fields, values);
     }
@@ -1282,7 +1452,22 @@ public:
                 {
                     const public_key_s &pk = *(const public_key_s *)pubk;
                     auto x = std::lower_bound(nodes.begin(), nodes.end(), pk);
-                    if (x->pubid == pk)
+                    if (&*x == nullptr)
+                    {
+                        int pc = 0, ac = 0;
+                        if (lc(chunk_node_push_count))
+                            pc = lc.get_i32();
+
+                        if (lc(chunk_node_accept_count))
+                            ac = lc.get_i32();
+
+                        if (pc || ac)
+                        {
+                            nodes.emplace_back(pk, pc, ac);
+                            std::sort(nodes.begin(), nodes.end());
+                        }
+
+                    } else if (x->pubid == pk)
                     {
                         if (lc(chunk_node_push_count))
                             x->push_count = lc.get_i32();
@@ -2592,7 +2777,7 @@ enum idgen_e
     ID_UNKNOWN,
 };
 
-static fid_s find_tox_fid(const public_key_s &id);
+static fid_s find_tox_fid(const public_key_s &id, bool strong_check = false);
 
 enum contact_caps_tox_e
 {
@@ -2697,7 +2882,7 @@ public:
 
         void isotoxin_video_send_frame(int fid, unsigned int width, unsigned int height, const byte *y, const byte *u, const byte *v)
         {
-            if (cl.video_quality < 0)
+            if (cl.disabled_video_ex)
             {
                 vquality = -1;
                 if (enc_cfg.g_w) vpx_codec_destroy(&v_encoder);
@@ -2740,7 +2925,7 @@ public:
                         return;
                     }
 
-                    enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE * 1000;
+                    enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE;
                     enc_cfg.g_w = 0;
                     enc_cfg.g_h = 0;
                     enc_cfg.g_pass = VPX_RC_ONE_PASS;
@@ -2756,7 +2941,7 @@ public:
                 encoder_vp8 = !cl.use_vp9_codec;
                 enc_cfg.g_w = width;
                 enc_cfg.g_h = height;
-                enc_cfg.rc_target_bitrate = (vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE) * 1000;
+                enc_cfg.rc_target_bitrate = (vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE);
 
                 if (vpx_codec_enc_init(&v_encoder, encoder_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0) != VPX_CODEC_OK)
                 {
@@ -2768,15 +2953,10 @@ public:
             if (vquality != cl.video_quality)
             {
                 vquality = cl.video_quality;
-                if (vquality < 0) vquality = 0;
-                if (vquality > 100) vquality = 100;
-                if (vquality == 0)
-                    vpx_codec_control(&v_encoder, VP8E_SET_CPUUSED, 0);
-                else
-                {
-                    int vv = encoder_vp8 ? ((100 - vquality) * 16 / 99) : ((100 - vquality) * 8 / 99);
-                    vpx_codec_control(&v_encoder, VP8E_SET_CPUUSED, vv);
-                }
+                int limit = encoder_vp8 ? 16 : 8;
+                if (vquality < -limit) vquality = -limit;
+                if (vquality > limit) vquality = limit;
+                vpx_codec_control(&v_encoder, VP8E_SET_CPUUSED, vquality);
             }
 
             for (;;)
@@ -3132,7 +3312,7 @@ public:
             return fid_s();
 
         const public_key_s &pk = address.as_public_key();
-        fid_s rfid = find_tox_fid(pk);
+        fid_s rfid = find_tox_fid(pk, true);
 
         if (rfid.is_normal())
             return rfid;
@@ -3350,6 +3530,16 @@ public:
         return av;
     }
 };
+
+void tox_c::restore_core_contacts()
+{
+    for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+    {
+        if (f->is_conference())
+            continue;
+        f->set_fid(f->restore_tox_friend());
+    }
+}
 
 void tox_c::add_to_callstate(contact_descriptor_s *d)
 {
@@ -3728,11 +3918,26 @@ static void restore_descriptor(int tox_fid)
 
     ASSERT( contact_descriptor_s::find(desc->address) == desc ); // check that such pubid is single
 
-    contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE );
+    contact_data_s cd( desc->get_id(true), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_STATUSMSG );
     
     std::sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
     cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
     cd.public_id = pubid.cstr();
+
+    std::string name, statusmsg;
+    TOX_ERR_FRIEND_QUERY er;
+    name.set_length(static_cast<int>(tox_friend_get_name_size(cl.tox, fid.normal(), &er)));
+    tox_friend_get_name(cl.tox, fid.normal(), (byte*)name.str(), &er);
+    cd.name = name.cstr();
+    cd.name_len = name.get_length();
+
+    statusmsg.set_length(static_cast<int>(tox_friend_get_status_message_size(cl.tox, fid.normal(), &er)));
+    tox_friend_get_status_message(cl.tox, fid.normal(), (byte*)statusmsg.str(), &er);
+    cd.status_message = statusmsg.cstr();
+    cd.status_message_len = statusmsg.get_length();
+
+    savebuffer cdata;
+    desc->prepare_protodata(cd, cdata);
 
     cd.state = CS_OFFLINE;
     cl.hf->update_contact(&cd);
@@ -3769,11 +3974,14 @@ static fid_s find_tox_unknown_contact(const public_key_s &id, const std::asptr &
     return desc->get_fid();
 }
 
-static fid_s find_tox_fid(const public_key_s &id)
+static fid_s find_tox_fid(const public_key_s &id, bool strong_check)
 {
     u32 r = tox_friend_by_public_key(cl.tox, id.key, nullptr);
     if ( r == UINT32_MAX )
     {
+        if (strong_check)
+            return fid_s();
+
         if ( contact_descriptor_s *desc = contact_descriptor_s::find( id ) )
             if (desc->get_fid().is_valid())
                 return desc->get_fid();
@@ -5109,7 +5317,7 @@ void tox_c::tick(int *sleep_time_ms)
                 if (accepted_nodes < 4 || zero_online())
                     ++zero_online_connect_cnt, connect();
 
-                if (zero_online_connect_cnt > 10)
+                if (restart_on_zero_online && zero_online_connect_cnt > 10)
                 {
                     restart_module = true;
                     MaskLog(LFLS_TIMEOUT, "Zero online, Restart... (%u)", GetCurrentProcessId());
@@ -5437,22 +5645,10 @@ void tox_c::set_config(const void*idata, int iisz)
     {
         parse_values(ca.params, [&](const std::pstr_c &field, const std::pstr_c &val)
         {
-            if (field.equals(STD_ASTR(CFGF_VIDEO_CODEC)))
-            {
-                use_vp9_codec = val.equals(STD_ASTR("vp9"));
-                return;
-            }
-            if (field.equals(STD_ASTR(CFGF_VIDEO_BITRATE)))
-            {
-                video_bitrate = val.as_int();
-                return;
-            }
-            if (field.equals(STD_ASTR(CFGF_VIDEO_QUALITY)))
-            {
-                video_quality = val.as_int();
-                return;
-            }
 
+#define ASI(aa) if (field.equals(STD_ASTR(#aa))) { adv_set_##aa(val); return; }
+            ADVSET
+#undef ASI
             if (field.equals(STD_ASTR(CFGF_PROXY_TYPE)))
             {
                 int new_proxy_type = val.as_int();
@@ -5472,23 +5668,12 @@ void tox_c::set_config(const void*idata, int iisz)
                 proxy_settings_ok = true;
                 return;
             }
-            if (field.equals(STD_ASTR(CFGF_SERVER_PORT)))
-            {
-                int new_server_port = val.as_int();
-                if (new_server_port != options.tcp_port)
-                    options.tcp_port = static_cast<uint16_t>(new_server_port), reconnect = true;
-                return;
-            }
 
-            handle_cop< SETBIT(auto_co_ipv6_enable) | SETBIT(auto_co_udp_enable) | SETBIT(auto_co_hole_punch) | SETBIT(auto_co_local_discovery) >(field.as_sptr(), val.as_sptr(), [&](auto_conn_options_e co, bool v) {
+            handle_cop< SETBIT(auto_co_ipv6_enable) | SETBIT(auto_co_udp_enable) >(field.as_sptr(), val.as_sptr(), [&](auto_conn_options_e co, bool v) {
                 if (auto_co_ipv6_enable == co && options.ipv6_enabled != v)
                     options.ipv6_enabled = v, reconnect = true;
                 else if (auto_co_udp_enable == co && options.udp_enabled != v)
                     options.udp_enabled = v, reconnect = true;
-                else if (auto_co_hole_punch == co && options.hole_punching_enabled != v)
-                    options.hole_punching_enabled = v, reconnect = true;
-                else if (auto_co_local_discovery == co && options.local_discovery_enabled != v)
-                    options.local_discovery_enabled = v, reconnect = true;
             });
 
             if (field.equals(STD_ASTR(CFGF_SETPROTO)))
@@ -5541,7 +5726,13 @@ void tox_c::set_config(const void*idata, int iisz)
         memcpy( buf_tox_config.data(), ca.native_data, ca.native_data_len );
 
         // raw tox_save
-        toxerr = prepare();
+        toxerr = prepare(true);
+
+        // import - restore descriptors
+        aint cnt = tox_self_get_friend_list_size(tox);
+        for (int fid = 0; fid < cnt; ++fid)
+            restore_descriptor(fid);
+
 
     } else if (ca.protocol_data_len>4 && (*(uint32_t *)ca.protocol_data ) != 0)
     {
@@ -5575,6 +5766,32 @@ void tox_c::set_config(const void*idata, int iisz)
         if (ldr(chunk_use_local_discovery, false))
             options.local_discovery_enabled = ldr.get_i32() != 0;
 
+        if (ldr(chunk_video_codec, false))
+            use_vp9_codec = ldr.get_i32() != 0;
+
+        if (ldr(chunk_video_quality, false))
+            video_quality = ldr.get_i32();
+
+        if (ldr(chunk_video_bitrate, false))
+            video_bitrate = ldr.get_i32();
+
+        if (ldr(chunk_restart_on_zero_online, false))
+            restart_on_zero_online = ldr.get_i32() != 0;
+        
+        if (ldr(chunk_disable_video_ex, false))
+            disabled_video_ex = ldr.get_i32() != 0;
+
+        if (ldr(chunk_nodes_list_fn, false))
+            adv_set_nodes_list_file( std::pstr_c(ldr.get_astr()) );
+        else
+            adv_set_nodes_list_file(std::pstr_c());
+        
+        if (ldr(chunk_pinned_list_fn, false))
+            adv_set_pinned_list_file(std::pstr_c(ldr.get_astr()));
+        else
+            adv_set_pinned_list_file(std::pstr_c());
+
+
         if (int sz = ldr(chunk_toxid))
         {
             loader l(ldr.chunkdata(), sz);
@@ -5593,13 +5810,13 @@ void tox_c::set_config(const void*idata, int iisz)
                 buf_tox_config.resize(dsz);
                 memcpy(buf_tox_config.data(), toxdata, dsz);
 
-                toxerr = prepare();
+                toxerr = prepare(true);
             }
 
         } else if (!tox)
         {
             buf_tox_config.clear();
-            toxerr = prepare(); // prepare anyway
+            toxerr = prepare(true); // prepare anyway
         }
 
         if (version == 1)
@@ -5624,7 +5841,7 @@ void tox_c::set_config(const void*idata, int iisz)
     } else if (!tox)
     {
         buf_tox_config.clear();
-        toxerr = prepare();
+        toxerr = prepare(true);
     }
 
     // now send configurable fields to application
@@ -5670,20 +5887,9 @@ void tox_c::online()
     online_flag = true;
 
     if (!tox && buf_tox_config.size())
-        prepare();
-    
-    if (tox)
-    {
-        ASSERT(buf_tox_config.size() == 0);
+        prepare(false);
 
-        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-        {
-            if (f->is_conference())
-                continue;
-            f->set_fid(f->restore_tox_friend());
-        }
-    }
-
+    restore_core_contacts();
     connect();
 }
 
@@ -5920,6 +6126,13 @@ void tox_c::save_current_stuff( savebuffer &b )
     chunk(b, chunk_use_udp) << static_cast<i32>(options.udp_enabled ? 1 : 0);
     chunk(b, chunk_use_hole_punching) << static_cast<i32>(options.hole_punching_enabled ? 1 : 0);
     chunk(b, chunk_use_local_discovery) << static_cast<i32>(options.local_discovery_enabled ? 1 : 0);
+    chunk(b, chunk_video_codec) << static_cast<i32>(use_vp9_codec ? 1 : 0);
+    chunk(b, chunk_video_quality) << static_cast<i32>(video_quality);
+    chunk(b, chunk_video_bitrate) << static_cast<i32>(video_bitrate);
+    chunk(b, chunk_restart_on_zero_online) << static_cast<i32>(restart_on_zero_online ? 1 : 0);
+    chunk(b, chunk_disable_video_ex) << static_cast<i32>(disabled_video_ex ? 1 : 0);
+    chunk(b, chunk_nodes_list_fn) << nodes_fn;
+    
     chunk(b, chunk_toxid) << lastmypubid.as_bytes();
 
     if (tox)
@@ -5934,7 +6147,7 @@ void tox_c::save_current_stuff( savebuffer &b )
         memcpy(data, buf_tox_config.data(), buf_tox_config.size());
     }
 
-    chunk(b, chunk_nodes) << servec<dht_node_s>(nodes);
+    chunk(b, chunk_nodes) << servec<tox_node_s>(nodes);
 }
 
 void tox_c::do_on_offline_stuff()
@@ -5991,7 +6204,7 @@ void tox_c::do_on_offline_stuff()
         size_t sz = tox_get_savedata_size(tox, 0);
         buf_tox_config.resize(sz);
         tox_get_savedata(tox, buf_tox_config.data(), 0);
-        prepare();
+        prepare(false);
         if (tox) buf_tox_config.clear();
 
         contact_data_s self(contact_id_s::make_self(), CDM_STATE);
@@ -6769,9 +6982,53 @@ void tox_c::logging_flags(unsigned int f)
     g_logging_flags = f;
 }
 
-void tox_c::telemetry_flags( unsigned int f )
+void tox_c::proto_file(i32 fid, const file_portion_prm_s *p)
 {
-    g_telemetry_flags = f;
+    switch (fid)
+    {
+    case FILE_TAG_NODES:
+        {
+            std::vector<tox_node_s> nodesback = std::move(nodes);
+            nodes.clear();
+            for (std::token<char> lns(std::asptr((const char *)p->data, p->size), '\n'); lns; ++lns)
+            {
+                std::token<char> l(lns->get_trimmed(), '/');
+                std::asptr ipv4;
+                std::asptr ipv6;
+                std::asptr pubid;
+                uint16_t port = 0;
+                if (l) ipv4 = l->as_sptr();
+                ++l; if (l) ipv6 = l->as_sptr();
+                ++l; if (l) port = l->as_num<uint16_t>();
+                ++l; if (l) pubid = l->as_sptr();
+                if (port != 0 && pubid.l && (ipv4.l || ipv6.l))
+                {
+                    nodes.emplace_back(ipv4, ipv6, port, pubid);
+                    tox_node_s &n = nodes[nodes.size() - 1];
+
+                    auto x = std::lower_bound(nodesback.begin(), nodesback.end(), n.pubid);
+                    if (&*x && x->pubid == n.pubid)
+                    {
+                        n.push_count = x->push_count;
+                        n.accept_count = x->accept_count;
+                    }
+                }
+            }
+
+            std::sort(nodes.begin(), nodes.end());
+        }
+        if (online_flag)
+            connect();
+        break;
+    case FILE_TAG_PINNED:
+        pinnedservs.clear();
+        parse_values(std::asptr((const char *)p->data, p->size), [&](const std::pstr_c &field, const std::pstr_c &val)
+        {
+            pinnedservs.emplace_back(field, val);
+        });
+
+        break;
+    }
 }
 
 #define FUNC1( rt, fn, p0 ) rt PROTOCALL static_##fn(p0 pp0) { return cl.fn(pp0); }
@@ -6815,9 +7072,8 @@ void PROTOCALL api_getinfo( proto_info_s *info )
         HOME_SITE,
         "",
         "m 74.044499,38.828783 c 0,-4.166708 0.06581,-9.385543 -0.02935,-13.551362 -0.0418,-1.794753 -0.238352,-3.62508 -0.663471,-5.366471 C 70.309137,7.460631 58.257256,-0.28224198 45.602382,2.007891 34.399851,4.0347699 26.06021,14.030422 26.06021,25.430393 l 0,13.371709 c -3.678661,-3.2e-4 -7.473489,0 -11.204309,0 -2.466229,0 -4.467316,2.000197 -4.467316,4.467315 l 0,50.583035 c 0,2.466229 2.001087,4.467316 4.467316,4.467316 l 70.661498,0 c 2.468007,0 4.468205,-2.001087 4.468205,-4.467316 l 0,-50.583035 c 0,-2.467118 -2.000198,-4.467315 -4.468205,-4.467315 z m -17.313405,47.37418 -13.140472,0 c -2.065122,0 -3.738031,-1.702258 -3.738031,-3.801176 0.452829,-4.54018 0.52948,-5.74902 1.833885,-7.830921 1.45946,-2.150501 3.42853,-3.548594 5.564801,-4.17738 -2.815752,-1.148179 -4.799051,-3.911458 -4.799051,-7.137211 0,-4.259202 3.450763,-7.709077 7.708187,-7.709077 4.259203,0 7.708188,3.449875 7.708188,7.709077 0,3.307575 -2.084688,6.128663 -5.01339,7.221701 2.074015,0.669697 4.03508,2.057118 5.57903,4.186274 1.608048,2.307856 2.032215,4.874192 2.032215,7.571225 -0.0053,0.05514 0,0.111171 0,0.168091 8.9e-4,2.097139 -1.672019,3.799397 -3.735362,3.799397 M 65.3331,31.049446 c -1.389199,4.100894 -4.019961,7.386234 -6.768121,10.594199 -2.532759,2.638121 -5.259444,5.204412 -7.880726,6.825041 1.583972,-2.735708 2.86111,-5.334453 3.231089,-8.363654 -3.765601,0.891151 -7.316864,0.501606 -10.755176,-1.013884 -6.102871,-2.688572 -9.750186,-8.553981 -9.127625,-15.175356 0.50961,-5.449182 3.605395,-10.490611 8.391106,-13.0271 7.708187,-4.0848867 17.24706,-1.0668343 21.653898,6.200225 2.567617,4.231632 2.810178,9.372258 1.255555,13.960529",
+        ADVSETSTRING,
         "sr=48000" NL "ch=1" NL "bps=16",
-        "",
-        "vp8/vp9",
         "ToxID",
         "f=png",
         CONFA_OPT_TYPE "=t/a",
@@ -6826,12 +7082,16 @@ void PROTOCALL api_getinfo( proto_info_s *info )
         nullptr
     };
 
+    //COPDEF( hole_punch, 1 ) \
+        //COPDEF( local_discovery, 1 ) \
+
+
     info->strings = strings;
 
     info->priority = 500;
     info->indicator = 500;
     info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_CONFERENCE | PF_CONFERENCE_ENTER_LEAVE; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_ipv6_enable | CF_udp_enable | CF_hole_punch | CF_local_discovery | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_ipv6_enable | CF_udp_enable;
 }
 
 extern "C"

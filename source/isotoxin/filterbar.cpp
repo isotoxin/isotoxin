@@ -48,6 +48,7 @@ gui_filterbar_c::~gui_filterbar_c()
     }
 
     search_in_messages = prf().is_loaded() && prf_options().is(MSGOP_FULL_SEARCH);
+    search_entire_phrases = prf().is_loaded() && prf_options().is(MSGOP_SEARCH_ENTIRE_PHRASES);
 
     if (!is_all())
         refresh_list(true);
@@ -220,9 +221,24 @@ bool gui_filterbar_c::cancel_filter(RID, GUIPARAM)
 
 void gui_filterbar_c::show_options(bool show)
 {
-    if (show && option1 != nullptr)
+    auto alloptionspresent = [this]()
+    {
+        for (gui_button_c *b : options)
+            if (b == nullptr)
+                return false;
+        return true;
+    };
+    auto anyoptionspresent = [this]()
+    {
+        for (gui_button_c *b : options)
+            if (b != nullptr)
+                return true;
+        return false;
+    };
+
+    if (show && alloptionspresent())
         return;
-    if (!show && option1 == nullptr)
+    if (!show && !anyoptionspresent())
         return;
 
     if (show)
@@ -235,11 +251,22 @@ void gui_filterbar_c::show_options(bool show)
         o1.set_text(TTT("Search in messages",337));
         if (search_in_messages)
             o1.mark();
+        options[0] = &o1;
 
-        option1 = &o1;
+        gui_button_c &o2 = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
+        o2.set_check(tag);
+        o2.set_handler(DELEGATE(this, option_handler), as_param(2));
+        o2.set_face_getter(BUTTON_FACE(check));
+        o2.set_text(TTT("Search entire phrases",355));
+        if (search_entire_phrases)
+            o2.mark();
+        options[1] = &o2;
+
+
     } else
     {
-        TSDEL( option1 );
+        for (gui_button_c *b : options)
+            TSDEL(b);
     }
 
     HOLD( getparent() ).as<gui_contactlist_c>().update_filter_pos();
@@ -247,9 +274,16 @@ void gui_filterbar_c::show_options(bool show)
 
 bool gui_filterbar_c::option_handler(RID, GUIPARAM p)
 {
-    search_in_messages = p != nullptr;
+    search_in_messages = (as_int(p) & 1) != 0;
+    search_entire_phrases = (as_int(p) & 2) != 0;
     if (prf().is_loaded())
-        prf().set_options( search_in_messages ? MSGOP_FULL_SEARCH : 0, MSGOP_FULL_SEARCH );
+    {
+        ts::flags32_s::BITS mo = 0;
+        if (search_in_messages) mo |= MSGOP_FULL_SEARCH;
+        if (search_entire_phrases) mo |= MSGOP_SEARCH_ENTIRE_PHRASES;
+
+        prf().set_options(mo, MSGOP_FULL_SEARCH| MSGOP_SEARCH_ENTIRE_PHRASES);
+    }
     found_stuff.fsplit.clear();
     refresh_list(false);
     return true;
@@ -415,9 +449,19 @@ void gui_filterbar_c::refresh_list( bool tags_ch )
 bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
 {
     ts::wstrings_c ospl( found_stuff.fsplit );
-    found_stuff.fsplit.split<ts::wchar>(e, ' ');
-    found_stuff.fsplit.trim();
-    found_stuff.fsplit.kill_empty_fast();
+
+    if (search_entire_phrases)
+    {
+        found_stuff.fsplit.clear();
+        if (!e.is_empty())
+            found_stuff.fsplit.add(e);
+    }
+    else
+    {
+        found_stuff.fsplit.split<ts::wchar>(e, ' ');
+        found_stuff.fsplit.trim();
+        found_stuff.fsplit.kill_empty_fast();
+    }
     found_stuff.fsplit.case_down();
 
     // kill dups
@@ -512,8 +556,8 @@ void gui_filterbar_c::redraw_anm()
 
     if (edit)
         sz.y += edit->getprops().size().y;
-    if (option1)
-        sz.y += option1->get_min_size().y;
+    for (gui_button_c *b : options)
+        if (b) sz.y += b->get_min_size().y;
 
     return sz.y + ( current_search ? current_search->pa.bmp.info().sz.y + 10 : 0 );
 }
@@ -545,12 +589,15 @@ void gui_filterbar_c::redraw_anm()
                 fake_margin.y += filtereditheight;
 
             }
-            if (option1)
-            {
-                int omy = option1->get_min_size().y;
-                MODIFY( *option1 ).pos( cla.lt + ts::ivec2(0,filtereditheight) ).size( cla.width(), omy );
-                fake_margin.y += omy;
-            }
+            int y = filtereditheight;
+            for (gui_button_c *b : options)
+                if (b)
+                {
+                    int omy = b->get_min_size().y;
+                    MODIFY( *b ).pos( cla.lt + ts::ivec2(0,y) ).size( cla.width(), omy );
+                    fake_margin.y += omy;
+                    y += omy;
+                }
         }
         return true;
     case SQ_MOUSE_LUP:
@@ -587,8 +634,8 @@ void gui_filterbar_c::redraw_anm()
 
                 if (edit)
                     dd.offset.y += edit->getprops().size().y;
-                if (option1)
-                    dd.offset.y += option1->get_min_size().y;
+                for (gui_button_c *b : options)
+                    if (b) dd.offset.y += b->get_min_size().y;
 
                 text_draw_params_s tdp;
                 tdp.rectupdate = updaterect;

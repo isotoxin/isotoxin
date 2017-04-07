@@ -331,7 +331,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
 
     std::vector<dht_node_s> nodes;
 
-#include "../../plugins/proto_tox/dht_nodes.inl"
+//#include "../../plugins/proto_tox/dht_nodes.inl"
 
     for( const dht_node_s &n : nodes )
     {

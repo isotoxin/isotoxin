@@ -838,6 +838,23 @@ public:
                 set( s.substr(0,eqi) ) = s.substr(eqi+1);
         }
     }
+    void parse(const strings_t<TCHARACTER>&ss, TCHARACTER eq = '=')
+    {
+        for (const auto& s : ss)
+        {
+            auto trs = s.get_trimmed();
+            int eqi = trs.find_pos(eq);
+            if (eqi > 0)
+                set(trs.substr(0, eqi)) = trs.substr(eqi + 1);
+        }
+    }
+
+    void merge(const strmap_t<S> & oth)
+    {
+        for (const auto& s : oth)
+            set_if_not_present(s.k, s.v);
+    }
+
     bool unset(const sptr<TCHARACTER>&k)
     {
         ts::aint index;
@@ -848,6 +865,17 @@ public:
         }
         return false;
     }
+    void set_if_not_present(const sptr<TCHARACTER>&k, const S&v)
+    {
+        ts::aint index;
+        if (super::find_sorted(index, k))
+            return;
+
+        auto &i = super::insert(index);
+        i.k = k;
+        i.v = v;
+    }
+
     S& set(const sptr<TCHARACTER>&k)
     {
         ts::aint index;

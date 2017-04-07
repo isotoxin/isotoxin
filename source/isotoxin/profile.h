@@ -57,6 +57,8 @@ enum profile_options_e : unsigned
 
     COPT_MUTE_MINIMIZED         = SETBIT(28),
 
+    MSGOP_SEARCH_ENTIRE_PHRASES = SETBIT(29),
+
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
@@ -795,10 +797,6 @@ public:
 #define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; }; const tableview_##tab##_s &get_table_##tab() const { return table_##tab; };
     PROFILE_TABLES
 #undef TAB
-
-    INTPAR(video_enc_quality, 0);
-    INTPAR(video_bitrate, 0);
-    TEXTAPAR(video_codec, "");
 
     INTPAR( backup_period, 3600 ); // seconds
     INTPAR( backup_keeptime, 30 ); // days

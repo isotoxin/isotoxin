@@ -75,7 +75,7 @@ int proc_grabnodes(const wstrings_c & pars)
         if (ipv6.equals(CONSTASTR("NONE")) || ipv6.equals(CONSTASTR("-")))
             ipv6.clear();
 
-        tmp_str_c s(CONSTASTR("nodes.emplace_back( CONSTASTR(\"<ip4>\"), CONSTASTR(\"<ip6>\"), <port>, CONSTASTR(\"<clid>\") );\r\n"));
+        tmp_str_c s(CONSTASTR("<ip4>/<ip6>/<port>/<clid>\n"));
         s.replace_all( CONSTASTR("<ip4>"), tmp_str_c(ipv4).trim() );
         s.replace_all( CONSTASTR("<ip6>"), ipv6 );
         s.replace_all( CONSTASTR("<port>"), tmp_str_c(port).trim() );

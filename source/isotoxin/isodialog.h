@@ -21,6 +21,7 @@ enum unique_dialog_e
     UD_PREPARE_IMAGE,
     UD_ENCRYPT_PROFILE_PB,
     UD_DICTIONARIES,
+    UD_ADVANCED_NETWORK_SETTINGS,
 
 };
 
@@ -53,6 +54,8 @@ enum rtitle_e
     title_rentag,
     title_avatar,
     title_conference_properties,
+    title_dictionaries,
+    title_advanced_con_settings,
 };
 
 
@@ -81,7 +84,7 @@ public:
 
 template<typename DLGT, class... _Valty> RID SUMMON_DIALOG(unique_dialog_e udtag, bool mainparent, _Valty&&... _Val)
 {
-    if (udtag && dialog_already_present(udtag)) return RID();
+    if (udtag != UD_NOT_UNIQUE && dialog_already_present(udtag)) return RID();
 
     RID r = MAKE_ROOT<DLGT>( mainparent, std::forward<_Valty>(_Val)... );
     {
@@ -98,7 +101,7 @@ template<typename DLGT, class... _Valty> RID SUMMON_DIALOG(unique_dialog_e udtag
 
 template<typename DLGT> RID SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE)
 {
-    if (udtag && dialog_already_present(udtag)) return RID();
+    if (udtag != UD_NOT_UNIQUE && dialog_already_present(udtag)) return RID();
     RID r = MAKE_ROOT<DLGT>();
     
     {

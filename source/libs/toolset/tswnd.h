@@ -142,6 +142,7 @@ public:
     virtual void set_capture() = 0;
 
     virtual void make_hole( const ts::irect &holerect ) = 0;
+    virtual void special_border(bool on) = 0;
 
     virtual bmpcore_exbody_s get_backbuffer() = 0;
     virtual void flush_draw( const irect &r ) = 0;

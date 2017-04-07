@@ -82,8 +82,10 @@ __pragma( message( "SLERROR undefined" ) )
 
 #ifdef _WIN32
 #ifdef _WINDOWS_
+#ifndef INLINE_PTHREAD_SELF
 #define INLINE_PTHREAD_SELF
 SLINLINE unsigned long pthread_self() { return ::GetCurrentThreadId(); }
+#endif
 #else
 unsigned long pthread_self();
 #endif

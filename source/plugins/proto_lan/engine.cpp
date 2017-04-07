@@ -157,7 +157,7 @@ void lan_engine::media_stuff_s::encode_video_and_send( u64 msmonotonic, const by
                 return;
             }
 
-            enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE * 1000;
+            enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE;
             enc_cfg.g_w = 0;
             enc_cfg.g_h = 0;
             enc_cfg.g_pass = VPX_RC_ONE_PASS;
@@ -173,7 +173,7 @@ void lan_engine::media_stuff_s::encode_video_and_send( u64 msmonotonic, const by
         vcodec = engine->use_vcodec;
         enc_cfg.g_w = video_w;
         enc_cfg.g_h = video_h;
-        enc_cfg.rc_target_bitrate = ( vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE ) * 1000;
+        enc_cfg.rc_target_bitrate = (vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE);
 
         if ( vpx_codec_enc_init( &v_encoder, vcodec == vc_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0 ) != VPX_CODEC_OK )
         {
@@ -1151,6 +1151,11 @@ enum chunks_e // HADR ORDER!!!!!!!!
     chunk_contact_avatar_hash,
     chunk_contact_avatar_tag,
 
+    chunk_video_codec,
+    chunk_video_quality,
+    chunk_video_bitrate,
+    chunk_video_telemetry,
+
 };
 
 //lan_engine::contact_s *contact;
@@ -1213,7 +1218,6 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
     {
         chunk(chunkm.b, chunk_contact_avatar_hash) << bytes(c.avatar_hash, 16);
     }
-
 
 }
 
@@ -1980,6 +1984,31 @@ void lan_engine::stop_encoder()
 
 }
 
+void lan_engine::send_configurable()
+{
+    const char * fields[adv_count] = { 
+#define ASI(aa) #aa,
+        ADVSET
+#undef ASI
+    };
+
+    std::string svalues[adv_count];
+    const char * values[adv_count];
+
+    static_assert(ARRAY_SIZE(fields) == ARRAY_SIZE(values) && ARRAY_SIZE(values) == ARRAY_SIZE(svalues), "check len");
+
+    int i = 0;
+#define ASI(aa) svalues[i++] = adv_##aa();
+    ADVSET
+#undef ASI
+
+    i = 0;
+    for (const std::string &s : svalues) values[i++] = s.cstr();
+
+    hf->configurable(ARRAY_SIZE(fields), fields, values);
+}
+
+
 void lan_engine::signal(contact_id_s id, signal_e s)
 {
     switch (s)
@@ -2299,6 +2328,59 @@ bool lan_engine::load_contact(contact_id_s cid, loader &l)
     return loaded;
 }
 
+void lan_engine::adv_video_codec(const std::pstr_c &val)
+{
+    if (val.equals(STD_ASTR("vp8")))
+        use_vcodec = vc_vp8;
+    if (val.equals(STD_ASTR("vp9")))
+        use_vcodec = vc_vp9;
+}
+
+std::string lan_engine::adv_video_codec() const
+{
+    switch (use_vcodec)
+    {
+    case vc_vp9:
+        return std::string(STD_ASTR("vp9"));
+    }
+
+    return std::string( STD_ASTR("vp8") );
+}
+
+void lan_engine::adv_video_bitrate(const std::pstr_c &val)
+{
+    use_vbitrate = val.as_int();
+}
+std::string lan_engine::adv_video_bitrate() const
+{
+    std::string s;
+    s.set_as_int(use_vbitrate);
+    return s;
+}
+
+void lan_engine::adv_video_quality(const std::pstr_c &val)
+{
+    use_vquality = val.as_int();
+}
+
+std::string lan_engine::adv_video_quality() const
+{
+    std::string s;
+    s.set_as_int(use_vquality);
+    return s;
+}
+
+void lan_engine::adv_video_telemetry(const std::pstr_c &val)
+{
+    tlmflags = val.as_int() != 0? -1 : 0;
+}
+std::string lan_engine::adv_video_telemetry() const
+{
+    std::string s( tlmflags ? STD_ASTR("1") : STD_ASTR("0") );
+    return s;
+}
+
+
 void lan_engine::set_config(const void*data, int isz)
 {
     if ( isz < 4 ) return;
@@ -2308,24 +2390,10 @@ void lan_engine::set_config(const void*data, int isz)
 
     auto parsev = [&] ( const std::pstr_c &field, const std::pstr_c &val )
     {
-        if ( field.equals( STD_ASTR( CFGF_VIDEO_CODEC ) ) )
-        {
-            if ( val.equals( STD_ASTR( "vp8" ) ) )
-                use_vcodec = vc_vp8;
-            if ( val.equals( STD_ASTR( "vp9" ) ) )
-                use_vcodec = vc_vp9;
-            return;
-        }
-        if ( field.equals( STD_ASTR( CFGF_VIDEO_BITRATE ) ) )
-        {
-            use_vbitrate = val.as_int();
-            return;
-        }
-        if ( field.equals( STD_ASTR( CFGF_VIDEO_QUALITY ) ) )
-        {
-            use_vquality = val.as_int();
-            return;
-        }
+#define ASI(aa) if (field.equals(STD_ASTR(#aa))) { adv_##aa(val); return; }
+        ADVSET
+#undef ASI
+
         if ( field.equals( STD_ASTR( CFGF_SETPROTO ) ) )
         {
             setproto = val.as_int() != 0;
@@ -2363,6 +2431,18 @@ void lan_engine::set_config(const void*data, int isz)
             loaded |= load_contact( contact_id_s(), l );
     }
 
+    if (ldr(chunk_video_codec))
+        use_vcodec = ldr.get_i32() != 0 ? vc_vp9 : vc_vp8;
+
+    if (ldr(chunk_video_quality))
+        use_vquality = ldr.get_i32();
+
+    if (ldr(chunk_video_bitrate))
+        use_vbitrate = ldr.get_i32();
+
+    if (ldr(chunk_video_telemetry))
+        tlmflags = ldr.get_i32();
+
     if (!loaded)
     {
         // setup default
@@ -2374,6 +2454,7 @@ void lan_engine::set_config(const void*data, int isz)
     }
 
     hf->operation_result( LOP_SETCONFIG, CR_OK );
+    send_configurable();
 }
 
 void lan_engine::save_config(void *param)
@@ -2384,6 +2465,12 @@ void lan_engine::save_config(void *param)
         chunk(b, chunk_magic) << (u64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
         chunk(b, chunk_secret_key) << bytes(my_secret_key, SIZE_SECRET_KEY);
         chunk(b, chunk_contacts) << serlist<contact_s, nonext<contact_s> >(first);
+
+        chunk(b, chunk_video_codec) << static_cast<i32>(use_vcodec == vc_vp8 ? 0 : 1);
+        chunk(b, chunk_video_quality) << static_cast<i32>(use_vquality);
+        chunk(b, chunk_video_bitrate) << static_cast<i32>(use_vbitrate);
+        chunk(b, chunk_video_telemetry) << static_cast<i32>(tlmflags);
+
         hf->on_save(b.data(), (int)b.size(), param);
     }
 }
@@ -3864,6 +3951,7 @@ void lan_engine::folder_share_toc(contact_id_s cid, const folder_share_prm_s *sf
                 }
             }
 
+            send_announce();
         }
     }
 
@@ -3929,7 +4017,8 @@ void lan_engine::logging_flags(unsigned int f)
 {
     g_logging_flags = f;
 }
-void lan_engine::telemetry_flags( unsigned int f )
+
+void lan_engine::proto_file(i32, const file_portion_prm_s *)
 {
-    g_telemetry_flags = f;
+
 }

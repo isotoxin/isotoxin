@@ -27,8 +27,9 @@ ts::uint32 desktop_rect_c::gm_handler( gmsg<GM_UI_EVENT> &ue )
         name.clear();
         on_theme_changed();
     }
-    if ( ue.evt == UE_ACTIVATE && ue.arid == getrid() )
+    if (ue.evt == UE_ACTIVATE && ue.arid == getrid())
         on_activate();
+
     return 0;
 }
 
@@ -744,5 +745,5 @@ desktop_shade_c::~desktop_shade_c()
 desktop_shade_c &desktop_shade_c::summon(const ts::irect &r)
 {
     MAKE_ROOT<desktop_shade_c> g(r);
-    return g;
+    return *g.me;
 }

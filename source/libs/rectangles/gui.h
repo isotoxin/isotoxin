@@ -389,7 +389,7 @@ public:
     gui_c();
 	~gui_c();
 
-    void disable_special_border(bool v) { m_flags.init( F_DISABLESPECIALBORDER, v ); }
+    void enable_special_border(bool v);
     bool is_disabled_special_border() const { return m_flags.is( F_DISABLESPECIALBORDER ); }
 
     const ts::bitmap_c * acquire_texture( text_rect_dynamic_c *requester, ts::ivec2 size );

@@ -6,7 +6,6 @@
 #pragma warning (pop)
 
 unsigned int g_logging_flags = 0;
-unsigned int g_telemetry_flags = 0;
 HINSTANCE g_module = nullptr;
 
 #define LENGTH(a) (sizeof(a)/sizeof(a[0]))

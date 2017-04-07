@@ -71,6 +71,8 @@ ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
     case title_rentag:                      return MAKE_TITLE(TTT("Rename tag",921));
     case title_avatar:                      return MAKE_TITLE(TTT("Avatar",922));
     case title_conference_properties:       return MAKE_TITLE(TTT("Conference properties",923));
+    case title_dictionaries:                return MAKE_TITLE(TTT("Dictionaries", 924));
+    case title_advanced_con_settings:       return MAKE_TITLE(TTT("Advanced connection options", 925));
     }
 
     return APPNAME_CAPTION;

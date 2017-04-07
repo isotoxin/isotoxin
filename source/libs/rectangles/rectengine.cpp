@@ -1794,6 +1794,12 @@ bool rectengine_root_c::shakeme(RID, GUIPARAM)
     return true;
 }
 
+void rectengine_root_c::special_border(bool on)
+{
+    if (syswnd.wnd)
+        syswnd.wnd->special_border(on);
+}
+
 void rectengine_root_c::make_hole( const ts::irect &holerect )
 {
     if ( syswnd.wnd )

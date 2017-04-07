@@ -65,11 +65,12 @@ class gui_filterbar_c : public gui_label_ex_c
 
     ts::safe_ptr<rectengine_c> active;
     ts::safe_ptr<gui_textedit_c> edit;
-    ts::safe_ptr<gui_button_c> option1;
+    ts::safe_ptr<gui_button_c> options[2];
     int filtereditheight = 25;
     int contact_index = 0;
 
     bool search_in_messages = true;
+    bool search_entire_phrases = false;
     bool tagschanged = false;
 
     bool cancel_filter(RID, GUIPARAM);

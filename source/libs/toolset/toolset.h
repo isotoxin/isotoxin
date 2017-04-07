@@ -97,7 +97,7 @@
 #define _NIX
 #endif
 
-#define UPAR(p) { (p) = (p); }
+#define UPAR(p) (p)
 
 #if defined DLMALLOC_USED && DLMALLOC_USED
 extern "C"

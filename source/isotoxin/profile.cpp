@@ -2683,14 +2683,15 @@ void profile_c::del_folder_share(uint64 utag)
 void profile_c::del_folder_share_by_historian(const contact_key_s &h)
 {
     bool ch = false;
-    while (auto *row = prf().get_table_folder_share().find<true>([h](folder_share_s &fsh) {
-
-        if (fsh.historian == h)
-            return true;
-        return false;
-    })) {
-        ch |= row->deleted();
+    
+    for (auto &row : prf().get_table_folder_share())
+    {
+        if (row.other.historian == h)
+        {
+            ch |= row.deleted();
+        }
     }
+
     if (ch)
         prf().changed();
 }

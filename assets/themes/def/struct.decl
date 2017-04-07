@@ -158,6 +158,10 @@ rects
   {
 	colors=##text_bad
   }
+  advnet=main
+  {
+  }
+
 
   simplelst=textfield
   {

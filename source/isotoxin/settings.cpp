@@ -23,7 +23,6 @@
 #define PROTO_ICON_SIZE 32
 
 
-#define AM_VIDEO_CALLS TTT("Video calls", 397)
 #define AM_TOOLS TTT("Tools", 432)
 #define AM_MISC TTT("Misc", 435)
 #define AM_DEBUG TTT("Debug", 395)
@@ -68,6 +67,7 @@ int curl_execute_download(CURL *curl, int id);
 namespace
 {
     class dialog_dictionaries_c;
+    class dialog_advanced_c;
 
 }
 
@@ -76,6 +76,13 @@ namespace
         dialog_settings_c *setts;
         ts::wstrings_c dar;
         MAKE_ROOT(bool mainparent, dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( rect_sys_e( RS_NORMAL | (mainparent ? RS_MAINPARENT : 0) ) ); }
+        ~MAKE_ROOT() {}
+    };
+
+    template<> struct MAKE_ROOT<dialog_advanced_c> : public _PROOT(dialog_advanced_c)
+    {
+        dialog_setup_network_c *setts;
+        MAKE_ROOT(bool mainparent, dialog_setup_network_c *setts) : _PROOT(dialog_advanced_c)(), setts(setts) { init(rect_sys_e(RS_NORMAL | (mainparent ? RS_MAINPARENT : 0))); }
         ~MAKE_ROOT() {}
     };
 
@@ -689,6 +696,7 @@ namespace
     public:
         dialog_dictionaries_c(MAKE_ROOT<dialog_dictionaries_c> &data) :gui_isodialog_c(data), watchdog(data.setts ? data.setts->getrid() : RID(), DELEGATE(this, mustdie), nullptr ), dar(data.dar)
         {
+            deftitle = title_dictionaries;
             setts = data.setts;
         }
         ~dialog_dictionaries_c()
@@ -857,6 +865,303 @@ namespace
         ts::task_c::done(canceled);
     }
 
+    class dialog_advanced_c : public gui_isodialog_c
+    {
+        typedef gui_isodialog_c super;
+
+        guirect_watch_c watchdog;
+        ts::safe_ptr<dialog_setup_network_c> setts;
+
+        struct setitem_s
+        {
+            ts::str_c name;
+            ts::str_c value;
+            setitem_s(const ts::str_c &name) :name(name) {}
+            virtual ~setitem_s() {}
+        };
+
+        struct setitem_bool_s : public setitem_s
+        {
+            bool val;
+            setitem_bool_s(bool v, const ts::str_c &name) :setitem_s(name), val(v) {}
+            bool onchange(RID, GUIPARAM p)
+            {
+                val = p != nullptr;
+                value.set(val ? CONSTASTR("1") : CONSTASTR("0"));
+                return true;
+            }
+        };
+
+        struct setitem_int_s : public setitem_s
+        {
+            int val;
+            setitem_int_s(int v, const ts::str_c &name) :setitem_s(name), val(v) {}
+            bool onchange(const ts::wstr_c &s, bool ch)
+            {
+                val = s.as_int();
+                value.set_as_int(val);
+                return true;
+            }
+        };
+
+        struct setitem_file_s : public setitem_s
+        {
+            setitem_file_s(const ts::str_c &v, const ts::str_c &name) :setitem_s(name)
+            {
+                value = v;
+            }
+
+            bool onchange(RID srid, GUIPARAM p)
+            {
+                behav_s *b = (behav_s *)p;
+                if (behav_s::EVT_ON_CLICK == b->e)
+                {
+                    value = b->param;
+                }
+
+                return true;
+            }
+
+            menu_c menu()
+            {
+                menu_c mm;
+
+                ts::wstrings_c fns;
+                ts::g_fileop->find(fns, CONSTWSTR("protocols/**/*.*"), true);
+                fns.sort(true);
+
+                mm.add(TTT("no file",397));
+                mm.add_separator();
+
+                for (const ts::wstr_c &f : fns)
+                {
+                    menu_c m;
+                    ts::wstr_c fn, path;
+                    int fni = f.find_last_pos_of(CONSTWSTR("/\\"));
+                    ASSERT(fni >= 9);
+                    if (fni > 10)
+                    {
+                        path.set(f.substr(10, fni));
+                        path.replace_all('\\', '/');
+                        fn = f.substr(fni + 1);
+                        m = mm.add_path(path);
+                    }
+                    else
+                        m = mm, fn.set(f.substr(fni + 1));
+                    if (fni == 0) fn.cut(0, 1);
+
+                    ts::wstr_c ffn(ts::fn_join(path, fn)); ffn.replace_all('\\', '/');
+                    m.add(fn, 0, nullptr, ts::to_utf8(ffn));
+                }
+
+                return mm;
+            }
+        };
+
+        struct setitem_enum_s : public setitem_s
+        {
+            dialog_advanced_c *dlg;
+            ts::str_c cn;
+            ts::astrings_c values;
+            int val;
+            setitem_enum_s(const ts::str_c &cn, dialog_advanced_c *dlg, ts::astrings_c&&values, const ts::str_c &v, const ts::str_c &name) :setitem_s(name), dlg(dlg), cn(cn), values(std::move(values)) 
+            {
+                val = static_cast<int>(this->values.find(v));
+                if (val < 0)
+                    val = 0;
+            }
+            void onchange(const ts::str_c &p)
+            {
+                val = p.as_int();
+                value = values.get(val);
+                dlg->set_combik_menu(cn, menu());
+            }
+            menu_c menu()
+            {
+                menu_c m;
+                int ii = 0;
+                for (const ts::str_c &vv : values)
+                {
+                    m.add( ts::from_utf8(vv), ii == val ? MIF_MARKED : 0, DELEGATE(this, onchange), ts::amake(ii) );
+                    ++ii;
+                }
+                return m;
+            }
+        };
+
+        ts::array_del_t<setitem_s, 4> setitems;
+
+        /*virtual*/ void created() override
+        {
+            if (watchdog)
+                gui->exclusive_input(getrid());
+
+            set_theme_rect(CONSTASTR("advnet"), false);
+            super::created();
+            tabsel(CONSTASTR("1"));
+        }
+        /*virtual*/ void getbutton(bcreate_s &bcr) override
+        {
+            super::getbutton(bcr);
+        }
+        /*virtual*/ int additions(ts::irect &) override
+        {
+            descmaker dm(this);
+            dm << 1;
+            //dm().list(ts::wsptr(), ts::wsptr(), -350).setname(CONSTASTR("lst"));
+            //dm().vspace();
+
+            int ctln = 1;
+            int prevtype = 0;
+            ts::str_c props; props.set_as_int(minw - 100).append(CONSTASTR(",100"));
+
+            for (ts::token<char> t(setts->get_advanced(), '/'); t; ++t)
+            {
+                ts::token<char> st(*t, ':');
+                ts::str_c aname = *st;
+                bool nameok = true;
+                for (int i = 0; i < aname.get_length(); ++i)
+                {
+                    if (aname.get_char(i) != '_' && (aname.get_char(i) < 'a' || aname.get_char(i) > 'z'))
+                    {
+                        nameok = false;
+                        continue;
+                    }
+                }
+                if (!nameok)
+                    continue;
+
+                ts::str_c value = setts->adv_param(aname);
+
+                ts::wstr_c name = ts::from_utf8(aname);
+                ts::wstr_c hint = labels.get(CONSTWSTR("hint_") + name);
+                name = labels.get(name,name);
+
+                ++st;
+                if (st->equals(CONSTASTR("bool")))
+                {
+                    if (prevtype == 1 || prevtype == 2 || prevtype == 3)
+                        dm().vspace();
+
+                    ++st;
+                    if (value.is_empty()) value.set(*st);
+                    setitem_bool_s *i = TSNEW(setitem_bool_s, value.as_int() != 0, aname);
+                    setitems.add(i);
+
+                    dm().checkb(ts::wsptr(), DELEGATE(i,onchange), i->val ? 1 : 0 ).setmenu(
+                        menu_c().add(name, 0, MENUHANDLER(), CONSTASTR("1"))
+                    ).sethint(hint);
+                    prevtype = 0;
+                }
+                if (st->equals(CONSTASTR("int")))
+                {
+                    ++st;
+                    if (value.is_empty()) value.set(*st);
+
+                    setitem_int_s *i = TSNEW(setitem_int_s, value.as_int(), aname);
+                    setitems.add(i);
+
+                    dm().hgroup(ts::wsptr(), props, minw);
+                    dm().label(name).sethint(hint);
+                    dm().textfield(ts::wsptr(),ts::from_utf8(value), DELEGATE(i, onchange)).sethint(hint);
+
+                    prevtype = 1;
+                }
+                if (st->begins(CONSTASTR("enum")))
+                {
+                    ts::ZSTRINGS_SIGNED index = 4;
+                    ts::astrings_c values(st->substr(index, '(', ')').as_sptr(), ',');
+                    ++st;
+                    if (value.is_empty()) value = values.get(st->as_int());
+                    ts::str_c cn(CONSTASTR("ctl")); cn.append_as_int(ctln++);
+                    setitem_enum_s *i = TSNEW(setitem_enum_s, cn, this, std::move(values), value, aname);
+                    setitems.add(i);
+
+                    if (prevtype == 0 || prevtype == 2 || prevtype == 3)
+                        dm().vspace();
+
+                    dm().hgroup(ts::wsptr(), props, minw);
+                    dm().label(name).sethint(hint);
+                    dm().combik(ts::wsptr()).setmenu( i->menu() ).setname(cn).sethint(hint);
+
+                    prevtype = 2;
+                }
+                if (st->begins(CONSTASTR("file")))
+                {
+                    setitem_file_s *i = TSNEW(setitem_file_s, value, aname);
+                    setitems.add(i);
+
+                    if (prevtype == 0 || prevtype == 1 || prevtype == 2 || prevtype == 3)
+                        dm().vspace();
+
+                    dm().hgroup(ts::wsptr());
+                    dm().label(name).sethint(hint);
+                    dm().selector(ts::wstr_c(), ts::from_utf8(value), DELEGATE(i, onchange)).setmenu(i->menu()).sethint(hint);
+
+                    prevtype = 3;
+                }
+            }
+
+            return 0;
+        }
+
+        /*virtual*/ void on_confirm() override
+        {
+            for (setitem_s *s : setitems)
+            {
+                if (!s->value.is_empty())
+                    setts->adv_param(s->name, s->value);
+            }
+
+            super::on_confirm();
+        }
+
+        bool mustdie(RID, GUIPARAM)
+        {
+            TSDEL(this);
+            return true;
+        }
+
+        static const int minw = 400;
+
+        ts::wstrmap_c labels;
+
+    public:
+
+        dialog_advanced_c(MAKE_ROOT<dialog_advanced_c> &data) :gui_isodialog_c(data), watchdog(data.setts->getrid(), DELEGATE(this, mustdie), nullptr)
+        {
+            deftitle = title_advanced_con_settings;
+            setts = data.setts;
+
+            ts::wstr_c labelsfn(CONSTWSTR("loc" NATIVE_SLASH_S "en.proto.$.lng")); labelsfn.replace_all(CONSTWSTR("$"), setts->prototag());
+            ts::wstrings_c ss;
+            ts::parse_text_file(labelsfn,ss,true);
+            labels.parse(ss);
+
+            ts::str_c lng = cfg().language();
+            if (!lng.equals(CONSTASTR("en")))
+            {
+                labelsfn.replace(4, 2, ts::to_wstr(lng));
+                ts::parse_text_file(labelsfn, ss, true);
+                labels.parse(ss);
+            }
+        }
+        ~dialog_advanced_c()
+        {
+            if (gui)
+            {
+            }
+        }
+
+        /*virtual*/ int unique_tag() override { return UD_ADVANCED_NETWORK_SETTINGS; }
+
+        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(minw, 400); }
+        /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
+        {
+            return super::sq_evt(qp, rid, data);
+        }
+
+    };
 }
 
 bool choose_dicts_load(RID, GUIPARAM)
@@ -1721,18 +2026,6 @@ void dialog_settings_c::mod()
         for (bits_edit_s &b : bgroups)
             b.settings = this, b.source = &msgopts_current;
 
-        int video_quality_ = prf().video_enc_quality();
-
-        PREPARE(disable_video_ex, video_quality_ < 0);
-        PREPARE(encoding_quality, video_quality_ < 0  ? 0 : video_quality_);
-        PREPARE(video_bitrate, prf().video_bitrate());
-        auto getcodecs = []()->ts::astrmap_c
-        {
-            ts::astrmap_c d(prf().video_codec());
-            return d;
-        };
-        PREPARE(video_codecs, std::move(getcodecs()));
-
         PREPARE( desktop_notification_duration, prf().dmn_duration() );
 
         PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
@@ -1904,7 +2197,6 @@ void dialog_settings_c::mod()
 
     if ( profile_selected && prf_options().is(OPTOPT_POWER_USER) )
     m.add_sub(TTT("Advanced",394))
-        .add(AM_VIDEO_CALLS, 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
         .add(AM_TOOLS, 0, TABSELMI(MASK_ADVANCED_TOOLS))
         .add(AM_MISC, 0, TABSELMI(MASK_ADVANCED_MISC))
         .add(AM_DEBUG, 0, TABSELMI(MASK_ADVANCED_DEBUG));
@@ -2255,12 +2547,11 @@ void dialog_settings_c::mod()
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() ? 1 : 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
     dopts |= debug.get(CONSTASTR("contactids")).as_int() ? 4 : 0;
-    dopts |= debug.get(CONSTASTR(DEBUG_OPT_TELEMETRY)).as_int() ? 8 : 0;
 
     dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
         menu_c().add(CONSTWSTR("Create full memory dump on crash"), 0, MENUHANDLER(), CONSTASTR("1"))
                 .add(CONSTWSTR("Enable logging"), 0, MENUHANDLER(), CONSTASTR("2"))
-                .add( CONSTWSTR("Enable telemetry"), 0, MENUHANDLER(), CONSTASTR( "8" ))
+                //.add( CONSTWSTR("Enable telemetry"), 0, MENUHANDLER(), CONSTASTR( "8" ))
                 .add(CONSTWSTR("Show contacts id's"), 0, MENUHANDLER(), CONSTASTR("4"))
         );
 
@@ -2299,21 +2590,6 @@ void dialog_settings_c::mod()
     dm().checkb( ts::wstr_c(), DELEGATE( this, pmiscf_handler ), pmisc_flags ).setmenu(
         menu_c().add( TTT("Save avatar images",498), 0, MENUHANDLER(), ts::amake<int>( PMISCF_SAVEAVATARS ) )
     );
-
-    if (profile_selected)
-    {
-        dm << MASK_ADVANCED_VIDEOCALLS;
-        dm().page_caption(AM_VIDEO_CALLS);
-        dm().checkb(ts::wstr_c(), DELEGATE(this, advv_handler), disable_video_ex ? 1 : 0).setmenu(
-            menu_c().add(TTT("Disable extended video support",406), 0, MENUHANDLER(), CONSTASTR("1"))
-            );
-        dm().vspace();
-        dm().hslider(TTT("Video encoding quality (0 - auto)",398), (float)encoding_quality * 0.01f, CONSTWSTR("0/0/1/1"), DELEGATE(this, encoding_quality_set));
-        dm().vspace();
-        dm().textfield(TTT("Video bitrate (0 - auto)",407), ts::wmake(video_bitrate), DELEGATE(this, set_bitrate));
-        dm().vspace(10);
-        dm().list(TTT("Codecs",404), ts::wsptr(), -100).setname(CONSTASTR("protocodeclist"));
-    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
@@ -2354,11 +2630,6 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
         debug.unset(CONSTASTR("contactids"));
     else
         debug.set(CONSTASTR("contactids")) = CONSTASTR("1");
-
-    if ( 0 == ( opts & 8 ) )
-        debug.unset( CONSTASTR( DEBUG_OPT_TELEMETRY ) );
-    else
-        debug.set( CONSTASTR( DEBUG_OPT_TELEMETRY ) ) = CONSTASTR( "-1" );
 
     mod();
     return true;
@@ -2463,73 +2734,6 @@ bool dialog_settings_c::backup_clean_count_handler(const ts::wstr_c &n, bool)
 }
 
 
-void dialog_settings_c::codecselected(const ts::str_c& prm)
-{
-    ts::str_c tag, codec;
-    prm.split(tag, codec, '/');
-    video_codecs.set(tag) = codec;
-    mod();
-
-    videocodecs_tab_selected();
-}
-
-menu_c dialog_settings_c::codecctxmenu(const ts::str_c& param, bool activation)
-{
-    menu_c m;
-    for (const protocol_description_s &pd : available_prots)
-    {
-        if (pd.getstr(IS_PROTO_TAG) == param)
-        {
-            ts::token<char> t(pd.getstr( IS_VIDEO_CODECS ), '/');
-            ts::str_c cur = video_codecs.get(pd.getstr( IS_PROTO_TAG ), *t);
-            if (cur.is_empty()) cur = *t;
-
-            for (; t; ++t)
-                m.add(to_wstr(*t), cur.equals(*t) ? MIF_MARKED : 0, DELEGATE(this, codecselected), ts::str_c( pd.getstr( IS_PROTO_TAG ) ).append_char('/').append(*t));
-        }
-    }
-    return m;
-}
-
-void dialog_settings_c::videocodecs_tab_selected()
-{
-    if (RID lst = find(CONSTASTR("protocodeclist")))
-    {
-        HOLD(lst).engine().trunc_children(0);
-        for (const protocol_description_s &pd : available_prots)
-        {
-            if (pd.getstr( IS_VIDEO_CODECS ).get_length())
-            {
-                ts::token<char> t(pd.getstr( IS_VIDEO_CODECS ), '/');
-                ts::str_c cur = video_codecs.get( pd.getstr( IS_PROTO_TAG ), *t );
-                if (cur.is_empty()) cur = *t;
-
-                MAKE_CHILD<gui_listitem_c>(lst, from_utf8(pd.getstr( IS_PROTO_DESCRIPTION_WITH_TAG ) ).append(CONSTWSTR(": ")).append( to_wstr(cur) ), pd.getstr( IS_PROTO_TAG ) ) << DELEGATE(this, codecctxmenu);
-            }
-        }
-    }
-}
-
-bool dialog_settings_c::set_bitrate(const ts::wstr_c &t, bool )
-{
-    video_bitrate = t.as_int();
-    if (video_bitrate < 0) video_bitrate = 0;
-    mod();
-    return true;
-}
-
-bool dialog_settings_c::encoding_quality_set(RID srid, GUIPARAM p)
-{
-    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
-    encoding_quality = ts::lround( pp->value * 100.0f );
-    if (encoding_quality == 0)
-        pp->custom_value_text.set(TTT("Automatic quality adjust",405));
-    else
-        pp->custom_value_text.set(CONSTWSTR("<l>")).append(TTT("Quality: $",399) / ts::wmake(encoding_quality).append_char('%')).append(CONSTWSTR("</l>"));
-    mod();
-    return true;
-}
-
 bool dialog_settings_c::advt_handler(RID, GUIPARAM p)
 {
     tools_bits = as_int(p);
@@ -2537,13 +2741,6 @@ bool dialog_settings_c::advt_handler(RID, GUIPARAM p)
     return true;
 }
 
-
-bool dialog_settings_c::advv_handler(RID, GUIPARAM p)
-{
-    disable_video_ex = p != nullptr;
-    mod();
-    return true;
-}
 
 bool dialog_settings_c::sndvolhandler( RID srid, GUIPARAM p )
 {
@@ -2707,7 +2904,6 @@ void dialog_settings_c::networks_tab_selected()
     } else
     {
         if (dlg->is_networks_tab_selected) dlg->networks_tab_selected();
-        if (dlg->is_video_codecs_tab_selected) dlg->videocodecs_tab_selected();
         dlg->proto_list_loaded = true;
     }
 }
@@ -2810,21 +3006,6 @@ void dialog_settings_c::networks_tab_selected()
     {
         ctlenable(CONSTASTR("applypreset"), selected_preset >= 0);
         DEFERRED_UNIQUE_CALL( 0.01, DELEGATE(this, addlistsound), as_param( snd_count -1 ) );
-    }
-
-    if (mask & MASK_ADVANCED_VIDEOCALLS)
-    {
-        is_video_codecs_tab_selected = true;
-        if (proto_list_loaded)
-        {
-            videocodecs_tab_selected();
-        }
-        else
-        {
-            set_list_emptymessage(CONSTASTR("protocodeclist"), ts::wstr_c(loc_text(loc_loading)));
-            ASSERT(prf().is_loaded());
-            available_prots.load();
-        }
     }
 
     setup_video_device();
@@ -3021,9 +3202,7 @@ ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, ts::aint
 bool dialog_settings_c::addnetwork(RID, GUIPARAM)
 {
     dialog_protosetup_params_s prms( &available_prots, &table_active_protocol_underedit, DELEGATE(this,addeditnethandler));
-    prms.configurable.ipv6_enable = true;
-    prms.configurable.udp_enable = true;
-    prms.configurable.server_port = 0;
+    prms.configurable.set_defaults();
     prms.configurable.initialized = true;
     prms.connect_at_startup = true;
     prms.watch = getrid();
@@ -3256,15 +3435,8 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         }
         fontchanged = prf().fontscale_conv_text(font_scale_conv_text) || prf().fontscale_msg_edit(font_scale_msg_edit);
 
-        bool chvideoencopts = prf().video_enc_quality(disable_video_ex ? -1 : encoding_quality);
-        chvideoencopts |= prf().video_bitrate(video_bitrate);
-        chvideoencopts |= prf().video_codec( video_codecs.to_str() );
-        if (chvideoencopts)
-            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_VIDEO_ENCODING_SETTINGS).send();
-
         prf().useproxyfor( useproxyfor );
         prf().misc_flags( pmisc_flags );
-
     }
 
     cfg().temp_folder_sendimg( tempfolder_sendimg );
@@ -3331,7 +3503,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     INITFLAG(misc_flags, MISCF_DONT_LIM_BACKUP_COUNT, 0 == (backupopt & 8));
 
     cfg().misc_flags( misc_flags );
-    gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
+    gui->enable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) == 0 );
 
 
 #define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
@@ -3941,9 +4113,73 @@ bool dialog_setup_network_c::lost_contact(RID, GUIPARAM p)
     tabsel(CONSTASTR("1"));
 }
 
+bool dialog_setup_network_c::b_advanced(RID, GUIPARAM)
+{
+    SUMMON_DIALOG<dialog_advanced_c>(UD_ADVANCED_NETWORK_SETTINGS, false, this);
+    return true;
+}
+
+ts::str_c dialog_setup_network_c::adv_param(const ts::asptr &pn) const
+{
+    return params.configurable.advanced.get(pn);
+}
+
+void dialog_setup_network_c::adv_param(const ts::asptr &pn, const ts::str_c &pv)
+{
+    params.configurable.advanced.set(pn) = pv;
+}
+
+ts::wstr_c dialog_setup_network_c::prototag() const
+{
+    if (!params.networktag.is_empty())
+        return ts::to_wstr(params.networktag);
+
+    if (params.protoid != 0)
+    {
+        if (active_protocol_c *ap = prf().ap(params.protoid))
+            return ts::to_wstr(ap->get_tag());
+    }
+
+    return ts::wstr_c();
+}
+
+ts::str_c dialog_setup_network_c::get_advanced()
+{
+    if (!params.networktag.is_empty())
+    {
+        if (params.avprotos)
+        {
+            for (const protocol_description_s&proto : *params.avprotos)
+            {
+                if (params.networktag.equals(proto.getstr(IS_PROTO_TAG)))
+                    return proto.getstr(IS_ADVANCED_SETTINGS);
+            }
+        }
+    }
+
+    if (params.protoid != 0)
+    {
+        if (active_protocol_c *ap = prf().ap(params.protoid))
+            return ap->get_infostr(IS_ADVANCED_SETTINGS);
+    }
+
+    return ts::str_c();
+}
+
+
 void dialog_setup_network_c::getbutton(bcreate_s &bcr)
 {
     super::getbutton(bcr);
+
+    if (!get_advanced().is_empty())
+    {
+        if (bcr.tag == 2)
+        {
+            bcr.face = BUTTON_FACE(button);
+            bcr.btext = TTT("Advanced", 265);
+            bcr.handler = DELEGATE(this, b_advanced);
+        }
+    }
 }
 
 void dialog_setup_network_c::available_network_selected(const ts::str_c&tag)
@@ -4057,13 +4293,11 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     {
         TTT("Allow IPv6",361),
         TTT("Allow UDP",264),
-        TTT("Allow hole punching",534),
-        TTT("Allow local discovery",535),
         TTT("Allow only encrypted connection",523),
         TTT("Allow only trusted connection",524),
     };
 
-    TS_STATIC_CHECK(auto_co_count == 6, "Please describe new options");
+    TS_STATIC_CHECK(auto_co_count == 4, "Please describe new options");
 
 #define COPDEF( nnn, dv ) if (0 != (params.proto_desc.connection_features & CF_##nnn)) \
     { \
@@ -4074,14 +4308,6 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     }
     CONN_OPTIONS
 #undef COPDEF
-
-    if (0 != (params.proto_desc.connection_features & CF_SERVER_OPTION))
-    {
-        ASSERT(params.configurable.initialized);
-        dm().vspace(5);
-        addh += 45;
-        dm().textfield(TTT("Listen port (0 - don't listen)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
-    }
 
     if (0 != (params.proto_desc.connection_features & CF_PROXY_MASK))
     {
@@ -4220,15 +4446,6 @@ bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t, bool )
     return true;
 }
 
-bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t, bool )
-{
-    params.configurable.initialized = true;
-    params.configurable.server_port = t.as_int();
-    if (params.configurable.server_port < 0 || params.configurable.server_port > 65535)
-        params.configurable.server_port = 0;
-    return true;
-}
-
 #define COPDEF( nnn, dv ) bool dialog_setup_network_c::network_##nnn(RID, GUIPARAM p) \
 { \
     params.configurable.initialized = true;  params.configurable.nnn = p != nullptr; return true; \
@@ -4278,12 +4495,12 @@ bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t, bool )
         check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
         r.call_enable(params.configurable.proxy.proxy_type != 0);
     }
-    if ( RID r = find( CONSTASTR( "loginedit" ) ) )
+    if (RID r = find(CONSTASTR("loginedit")))
     {
         gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
         tf.badvalue( params.configurable.login.is_empty() );
     }
-    if ( RID r = find( CONSTASTR( "passedit" ) ) )
+    if (RID r = find(CONSTASTR("passedit")))
     {
         gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
         tf.badvalue( !password_ok );
@@ -4293,10 +4510,6 @@ bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t, bool )
             tf.set_placeholder( TOOLTIP( TTT("Unchanged",474) ), get_default_text_color( 0 ) );
     }
 }
-
-
-
-
 
 
 dialog_protosetup_params_s::dialog_protosetup_params_s(int protoid) : protoid(protoid)

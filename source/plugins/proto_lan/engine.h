@@ -6,6 +6,22 @@
 #define LOGGING 0
 #endif
 
+#define ADV_video_codec "video_codec"
+#define ADV_video_bitrate "video_bitrate"
+#define ADV_video_quality "video_quality"
+#define ADV_video_telemetry "video_telemetry"
+
+#define ADVSET \
+    ASI( video_codec ) ASI( video_bitrate ) ASI( video_quality ) ASI( video_telemetry )
+
+enum advset_e
+{
+#define ASI(aa) adv_##aa##_e,
+    ADVSET
+#undef ASI
+    adv_count
+};
+
 
 #define AUDIO_SAMPLERATE 48000
 #define AUDIO_BITS 16
@@ -339,6 +355,16 @@ class lan_engine : public packetgen
     void stop_encoder();
 
     bool load_contact(contact_id_s cid, loader &ldr);
+
+    void send_configurable();
+
+    int tlmflags = 0;
+#define IS_TLM( t ) (0!=(engine->tlmflags & ( 1 << t )))
+
+#define ASI(aa) void adv_##aa( const std::pstr_c &val ); std::string adv_##aa() const;
+    ADVSET
+#undef ASI
+
 public:
 
     static void video_encoder();

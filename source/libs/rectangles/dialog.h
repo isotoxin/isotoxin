@@ -220,7 +220,8 @@ protected:
         ts::wstr_c gethint() const {return hint;}
 
         description_s&custom_mask(ts::uint32 cmask) { c_mask = cmask; return *this; }
-        description_s&sethint(const ts::wsptr&h) { hint=h; return *this; }
+        description_s&sethint(const ts::wstr_c&h) { hint=h; return *this; }
+        description_s&sethint(const ts::wsptr&h) { hint = h; return *this; }
         description_s&setname(const ts::asptr&n) { name=n; return *this; }
         description_s&setmenu( const menu_c &m ) { items = m; return *this; }
         description_s&readonly(bool f = true) { options.init( o_readonly, f ); return *this; }
@@ -232,7 +233,8 @@ protected:
         description_s&subctl(int tag,ts::wstr_c &ctldesc);
         description_s&passwd(bool p) { ASSERT(_TEXT == ctl || _PASSWD == ctl); ctl = p ? _PASSWD : _TEXT; return *this; }
 
-        void hgroup( const ts::wsptr& desc );
+        void hgroup(const ts::wsptr& desc);
+        void hgroup(const ts::wsptr& desc, const ts::asptr& propo, int div);
         description_s& label( const ts::wsptr& text );
         description_s& hiddenlabel( const ts::wsptr& text, bool is_err );
         void page_caption( const ts::wsptr& text );
@@ -336,6 +338,7 @@ protected:
     RID hgroup( const ts::wsptr& desc );
     int radio( const ts::array_wrapper_c<const radio_item_s> & items, GUIPARAMHANDLER handler, GUIPARAM current = nullptr );
     int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0, bool visible = true, RID parent = RID() );
+    RID label(const ts::wstr_c &text, RID parent);
     RID label(const ts::wstr_c &text, bool visible = true, bool is_err = false);
     RID vspace(int height);
     RID panel(int height, GUIPARAMHANDLER drawhandler);

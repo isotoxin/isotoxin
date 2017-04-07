@@ -412,6 +412,13 @@ void gui_dialog_c::description_s::hgroup( const ts::wsptr& desc_ )
     desc = desc_;
 }
 
+void gui_dialog_c::description_s::hgroup(const ts::wsptr& desc_, const ts::asptr& propo, int div)
+{
+    ctl = _HGROUP;
+    desc = desc_;
+    name.set_as_int(div).append_char('|').append(propo);
+}
+
 gui_dialog_c::description_s& gui_dialog_c::description_s::path( const ts::wsptr &desc_, const ts::wsptr &path, gui_textedit_c::TEXTCHECKFUNC checker )
 {
     ctl = _PATH;
@@ -1229,6 +1236,17 @@ RID gui_dialog_c::combik(const menu_c &m, RID parent)
     return textfield(s.name, 128, TFR_COMBO, check_always_ok, &dd, 0, parent);
 }
 
+RID gui_dialog_c::label(const ts::wstr_c &text, RID parent)
+{
+    gui_label_simplehtml_c &l = MAKE_VISIBLE_CHILD<gui_label_simplehtml_c>(parent, true);
+    l.on_link_click = (CLICK_LINK)ts::open_link;
+    l.set_autoheight();
+    l.set_text(text, true);
+    l.set_updaterect(getrectupdate());
+    l.set_defcolor(get_default_text_color());
+    return l.getrid();
+}
+
 RID gui_dialog_c::label(const ts::wstr_c &text, bool visible, bool is_err)
 {
     gui_label_simplehtml_c &l = MAKE_VISIBLE_CHILD<gui_label_simplehtml_c>(getrid(),visible);
@@ -1351,6 +1369,22 @@ void gui_dialog_c::tabsel(const ts::asptr& par)
 
     tabselmask = ts::pstr_c(par).as_uint();
     RID lasthgroup, focusctl;
+    ts::str_c lasthgrouppropo;
+
+    auto hgroupend = [&]()
+    {
+        if (lasthgroup && !lasthgrouppropo.is_empty())
+        {
+            gui_hgroup_c &g = HOLD(lasthgroup).as<gui_hgroup_c>();
+            int splt = lasthgrouppropo.find_pos('|');
+            int div = lasthgrouppropo.substr(0, splt).as_int();
+            g.set_proportions(lasthgrouppropo.substr(splt + 1), div);
+        }
+        lasthgroup = RID();
+    };
+        
+
+
     for(description_s &d : descs)
     {
         if (0 == (d.mask & tabselmask)) continue;
@@ -1383,23 +1417,26 @@ void gui_dialog_c::tabsel(const ts::asptr& par)
             break;
         case description_s::_HGROUP:
             {
+                hgroupend();
                 gui_hgroup_c &g = MAKE_VISIBLE_CHILD<gui_hgroup_c>( getrid() );
                 lasthgroup = g.getrid();
+                lasthgrouppropo = d.name;
             }
             break;
         case description_s::_STATIC:
-            rctl = label(d.text, true);
+            rctl = label(d.text, parent);
+            HOLD(rctl)().tooltip(d.gethintproc());
             break;
         case description_s::_STATIC_HIDDEN:
             rctl = label(d.text, false, d.options.is(description_s::o_err));
             break;
         case description_s::_VSPACE:
-            lasthgroup = RID();
+            hgroupend();
             rctl = vspace(d.height_);
             if (d.handler) d.handler( rctl, nullptr );
             break;
         case description_s::_PANEL:
-            lasthgroup = RID();
+            hgroupend();
             rctl = panel(d.height_, d.handler);
             break;
         case description_s::_PATH:
@@ -1414,6 +1451,7 @@ void gui_dialog_c::tabsel(const ts::asptr& par)
             if (!d.items.is_empty())
             {
                 rctl = combik( d.items, parent );
+                HOLD(rctl)().tooltip(d.gethintproc());
             }
             break;
         case description_s::_CHECKBUTTONS:
@@ -1460,8 +1498,12 @@ void gui_dialog_c::tabsel(const ts::asptr& par)
                 check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible), vg );
                 ts::aint chldcount2 = HOLD(vg).engine().children_count();
                 int index = 0;
-                for( ts::aint i=chldcount; i<chldcount2;++i)
-                    d.setctlptr( &HOLD(vg).engine().get_child(i)->getrect(), index++ );
+                for (ts::aint i = chldcount; i < chldcount2; ++i)
+                {
+                    guirect_c &r = HOLD(vg).engine().get_child(i)->getrect();
+                    d.setctlptr(&r, index++);
+                    r.tooltip(d.gethintproc());
+                }
             }
             break;
         case description_s::_RADIO:
@@ -1512,6 +1554,8 @@ void gui_dialog_c::tabsel(const ts::asptr& par)
         }
     }
 
+    hgroupend();
+
     if (focusctl)
         gui->set_focus( focusctl );
 
@@ -1524,8 +1568,11 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 
     switch (ctl)
     {
-    case _TEXT:
-        return dlg->textfield(text, MAX_PATH_LENGTH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
+    case _TEXT: {
+            RID t =dlg->textfield(text, MAX_PATH_LENGTH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
+            HOLD(t)().tooltip(gethintproc());
+            return t;
+        }
     case _ROTEXT:
         return dlg->textfield( text, MAX_PATH_LENGTH, TFR_TEXT_FILED_RO, nullptr, nullptr, height_, parent );
     case _PASSWD:
@@ -1537,6 +1584,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
             dd.textfield.behav_handler() = DELEGATE( this, updvalue2 );
 
             RID rr = dlg->textfield(text, MAX_PATH_LENGTH, TFR_CUSTOM_SELECTOR, nullptr, &dd, 0, parent);
+            HOLD(rr)().tooltip(gethintproc());
 
             if (handler)
             {
