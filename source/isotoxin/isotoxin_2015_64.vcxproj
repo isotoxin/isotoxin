@@ -95,6 +95,9 @@
     <PreBuildEvent>
       <Command>"$(ProjectDir)..\..\tools\prebuild.cmd"</Command>
     </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>"$(ProjectDir)..\..\tools\backup_final.cmd"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">
     <ClCompile>

@@ -471,7 +471,7 @@ public:
     void delete_event(GUIPARAMHANDLER h);
     void delete_event(GUIPARAMHANDLER h, GUIPARAM prm);
 
-    void simulate_kbd( int scancode, ts::uint32 casw );
+    bool simulate_kbd( int scancode, ts::uint32 casw );
     void register_kbd_callback(GUIPARAMHANDLER handler, int scancode, ts::uint32 casw)
     {
         kbd_press_callback_s &cb = m_kbdhandlers.add();

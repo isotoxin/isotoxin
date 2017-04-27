@@ -348,8 +348,8 @@ av_contacts_c::~av_contacts_c()
 int av_contacts_c::get_avinprogresscount() const
 {
     int cnt = 0;
-    for ( const av_contact_s *avc : m_contacts )
-        if ( av_contact_s::AV_INPROGRESS == avc->core->state )
+    for (const av_contact_s *avc : m_contacts)
+        if (av_contact_s::AV_INPROGRESS == avc->core->state)
             ++cnt;
     return cnt;
 }

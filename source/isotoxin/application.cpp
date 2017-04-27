@@ -2562,9 +2562,9 @@ void application_c::update_ringtone( contact_root_c *rt, contact_c *sub, bool pl
 
     if (0 == avcount && avcontacts().get_avringcount())
     {
-        ( avcontacts().get_avinprogresscount() == 0) ?
-            play_sound(snd_ringtone, true) :
-            play_sound(snd_ringtone2, true);
+        avcontacts().is_any_inprogress() ?
+            play_sound(snd_ringtone2, true) :
+            play_sound(snd_ringtone, true);
 
         if (prf_options().is(UIOPT_SHOW_INCOMING_CALL_BAR))
         {

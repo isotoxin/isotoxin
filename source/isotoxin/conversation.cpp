@@ -3425,7 +3425,9 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             {
                 //if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
                 //    continue;
-                ts::str_c pubid = contacts().find_pubid(s.x);
+                ts::str_c pubid;
+                if (s.x > 0)
+                    pubid = contacts().find_pubid(s.x);
                 if (!pubid.is_empty())
                 {
                     not_at_end();
@@ -3783,7 +3785,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         addition_file_data_s &ab = addition_file_data();
                         if ( ab.imgloader )
                             imgloader_get( nullptr ).on_draw();
-                        else if ( !ab.disable_loading )
+                        else if (!ab.disable_loading && prf_options().is(MSGOP_SHOW_INLINE_IMG))
                         {
                             if (nullptr == g_app->find_file_transfer_by_msgutag( utag ))
                                 ab.imgloader.initialize<image_loader_c>( this, from_utf8( intext->cstr() ) );
@@ -5218,7 +5220,17 @@ void gui_message_item_c::update_text(int for_width)
 
             ASSERT(for_width == 0 || imgloader());
 
-            int rectw = for_width ? for_width : getprops().size().x;
+            auto calcwidth = [this]()
+            {
+                int w = getprops().size().x;
+                if (w > 0) return w;
+
+                DEFERRED_UNIQUE_CALL(0.5, DELEGATE(this, update_text_again), 0);
+
+                return HOLD(getparent())().getprops().size().x;
+            };
+
+            int rectw = for_width ? for_width : calcwidth();
             int oldh = for_width ? 0 : get_height_by_width(rectw);
 
             set_selectable(false);

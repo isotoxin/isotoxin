@@ -5941,7 +5941,7 @@ void tox_c::signal(contact_id_s cid, signal_e s)
             if (it == id2desc.end()) return;
             contact_descriptor_s *desc = it->second;
 
-            if (desc->address.compatible(tox_address_c::TAT_PUBLIC_KEY) && !desc->get_fid().is_valid())
+            if (desc->address.compatible(tox_address_c::TAT_PUBLIC_KEY) && (!desc->get_fid().is_valid() || desc->get_fid().is_unknown()))
             {
                 TOX_ERR_FRIEND_ADD er;
                 int tox_fid = tox_friend_add_norequest(tox, desc->address.as_public_key().key, &er);
@@ -6057,7 +6057,8 @@ void tox_c::signal(contact_id_s cid, signal_e s)
                     }
                 }
 
-                tox_friend_delete(tox, desc->get_fid().normal(), nullptr);
+                if (desc->get_fid().is_normal())
+                    tox_friend_delete(tox, desc->get_fid().normal(), nullptr);
                 desc->die();
                 hf->save();
 

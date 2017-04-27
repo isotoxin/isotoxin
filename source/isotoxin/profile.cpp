@@ -2914,6 +2914,9 @@ bool profile_c::is_conference_member( const contact_key_s &ck )
 
 void profile_c::make_contact_unknown_member( contact_c * c )
 {
+    if (c->get_state() != CS_OFFLINE && c->get_state() != CS_ONLINE || find_conference_member(c->get_pubid(), c->getkey().protoid) != nullptr)
+        return;
+
     ts::db_transaction_c __transaction( db );
 
     contact_key_s oldkey = c->getkey();

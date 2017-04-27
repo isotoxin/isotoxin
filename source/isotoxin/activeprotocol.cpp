@@ -445,16 +445,11 @@ bool active_protocol_c::cmdhandler(ipcr r)
             int fid = r.get<int>();
 
             ts::wstr_c wfn = ts::fn_join(CONSTWSTR("protocols"), ts::from_utf8(fn));
-            if (void *f = ts::f_open(wfn))
+            
+            if (ts::blob_c b = ts::g_fileop->load(wfn))
             {
-                uint64 sz = ts::f_size(f);
-                if (sz < 65536)
+                if (b.size() < 65536)
                 {
-                    ts::blob_c b;
-                    b.set_size(static_cast<ts::aint>(sz), false);
-                    ts::f_read(f, b.data(), sz);
-                    ts::f_close(f);
-
                     ipcp->send(ipcw(XX_PROTO_FILE) << fid << b);
                 }
             }

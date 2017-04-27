@@ -863,7 +863,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&msg)
             contacts_s *c = &trowc->other;
             contact_root_c *metac = nullptr;
             ts::aint index;
-            if (CHECK(arr.find_sorted(index, contact_key_s(c->metaid))))
+            if (arr.find_sorted(index, contact_key_s(c->metaid)))
             {
                 metac = ts::ptr_cast<contact_root_c *>( arr.get(index).get() );
             meta_restored:
@@ -874,11 +874,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&msg)
                     arr.insert(index, cc);
             } else
             {
-                contact_key_s metakey(c->metaid);
-                metac = TSNEW(contact_root_c, metakey);
-                arr.insert(index, metac);
-                prf().dirtycontact(metac->getkey());
-                goto meta_restored;
+                // corrupted contact without meta
+                // just kill it
+                prf().killcontact(c->key);
             }
         }
 
@@ -1449,13 +1447,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
             process_update_as_unknown_conference_member:
 
                 ASSERT( cm->memba );
-
-                if ( cm->proto_key.is_empty() )
-                    cm->proto_key = contact.key;
-                else
-                {
-                    ASSERT( cm->proto_key == contact.key );
-                }
+                cm->proto_key = contact.key;
             }
             else
             {

@@ -2872,7 +2872,9 @@ const protocol_description_s * dialog_settings_c::describe_network(ts::wstr_c&de
         desc.replace_all(CONSTWSTR("{module}"), CONSTWSTR("?"));
     } else
     {
-        ts::wstr_c pubid = to_wstr(contacts().find_pubid(id));
+        ts::wstr_c pubid;
+        if (id > 0)
+            pubid = to_wstr(contacts().find_pubid(id));
         if (pubid.is_empty()) pubid = TTT("not yet created or loaded",200); else pubid.insert(0, CONSTWSTR("<ee>"));
 
         desc.replace_all(CONSTWSTR("{name}"), from_utf8(name));

@@ -425,7 +425,7 @@ void gui_c::heartbeat()
 #endif
 }
 
-void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
+bool gui_c::simulate_kbd(int scancode, ts::uint32 casw)
 {
     ts::uint32 signalkbd = scancode | casw;
     for ( ts::aint i = m_kbdhandlers.size() - 1; i >= 0; --i) // back order! latest handler handle key first
@@ -434,9 +434,10 @@ void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
         if (cb.scancode == signalkbd)
         {
             if (cb.handler(RID(), nullptr))
-                break;
+                return true;
         }
     }
+    return false;
 }
 
 void gui_c::unregister_kbd_callback(GUIPARAMHANDLER handler)
@@ -467,7 +468,7 @@ bool gui_c::handle_keyboard(int scan, bool dn, int casw)
         }
 
     if (dn)
-        simulate_kbd( scan, casw );
+        return simulate_kbd( scan, casw );
 
     return false;
 }

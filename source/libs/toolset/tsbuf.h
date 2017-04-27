@@ -1039,7 +1039,7 @@ public:
     }
 
 
-    template<typename F> bool find_index_sorted(aint &index, const T &t, F &comp) const
+    template<typename TT, typename F> bool find_index_sorted(aint &index, const TT &t, F &comp) const
     {
         if (count() == 0)
         {

@@ -2680,7 +2680,11 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
         break;
     case menu_anchor_s::RELPOS_TYPE_BD:
-        if (!height_decreased && cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
+        if (!height_decreased && cp.y < showpoint.rect.rb.y)
+        {
+            cp.y = showpoint.rect.lt.y - sz.y;
+            if (cp.y < maxsz.lt.y) cp.y = maxsz.lt.y;
+        }
         if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
         break;
     case menu_anchor_s::RELPOS_TYPE_TU:
