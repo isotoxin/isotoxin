@@ -41,18 +41,18 @@ int proc_grabnodes(const wstrings_c & pars)
     buf_c rslt;
 
     https_c httpsclient;
-    httpsclient.get( "https://wiki.tox.chat/users/nodes", rslt );
+    httpsclient.get( "https://nodes.tox.chat", rslt );
     //rslt.load_from_disk_file(nodesf);
 
 
-    int offset = find_tag( rslt.cstr(), 0, CONSTASTR("table") );
+    int offset = find_tag( rslt.cstr(), 0, CONSTASTR("tbody") );
     if (offset < 0)
     {
         Print(FOREGROUND_RED, "tag <table> not found\n");
         return 0;
     }
 
-    get_tag_inner( offset, rslt.cstr(), CONSTASTR("tr") ); // skip row with th's
+    //get_tag_inner( offset, rslt.cstr(), CONSTASTR("tr") ); // skip row with th's
 
     buf_c outb;
 
@@ -62,6 +62,7 @@ int proc_grabnodes(const wstrings_c & pars)
         if (row.get_length() == 0) break;
 
         int roffset = 0;
+        pstr_c img = get_tag_inner(roffset, row, CONSTASTR("td"));
         pstr_c ipv4 = get_tag_inner( roffset, row, CONSTASTR("td") );
 
         if (ipv4.is_empty())
@@ -72,7 +73,7 @@ int proc_grabnodes(const wstrings_c & pars)
         pstr_c clid = get_tag_inner( roffset, row, CONSTASTR("td") );
 
         ipv6.trim();
-        if (ipv6.equals(CONSTASTR("NONE")) || ipv6.equals(CONSTASTR("-")))
+        if (ipv6.equals(CONSTASTR("NONE")) || ipv6.equals(CONSTASTR("-")) || ipv6.equals(ipv4))
             ipv6.clear();
 
         tmp_str_c s(CONSTASTR("<ip4>/<ip6>/<port>/<clid>\n"));
@@ -81,6 +82,9 @@ int proc_grabnodes(const wstrings_c & pars)
         s.replace_all( CONSTASTR("<port>"), tmp_str_c(port).trim() );
         s.replace_all( CONSTASTR("<clid>"), tmp_str_c(clid).trim() );
         outb.append_buf(s.cstr(), s.get_length());
+
+        row = get_tag_inner(offset, rslt.cstr(), CONSTASTR("tr")); // skip next tr
+
     }
 
     outb.save_to_file(nodesf);
