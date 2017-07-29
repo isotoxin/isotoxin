@@ -36,7 +36,7 @@ bool player_data_s::update(Player *player, float dt)
         for (int g = 0; g < sgCount; g++)
         {
             Slot *slots = soundGroups[g].slots;
-            for (int i = 0, n = soundGroups[g].active; i < n; i++) slots[i].update(player, dt, false);
+            for (int i = 0, n = soundGroups[g].active; i < n; i++) slots[i].update(player, dt);
         }
 
         player_coredata_on_update( player );
@@ -126,6 +126,24 @@ void Player::SetMasterVolume(float f)
 {
     player_coredata_set_master_vol(this,f);
 }
+
+void Player::SetPitch(float k)
+{
+    player_data_s &pd = player_data_s::cvt(this);
+    spinlock::auto_simple_lock l(pd.sync);
+    if (pd.pitch != k)
+    {
+        pd.pitch = k;
+        pd.pitchchanged = true;
+    }
+}
+float Player::GetPitch() const
+{
+    player_data_s &pd = player_data_s::cvt(const_cast<Player *>(this));
+    spinlock::auto_simple_lock l(pd.sync);
+    return pd.pitch;
+}
+
 
 void Player::SetListenerParameters(const float pos[3], const float front[3], const float top[3], const float vel[3], float distFactor, float rolloffFactor, float dopplerFactor)
 {

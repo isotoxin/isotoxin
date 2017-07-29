@@ -1,40 +1,185 @@
+#define WIN32EMU
 #ifdef WIN32EMU
 
-// please, include this file into any cpp file of your project
+// please, include this file into any cpp file of your project (executable or dynamic library, NOT static lib!)
 
+#include <poll.h>
+#include <wchar.h>
+#include <wctype.h>
+#include <ctype.h>
+
+struct win32_emu_state_s
+{
+    w32e_consts lasterror = ERROR_SUCCESS;
+};
+
+__thread win32_emu_state_s w32state;
+
+w32e_consts GetLastError()
+{
+    return w32state.lasterror;
+}
+
+HANDLE CreateNamedPipeA( const char *name, int dwOpenMode, int dwPipeMode, int nMaxInstances, int nOutBufferSize, int nInBufferSize, int nDefaultTimeOut, void *secur )
+{
+    w32state.lasterror = ERROR_SUCCESS;
+    int fifo = mkfifo( name, (dwOpenMode & PIPE_ACCESS_INBOUND) ? O_RDONLY : O_WRONLY );
+    if (fifo < 0)
+    {
+        if (errno == EEXIST)
+            w32state.lasterror = ERROR_PIPE_BUSY;
+        return INVALID_HANDLE_VALUE;
+    }
+
+    w32e_handle_pipe_s *pip = new w32e_handle_pipe_s(fifo);
+    return pip;
+}
+
+HANDLE CreateFileA(const char *name, w32e_consts readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *)
+{
+    int mode = 0;
+    if (readwrite & GENERIC_WRITE)
+        mode |= O_WRONLY;
+    if (readwrite & GENERIC_READ)
+        mode |= O_RDONLY;
+    int h = open(name, mode);
+    if (h < 0)
+        return INVALID_HANDLE_VALUE;
+
+    struct stat st;
+    fstat(h,&st);
+
+    if (S_ISFIFO(st.st_mode))
+    {
+        unlink(name);
+        w32e_handle_pipe_s *pip = new w32e_handle_pipe_s(h);
+        return pip;
+
+    }
+
+    close(h);
+    __debugbreak();
+
+    return INVALID_HANDLE_VALUE;
+}
+
+namespace
+{
+    struct thstart_s
+    {
+        THREADPROC *proc;
+        void *par;
+
+        thstart_s(THREADPROC *proc, void *par):proc(proc), par(par) {}
+
+        static void *procx(void *par)
+        {
+            thstart_s p = *(thstart_s *)par;
+            delete (thstart_s *)par;
+            p.proc(p.par);
+            return nullptr;
+        }
+
+    };
+
+}
+
+HANDLE CreateThread(void *, int, THREADPROC *proc, void *par, int, void *)
+{
+    pthread_t tid;
+    thstart_s *tsp = new thstart_s(proc, par);
+
+    pthread_attr_t threadAttr;
+    pthread_attr_init(&threadAttr);
+    pthread_attr_setdetachstate(&threadAttr, PTHREAD_CREATE_DETACHED);
+
+    int err = pthread_create(&tid, &threadAttr, thstart_s::procx, tsp);
+
+    if (err == 0)
+        return new w32e_handle_thread_s(tid);
+
+    delete tsp;
+
+    return nullptr;
+}
 
 unsigned int WaitForSingleObject( HANDLE evt, int timeout )
 {
-    handle_t t;
-    t.hptr = evt;
-    switch (t.ht)
+    if (w32e_handle_event_s *e = dynamic_cast<w32e_handle_event_s *>(evt))
     {
-    case HT_EVENT: {
-
-            if ( INFINITE != timeout )
+        if ( INFINITE != timeout )
+        {
+            struct timeval now;
+            struct timespec timeouttime;
+            gettimeofday(&now, 0);
+            int secs = timeout / 1000;
+            int msecs = timeout - (secs * 1000);
+            timeouttime.tv_sec = now.tv_sec + secs;
+            timeouttime.tv_nsec = now.tv_usec * 1000 + msecs * 1000000;
+            if (timeouttime.tv_nsec >= 1000000000)
             {
-                pollfd fd;
-                fd.fd = t.h;
-                fd.events = POLLIN;
-                fd.revents = 0;
-                int r = poll(&fd, 1, timeout);
-                if ( r == 0 )
-                    return WAIT_TIMEOUT;
-                if ( r == -1 )
-                    return WAIT_FAILED;
+                ++timeouttime.tv_sec;
+                timeouttime.tv_nsec -= 1000000000;
             }
 
-            int64 evv1 = 1;
-            int r = read( t.h, &evv1, 8 );
-            if (r != 8)
-                return WAIT_FAILED;
-            if ( t.manualreset )
-                SetEvent( evt );
+
+            int rv = 0;
+            pthread_mutex_lock(&e->mutex);
+            while (!e->signaled)
+            {
+                rv = pthread_cond_timedwait(&e->cond, &e->mutex, &timeouttime);
+                if (ETIMEDOUT == rv)
+                    break;
+            }
+            if (!e->manualreset)
+                e->signaled = false;
+            pthread_mutex_unlock(&e->mutex);
+
+            if (ETIMEDOUT == rv)
+                return WAIT_TIMEOUT;
+
             return WAIT_OBJECT_0;
         }
-        break;
+
+        pthread_mutex_lock(&e->mutex);
+        while (!e->signaled)
+            pthread_cond_wait(&e->cond, &e->mutex);
+        if (!e->manualreset)
+            e->signaled = false;
+        pthread_mutex_unlock(&e->mutex);
+        return WAIT_OBJECT_0;
+
     }
     return WAIT_FAILED;
+}
+
+void Sleep(int ms)
+{
+    if (0 == ms)
+    {
+        pthread_yield();
+        return;
+    }
+    struct timespec req;
+    req.tv_sec = ms >= 1000 ? (ms / 1000) : 0;
+    req.tv_nsec = (ms - req.tv_sec * 1000) * 1000000;
+
+    // Loop until we've slept long enough
+    do
+    {
+        // Store remainder back on top of the original required time
+        if( 0 != nanosleep( &req, &req ) )
+        {
+            /* If any error other than a signal interrupt occurs, return an error */
+            if(errno != EINTR)
+                return;
+        }
+        else
+        {
+            // nanosleep succeeded, so exit the loop
+            break;
+        }
+    } while( req.tv_sec > 0 || req.tv_nsec > 0 );
 }
 
 

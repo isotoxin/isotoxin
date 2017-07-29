@@ -171,7 +171,7 @@ public:
 
     bool is_after(gui_contact_item_c &ci); // sort comparison
     /*virtual*/ int proto_sort_factor() const override;
-    bool same_prots(const gui_contact_item_c &itm) const;
+    //bool same_prots(const gui_contact_item_c &itm) const;
 
     void redraw(float delay);
 };

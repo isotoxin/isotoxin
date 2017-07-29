@@ -513,9 +513,11 @@ int ipc_junction_s::start( const char *junction_name )
 
     #ifdef _WIN32
     strcpy(buf, "\\\\.\\pipe\\_ipcp0_" __STR1__(IPCVER) "_");
+    static const int nnn = 14;
     #endif
     #ifdef _NIX
-    strcpy(buf, "ipcp0_" __STR1__(IPCVER) "_");
+    strcpy(buf, "/tmp/ipcp0_" __STR1__(IPCVER) "_");
+    static const int nnn = 9;
     #endif
     strcat(buf, junction_name);
 
@@ -526,14 +528,14 @@ int ipc_junction_s::start( const char *junction_name )
         d.pipe_in = nullptr;
         if (ERROR_PIPE_BUSY == GetLastError())
         {
-            is_client = true;
             // looks like self is client
+            is_client = true;
 
             d.pipe_out = CreateFileA(buf, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (INVALID_HANDLE_VALUE == d.pipe_out)
                 goto finita;
 
-            buf[14] = '1';
+            buf[nnn] = '1';
 
             d.pipe_in = CreateFileA( buf, GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
             if (INVALID_HANDLE_VALUE == d.pipe_in)
@@ -551,7 +553,7 @@ int ipc_junction_s::start( const char *junction_name )
         }
     } else
     {
-        buf[14] = '1';
+        buf[nnn] = '1';
         d.pipe_out = CreateNamedPipeA( buf, PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, BIG_DATA_SIZE, BIG_DATA_SIZE, 0, nullptr );
         if (INVALID_HANDLE_VALUE == d.pipe_out)
         {

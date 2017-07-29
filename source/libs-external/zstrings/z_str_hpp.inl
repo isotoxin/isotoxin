@@ -867,11 +867,12 @@ public:
     }
 
 
-    str_t<TCHARACTER, CORE> & case_down(ZSTRINGS_SIGNED offset = 0)
+    str_t<TCHARACTER, CORE> & case_down(ZSTRINGS_SIGNED offset0 = 0, ZSTRINGS_SIGNED offset1 = -1)
     {
         if (core.len() == 0) return *this;
 		core.change( core.len(), zstrings_internal::mod_preserve<TCHARACTER>( core.len() ) );
-        ZSTRINGS_SYSCALL(text_lowercase)(str() + offset, get_length() - offset);
+        if (offset1 < 0) offset1 = get_length();
+        ZSTRINGS_SYSCALL(text_lowercase)(str() + offset0, offset1 - offset0);
         return *this;
     }
 
@@ -1422,6 +1423,20 @@ public:
 			core()[idx] = c;
 		}
 		return *this;
+    }
+    
+    ZSTRINGS_SIGNED count_substrings(const sptr<TCHARACTER> &c) const
+    {
+        ZSTRINGS_SIGNED cnt = 0, index = 0;
+        for (;;)
+        {
+            ZSTRINGS_SIGNED a = find_pos(index, c);
+            if (a < 0)
+                break;
+            ++cnt;
+            index = a + c.l;
+        }
+        return cnt;
     }
 
     ZSTRINGS_SIGNED count_chars( TCHARACTER c ) const

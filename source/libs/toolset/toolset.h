@@ -4,6 +4,9 @@
 */
 #pragma once
 
+//#define TS_STATIC_CHECK(expr, msg) typedef char UNIQID(static_check) [(expr) ? 1 : -1]
+#define TS_STATIC_CHECK(expr, msg) static_assert((expr), msg)
+
 #define _ALLOW_RTCc_IN_STL
 
 #ifdef _WIN32
@@ -14,18 +17,21 @@
 #define WINDOWS_ONLY __error
 #include <stddef.h>
 #endif
-#ifdef _NIX
+#ifdef __GNUC__
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE 1
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define TS_LENDIAN 1
 #define TS_BENDIAN 0
-#endif
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define TS_LENDIAN 0
 #define TS_BENDIAN 1
+#else
+__error
 #endif
 #endif // _NIX
+
+TS_STATIC_CHECK((TS_LENDIAN + TS_BENDIAN) == 1, "something wrong");
 
 #pragma pack (push, 1)
 
@@ -274,9 +280,6 @@ template <size_t N> char(&__STRLENHELPER(const char(&array)[N]))[N];
 #define DEBUGCODE(...)
 #define FINALCODE(...) __VA_ARGS__
 #endif
-
-//#define TS_STATIC_CHECK(expr, msg) typedef char UNIQID(static_check) [(expr) ? 1 : -1]
-#define TS_STATIC_CHECK(expr, msg) static_assert((expr), msg)
 
 //#define SIMPLE_STR_HASH4( s ) MAKEFOURCC( (s)[0], (s)[1], (s)[2], (s)[3] )
 //#define SIMPLE_STR_HASH( s ) SIMPLE_STR_HASH4(s) ^ SIMPLE_STR_HASH4( s + sizeof(s) - 4 )

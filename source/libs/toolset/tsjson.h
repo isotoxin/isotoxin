@@ -63,6 +63,7 @@ namespace ts
         bool is_array() const {return SV_ARRAY == spec;}
         bool is_string() const {return SV_STRING == spec;}
         const str_c &as_string() const { return str; }
+        aint as_num() const { return ni; }
     
     };
 

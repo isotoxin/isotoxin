@@ -156,7 +156,7 @@ void active_protocol_c::run()
     auto r = syncdata.lock_read();
     if (r().flags.is(F_WORKER|F_WORKER_STOP)) return;
     if (r().flags.is(F_WORKER_STOPED))
-        g_app->avcontacts().stop_all_av();
+        g_app->avcontacts().stop_all_av(id);
     r.unlock();
 
     ts::master().sys_start_thread( DELEGATE( this, worker ) );
@@ -233,13 +233,13 @@ void active_protocol_c::setup_avatar_restrictions( ts::str_c& s )
 
 void active_protocol_c::signal(contact_id_s cid, signal_e s)
 {
-    ipcp->send(ipcw(AQ_SIGNAL) << cid << static_cast<ts::int32>(s));
+    if (ipcp) ipcp->send(ipcw(AQ_SIGNAL) << cid << static_cast<ts::int32>(s));
 }
 
 void active_protocol_c::signal(signal_e s)
 {
     ASSERT(s < _SIGNAL_NEED_CONTACT);
-    ipcp->send(ipcw(AQ_SIGNAL) << contact_id_s() << static_cast<ts::int32>(s));
+    if (ipcp) ipcp->send(ipcw(AQ_SIGNAL) << contact_id_s() << static_cast<ts::int32>(s));
 }
 
 bool active_protocol_c::cmdhandler(ipcr r)

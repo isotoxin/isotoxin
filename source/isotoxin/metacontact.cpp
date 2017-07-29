@@ -157,7 +157,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
                 ASSERT(c->is_meta());
                 c->unload_history();
                 prf().merge_history( basec->getkey(), ck );
-                c->stop_av();
+                c->stop_av(0);
                 c->subiterate([&](contact_c *cc) {
                     basec->subadd(cc);
                     prf().dirtycontact( cc->getkey() );

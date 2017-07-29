@@ -737,7 +737,7 @@ public:
         if ( maxcount == 1 )
         {
             int cmp = BEHAVIOUR::compare(m_list[0], key);
-            index = cmp <= 0 ? 0 : 1;
+            index = cmp < 0 ? 1 : 0;
             return cmp == 0;
         }
 
@@ -756,7 +756,7 @@ public:
                 index = test;
                 return true;
             }
-            if (cmp < 0)
+            if (cmp > 0)
             {
                 // do left
                 rite = test;
@@ -774,7 +774,7 @@ public:
         }
 
         int cmp = BEHAVIOUR::compare(m_list[left], key);
-        index = cmp <= 0 ? left : left + 1;
+        index = cmp < 0 ? left+1 : left;
         return cmp == 0;
     }
 
@@ -950,7 +950,7 @@ public:
         from.clear(false);
     }
 
-    template<typename ARR> bool invsortcopy(ARR &arr)
+    template<typename ARR> bool sortcopy(ARR &arr)
     {
         bool other_order = false;
         for(const T &t : *this)
@@ -1027,14 +1027,14 @@ public:
         return sorted;
     }
 
-    bool sort()
+    bool asort() /// ascending sort
     {
         return sort([](const T &o1, const T &o2)->bool
         {
             return BEHAVIOUR::compare(o1, o2) < 0;
         });
     }
-    bool invsort()
+    bool dsort() /// descending sort
     {
         return sort([](const T &o1, const T &o2)->bool
         {

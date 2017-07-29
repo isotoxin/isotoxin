@@ -60,6 +60,7 @@ namespace
         sound_init_task_s( mediasystem_c *msys, const ts::str_c &talkdevice, const ts::str_c &signaldevice, play_event_s && ev_ ):msys( msys ), talkdevice( talkdevice ), signaldevice( signaldevice )
         {
             ev = std::move( ev_ );
+            talks.params.bufferLength = VOICE_AUDIO_BUFFER_LENGTH;
         }
 
         /*virtual*/ int iterate(ts::task_executor_c *e) override
@@ -284,8 +285,30 @@ void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
         loops[snd].reset( TSNEW( loop_play, player, buf, volume * vol ) );
 }
 
-void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, ts::aint dsz, int clampms)
+void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d_in, ts::aint dsz, int clampms)
 {
+    const void *d = d_in;
+
+    int avr = asum / ARRAY_SIZE(vals);
+    if (player->nodata || avr < 62)
+    {
+        DMSG("average " << avr);
+        DMSG("msms " << vals[0] << vals[1] << vals[2] << vals[3] << vals[4] << vals[5] << vals[6] << vals[7] << vals[8] << vals[9] << vals[10] << vals[11] << vals[12] << vals[13] << vals[14] << vals[15]);
+
+        void *dd = _alloca(dsz * 2);
+        d = dd;
+        int ss = fmt.sampleSize();
+        
+        for (int i = 0; i < dsz; i += ss)
+        {
+            memcpy(dd, (char*)d_in + i, ss);
+            memcpy((char *)dd + ss, (char*)d_in + i, ss);
+            dd = (char *)dd + (ss + ss);
+        }
+        dsz *= 2;
+        player->nodata = false;
+    }
+
     auto w = data.lock_write();
 
     if (fmt != format)
@@ -293,6 +316,17 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         if (isPlaying()) stop();
         w().clear();
         format = fmt;
+    }
+
+    if (d == d_in)
+    {
+        if (avr > threshold && valptr == 0)
+        {
+            DMSG("average dec" << avr);
+
+            int ss = fmt.sampleSize();
+            dsz = ts::lround((dsz / ss) * 0.8f) * ss;
+        }
     }
 
     bool filter = false;
@@ -341,6 +375,25 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         w().add_data(d, dsz);
 
     }
+
+    asum -= vals[valptr];
+    int ms = format.bytesToMSec((int)w().available());
+    asum += ms;
+    vals[valptr] = ms;
+    valptr = (valptr + 1) & (ARRAY_SIZE(vals) - 1);
+
+    if (valptr == 0)
+    {
+        if (threshold > 80)
+            --threshold;
+
+        DMSG("average info" << avr << threshold);
+    }
+
+    //if (format.bytesToMSec(w().available()) > 200)
+    //{
+    //    player->SetPitch(player->GetPitch() * 1.05f); // make it play little faster
+    //}
 
     ts::aint clampbytes = format.avgBytesPerMSecs( clampms );
     ts::aint a = w().available();
@@ -431,14 +484,17 @@ ts::aint mediasystem_c::voice_player::protected_data_s::read_data(const s3::Form
 {
     auto w = data.lock_write();
 
+    ts::Time ndt = ts::Time::current();
+
     if (!mute && w().available() == 0)
     {
-        w().nodata += (int)size;
-        if (w().nodata > format.avgBytesPerSec())
-            return -1;
-    } else
-        w().nodata = 0;
+        int avg = (asum / ARRAY_SIZE(vals));
+        if (avg > threshold)
+            threshold = avg;
 
+        return (ndt > nodatatime) ? -1 : 0;
+    }
+    nodatatime = ndt + 1000;
     return w().read_data(format, dest, size);
 }
 

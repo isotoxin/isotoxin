@@ -67,13 +67,13 @@ enum SoundGroup {S3_SOUND_GROUPS SG_COUNT};
 
 class Player;
 
-class Source //базовый класс для источников звука (лучше использовать сразу MSource/PSource)
+class Source // base for any sound (better use MSource/PSource)
 {
 	friend class Slot;
     friend class Player;
-    friend void slot_coredata_update(Slot *slot, Player *player, bool full);
+    friend void slot_coredata_update(Slot *slot, Player *player);
 
-	Source &operator=(const Source &) = delete;//запрещаем присваивание
+	Source &operator=(const Source &) = delete;
 	static s3int readFunc(char *dest, s3int size, void *userPtr) {return ((Source*)userPtr)->read(dest, size);}
 	static Source *firstSourceToDelete;
 	Source *nextSourceToDelete;
@@ -86,8 +86,8 @@ public:
 
     static void autoDeleteSources();
 
-	float pitch;//коэффициент частоты звука
-	float volume;//начальный уровень громкости (можно задать перед началом прогрывания, менять во время проигрывания не рекомендуется)
+	float pitch; // frequency k
+	float volume; // initial volume (set before play), do not change while playing
 	void autoDelete();//для созданного по new источника звука можно вызвать эту функцию (только после окончания работы с ним), чтобы источник удалился автоматически по окончании проигрывания
 
     Player *get_player() {return player;};
@@ -96,7 +96,7 @@ public:
 	virtual ~Source() {}//*if (slotIndex != -1) */stop();}//останавливать звук нужно всегда в производных классах, т.к. иначе возможен pure virtual call of read(), т.к. заход в крит. секцию внутри stop() будет уже после разрушения производного класса
     virtual void die() { delete this; }
 
-	virtual s3int read(char *dest, s3int size) = 0;//нужно прочитать данные в dest буфер и вернуть размер прочитанных данных (0 в случае конца файла, < 0 - в случае ошибки)
+	virtual s3int read(char *dest, s3int size) = 0; // read size bytes to dest and return actually read bytes (0 - no more data, -1 - stop playing)
 	virtual void rewind(bool start) {if (!start) ErrorHandler(EL_ERROR, "Can't loop sound since rewind() not implemented");}
 
 //	void canPlayNow();
@@ -110,7 +110,7 @@ public:
 	float minDist, maxDist;
 };
 
-class MSource : public Source//базовый класс для пользовательских источников звука, данные которых доступны всегда, т.е. находящихся целиком в памяти
+class MSource : public Source //base for in-memory sounds
 {
 	const char *data;
 	int size, pos;
@@ -212,9 +212,13 @@ struct DEVICE
 struct InitParams
 {
     DEVICE device = DEFAULT_DEVICE;
-    int channels = 2, sampleRate = 44100, bitsPerSample = 16, prefetchBytes = 512 * 1024;
+    int channels = 2, sampleRate = 48000, bitsPerSample = 16, prefetchBytes = 512 * 1024;
     float bufferLength = .25f; //length of sound buffers (in seconds)
 	bool useHW = false, ctrlFrequency = false, rightHandedCS = false;
+
+    // useHW - hardware mixing
+    // tunePitch - decrease play frequency to avoid audio stream data holes
+
 };
 
 struct SlotInitParams {int max; bool is3d;};
@@ -232,6 +236,7 @@ public:
 #endif
     char data[ player_data_size ]; // its public, but you should not modify it - internal data
     InitParams params;
+    bool nodata = false; // sound engine will set this to true if no data
 
     Player( const Player& ) = delete;
     Player( Player && ) = delete;
@@ -244,6 +249,10 @@ public:
     bool Initialize(const SlotInitParams slotsIP[] = defaultSlotsInitParams, const int sgCount = SG_COUNT);
     void Shutdown(bool reinit = false /*internal use only!!! NEVER! NEVER call this method with true argument!*/ );
     void SetMasterVolume(float f);
+    void SetPitch(float k);
+    float GetPitch() const;
+
+
     inline void SetSoundGroupVolume(SoundGroup sg, float volume)
     {
         SoundGroupSlots *sgs = getSoundGroups();

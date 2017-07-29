@@ -531,10 +531,10 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
 
     ts::wstr_c title(TTT("Export protocol data: $",393) / from_utf8(ap->get_infostr(IS_PROTO_DESCRIPTION)));
 
-    ts::extension_s e[1];
+    ts::filefilter_s e[1];
     e[0].desc = CONSTWSTR("(*.*)");
-    e[0].ext = CONSTWSTR("*.*");
-    ts::extensions_s exts(e, 1);
+    e[0].wildcard = CONSTWSTR("*.*");
+    ts::filefilters_s ff(e, 1);
 
     ts::wstr_c deffn(ts::from_utf8(ap->get_infostr(IS_EXPORT_FILE)));
     ts::parse_env( deffn );
@@ -545,10 +545,9 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
         ts::fix_path( fromdir, FNO_APPENDSLASH );
     }
 
-    ts::wstr_c fn = HOLD(main)().getroot()->save_filename_dialog(fromdir, deffn, exts, title);
+    ts::wstr_c fn = HOLD(main)().getroot()->save_filename_dialog(fromdir, deffn, ff, title);
     if (!fn.is_empty())
         d.buf.save_to_file(fn);
-
 
     return 0;
 }
@@ -793,7 +792,8 @@ ts::bitmap_c application_c::build_icon( int sz, ts::TSCOLOR colorblack )
     gen.set( CONSTASTR( "size" ) ).set_value( ts::amake( ts::ivec2( sz ) ) );
     colors_map_s cmap;
     ts::bitmap_c iconz;
-    if ( generated_button_data_s *g = generated_button_data_s::generate( &gen, cmap, false ) )
+    ts::asptr f[4] = { CONSTASTR("online"), CONSTASTR("away"), CONSTASTR("dnd"), CONSTASTR("offline") };
+    if ( generated_button_data_s *g = generated_button_data_s::generate( &gen, cmap, false, f ) )
     {
         iconz = g->src;
         TSDEL( g );
@@ -1518,6 +1518,9 @@ namespace
         {
             if (!canceled && g_app)
                 g_app->F_CAPTURE_AUDIO_TASK(false);
+
+            if (s3::is_capturing() && g_app->m_currentsc)
+                s3::get_capture_format(g_app->m_currentsc->getfmt());
 
             ts::task_c::done( canceled );
         }
@@ -2357,7 +2360,8 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
 bool application_c::b_restart(RID, GUIPARAM)
 {
     ts::wstr_c n = ts::get_exe_full_name();
-    ts::wstr_c p( CONSTWSTR( "wait " ) ); p .append_as_uint( ts::master().process_id() );
+    ts::wstrings_c p(CONSTWSTR("wait"));
+    p.add().append_as_uint(ts::master().process_id());
 
     if (ts::master().start_app(n, p, nullptr, false))
     {

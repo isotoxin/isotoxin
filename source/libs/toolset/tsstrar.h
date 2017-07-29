@@ -22,6 +22,33 @@ public:
     {
     }
 
+    explicit strings_t(const strtype &s)
+    {
+        add(s);
+    }
+    explicit strings_t(const sptr<TCHARACTER> &s)
+    {
+        add(s);
+    }
+    strings_t(const sptr<TCHARACTER> &s1, const sptr<TCHARACTER> &s2)
+    {
+        add(s1);
+        add(s2);
+    }
+    strings_t(const sptr<TCHARACTER> &s1, const strtype &s2)
+    {
+        add(s1);
+        add(s2);
+    }
+
+    strings_t(const sptr<TCHARACTER> &s1, const strtype &s2, const strtype &s3)
+    {
+        add(s1);
+        add(s2);
+        add(s3);
+    }
+
+
     strings_t(const void *buf, aint bufsize, bool allow_empty_lines)
     {
         const TCHARACTER * s = (TCHARACTER *)buf;
@@ -366,6 +393,11 @@ public:
         for (const strtype &s : a)
             add(s);
     };
+
+    strtype &add()
+    {
+        return super::add();
+    }
 
     template<typename TCHARACTER2, typename CORE2> aint add(const str_t<TCHARACTER2, CORE2> &s)
     {
@@ -771,11 +803,11 @@ template <typename S> struct strmap_pair_s
     typedef typename S::TCHAR TCHARACTER;
     int operator()( const sptr<TCHARACTER> &_k ) const
     {
-        return S::compare( _k, k );
+        return S::compare(k, _k);
     }
     int operator()( const S &_k ) const
     {
-        return S::compare(_k, k);
+        return S::compare(k, _k);
     }
     bool operator==( const strmap_pair_s&m ) const
     {

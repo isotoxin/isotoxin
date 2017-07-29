@@ -18,3 +18,5 @@ nodes_list_file=Список узлов
 hint_nodes_list_file=Создайте файл в папке {executable}/protocols.<br>Формат списка: каждая строка файла - один узел:<br>IPv4/IPv6/Порт/ПубличныйКлюч
 pinned_list_file=Известные ToxDNS сервера
 hint_pinned_list_file=Создайте файл в папке {executable}/protocols.<br>Формат списка: каждая строка файла - один сервер:<br>АдресСервера=ПубличныйКлюч
+hint_video_limit=В байтах в секунду. 0 - нет ограничения. Только для Isotoxin-Isotoxin соединений.
+video_limit=Ограничение скорости передачи видео

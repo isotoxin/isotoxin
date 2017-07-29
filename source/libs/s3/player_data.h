@@ -9,8 +9,10 @@ struct player_data_s
     char coredata[PLAYER_COREDATA_SIZE] = {};
 
     int sgCount = 0;
+    float pitch = 1.0f;
     SoundGroupSlots *soundGroups = nullptr;
     Decoder *gdecoder = nullptr;
+    bool pitchchanged = false;
 
     player_data_s( const player_data_s & ) = delete;
     player_data_s( player_data_s && ) = delete;

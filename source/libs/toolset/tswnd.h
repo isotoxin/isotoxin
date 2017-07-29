@@ -34,7 +34,7 @@ enum disposition_e
     D_MIN,
     D_MICRO,
 
-    D_RESTORE, // D_MAX of D_NORMAL, depend on last disposition
+    D_RESTORE, // D_MAX or D_NORMAL, depend on last disposition
 };
 
 enum specborder_e
@@ -147,10 +147,10 @@ public:
     virtual bmpcore_exbody_s get_backbuffer() = 0;
     virtual void flush_draw( const irect &r ) = 0;
 
-    virtual wstr_c get_load_filename_dialog( const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title ) { return wstr_c();  }
-    virtual bool   get_load_filename_dialog( wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title ) { return false; }
+    virtual wstr_c get_load_filename_dialog( const wsptr &iroot, const wsptr &name, filefilters_s &ff, const wchar *title ) { return wstr_c();  }
+    virtual bool   get_load_filename_dialog( wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::filefilters_s & ff, const wchar *title ) { return false; }
     virtual wstr_c get_save_directory_dialog( const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false ) { return wstr_c(); }
-    virtual wstr_c get_save_filename_dialog( const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title ) { return wstr_c(); }
+    virtual wstr_c get_save_filename_dialog( const wsptr &iroot, const wsptr &name, filefilters_s &ff, const wchar *title ) { return wstr_c(); }
 
     wnd_callbacks_s *get_callbacks() { return cbs; }
 

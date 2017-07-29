@@ -18,3 +18,5 @@ nodes_list_file=Nodes list file
 hint_nodes_list_file=Put list file into {executable}/protocols folder.<br>List format: every line is one node:<br>IPv4/IPv6/Port/PublicKey
 pinned_list_file=Pinned ToxDNS servers
 hint_pinned_list_file=Put list file into {executable}/protocols folder.<br>List format: every line is one server:<br>ServerAddress=PublicKey
+hint_video_limit=In bytes per second. 0 - no limit. Only for Isotoxin-Isotoxin connections.
+video_limit=Video transfer speed limit

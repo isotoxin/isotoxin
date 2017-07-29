@@ -138,7 +138,7 @@ tmpalloc_c tmpb;
 	class tsfileop_def_c : public tsfileop_c
 	{
 	public:
-		tsfileop_def_c() 
+		tsfileop_def_c()
 		{
 		}
 
@@ -230,7 +230,3 @@ tmpalloc_c tmpb;
 
 
 } // namespace ts
-
-#ifdef _NIX
-#include "win32emu/win32emu.inl"
-#endif

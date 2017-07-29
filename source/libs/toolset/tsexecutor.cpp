@@ -43,7 +43,7 @@ task_executor_c::~task_executor_c()
         if (w().workers || w().worker_started)
         {
             w().worker_should_stop = true;
-            SetEvent(evt);
+            SetEvent((HANDLE)evt);
             w.unlock();
             Sleep(1);
         } else
@@ -80,7 +80,7 @@ task_executor_c::~task_executor_c()
         t->done( true );
     }
 
-    CloseHandle(evt);
+    CloseHandle((HANDLE)evt);
 }
 
 void task_executor_c::work()
@@ -94,7 +94,7 @@ void task_executor_c::work()
     {
         MEMT( MEMT_EXECUTOR );
 
-        bool timeout = WAIT_TIMEOUT == WaitForSingleObject(evt, 5000);
+        bool timeout = WAIT_TIMEOUT == WaitForSingleObject((HANDLE)evt, 5000);
 
         task_c *t;
         while (executing.try_pop(t))
@@ -150,7 +150,7 @@ void task_executor_c::work()
 
         if (timeout)
             break;
-        
+
     }
 
     --sync.lock_write()().workers;
@@ -183,7 +183,7 @@ void task_executor_c::add(task_c *task)
 
     task->changeflag(0,f_executing);
     executing.push(task);
-    SetEvent(evt);
+    SetEvent((HANDLE)evt);
 
     check_worker();
     tick();
@@ -205,7 +205,7 @@ void task_executor_c::tick()
             {
                 t->changeflag( f_exec_after_result, f_executing);
                 executing.push(t); // next iteration
-                SetEvent(evt);
+                SetEvent((HANDLE)evt);
             }
         }
 
@@ -232,7 +232,7 @@ void task_executor_c::tick()
             {
                 t->changeflag(0,f_executing);
                 executing.push( t ); // next iteration
-                SetEvent( evt );
+                SetEvent( (HANDLE)evt );
             } else
             {
                 sltasks.add( t );

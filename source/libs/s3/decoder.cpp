@@ -223,7 +223,7 @@ s3int Decoder::read(void *buffer, s3int size)
 
 	case TYPE_WAV:
 		if (size > fbSize) size = fbSize;
-		fbSize -= (int)size;//в fbSize хранится кол-во оставшихся байт
+		fbSize -= (int)size; //fbSize -  bytes not yet read
 	case TYPE_RAW:
 		return (*readFunc)((char*)buffer, (int)size, userPtr);
 

@@ -218,8 +218,8 @@ void config_c::load( const ts::wstr_c &path_override )
             auto fix = [](const ts::wstr_c &p)
             {
                 ts::wstr_c s(p);
-                s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR("{ConfigPath}"));
-                s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR("{ContactId}"));
+                s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR(PATH_MACRO_CONFIG));
+                s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR(PATH_MACRO_CONTACTID));
                 return s;
             };
 

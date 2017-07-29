@@ -94,7 +94,7 @@ void rectengine_c::prepare_children_z_sorted()
         children_z_sorted.clear();
         for(rectengine_c *e : children)
             if (e) children_z_sorted.add(e);
-        children_z_sorted.invsort();
+        children_z_sorted.dsort();
     }
 }
 
@@ -1923,21 +1923,21 @@ bool rectengine_root_c::update_foreground()
     return oldfocus != gui->get_focus();
 }
 
-ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
+ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::filefilters_s & ff, const ts::wchar *title)
 {
-    return syswnd.wnd->get_load_filename_dialog(iroot, name, exts, title);
+    return syswnd.wnd->get_load_filename_dialog(iroot, name, ff, title);
 }
-bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, ts::extensions_s & exts, const ts::wchar *title)
+bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, ts::filefilters_s & ff, const ts::wchar *title)
 {
-    return syswnd.wnd->get_load_filename_dialog(files, iroot, name, exts, title);
+    return syswnd.wnd->get_load_filename_dialog(files, iroot, name, ff, title);
 }
 ts::wstr_c  rectengine_root_c::save_directory_dialog(const ts::wsptr &root, const ts::wsptr &title, const ts::wsptr &selectpath, bool nonewfolder)
 {
     return syswnd.wnd->get_save_directory_dialog(root, title, selectpath, nonewfolder);
 }
-ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
+ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::filefilters_s & ff, const ts::wchar *title)
 {
-    return syswnd.wnd->get_save_filename_dialog(iroot, name, exts, title);
+    return syswnd.wnd->get_save_filename_dialog(iroot, name, ff, title);
 }
 
 

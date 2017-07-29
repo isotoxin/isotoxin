@@ -128,6 +128,8 @@ public:
     virtual void refresh() {}
     virtual bool is_type(folder_share_s::fstype_e t) const = 0;
 
+    void explore();
+
     void update_data(); // update notice and db
     void send_ctl(folder_share_control_e ctl);
     static folder_share_c *build(folder_share_s::fstype_e t, contact_key_s k, const ts::str_c &name, uint64 utag);

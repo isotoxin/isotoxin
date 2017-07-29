@@ -1155,7 +1155,7 @@ namespace
 
         /*virtual*/ int unique_tag() override { return UD_ADVANCED_NETWORK_SETTINGS; }
 
-        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(minw, 400); }
+        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(minw, 420); }
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
         {
             return super::sq_evt(qp, rid, data);

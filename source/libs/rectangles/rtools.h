@@ -182,6 +182,16 @@ ts::str_c text_remove_cstm(const ts::str_c &text_utf8);
 
 #define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ts::wstr_c(ttt); } )
 
+INLINE void append_color(ts::str_c &s, ts::TSCOLOR c)
+{
+    s.append_char('#');
+    s.append_as_hex(ts::RED(c));
+    s.append_as_hex(ts::GREEN(c));
+    s.append_as_hex(ts::BLUE(c));
+    if (ts::ALPHA(c) != 0xff)
+        s.append_as_hex(ts::ALPHA(c));
+}
+
 INLINE void make_color(ts::str_c &s, ts::TSCOLOR c)
 {
     s.set_as_char('#');

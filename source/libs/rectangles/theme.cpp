@@ -525,7 +525,18 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
                     it->set_value(s);
                 }
             }
-            if ( it.name().find_pos(CONSTASTR("color")) >= 0 && s.begins(CONSTASTR("##")) )
+
+            if (it.name().ends(CONSTASTR("colors")) && s.begins(CONSTASTR("##")))
+            {
+                ts::str_c ns;
+                for (ts::token<char> cc(s, ','); cc; ++cc)
+                {
+                    if (!ns.is_empty())
+                        ns.append_char(',');
+                    append_color(ns, colsmap.parse(*cc, ts::ARGB(0, 0, 0)));
+                }
+                it->set_value(ns);
+            } else if ( it.name().find_pos(CONSTASTR("color")) >= 0 && s.begins(CONSTASTR("##")) )
             {
                 make_color(s, colsmap.parse(s, ts::ARGB(0, 0, 0)));
                 it->set_value(s);

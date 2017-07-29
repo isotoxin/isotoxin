@@ -282,7 +282,11 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     if (NOTICE_KILL_CALL_INPROGRESS == n.pars->n)
     {
         if (NOTICE_CALL_INPROGRESS == notice || NOTICE_CALL == notice || NOTICE_INCOMING_CALL == notice)
-            TSDEL(this);
+        {
+            notice_kill_call_s *nk = ts::ptr_cast<notice_kill_call_s *>(n.pars);
+            if (nk->apid == 0 || sender.get() == nullptr || (unsigned)nk->apid == sender.get()->getkey().protoid)
+                TSDEL(this);
+        }
         return 0;
     }
 
@@ -1298,8 +1302,15 @@ void gui_notice_foldershare_c::update(folder_share_c *share)
         newtext.append(CONSTWSTR(": <i>")).append(from_utf8(name));
 
         if (share)
-            newtext.append(CONSTWSTR("</i><br><b>")).append(share->get_path()).append(CONSTWSTR("</b><br>"));
-        else
+        {
+            if (ts::is_dir_exists(share->get_path()))
+                newtext.append(CONSTWSTR("</i><br><b>")).append(share->get_path()).append(CONSTWSTR("</b><br>"));
+            else
+            {
+                newtext.append(CONSTWSTR("</i><br><b><s>")).append(share->get_path()).append(CONSTWSTR("</s></b><br>"));
+            }
+
+        } else
             newtext.append(CONSTWSTR("</i><br>"));
     }
 
@@ -1368,6 +1379,7 @@ void gui_notice_foldershare_c::update(folder_share_c *share)
 
                 ba(this)
                     .add(addrefresh, BUTTON_FACE(fsh_refresh), DELEGATE(this, b_refresh))
+                    .add(BUTTON_FACE(fsh_explore), DELEGATE(this, b_explore))
                     .add(BUTTON_FACE(fsh_dismiss), DELEGATE(this, b_dismiss));
 
             }
@@ -1552,6 +1564,13 @@ bool gui_notice_foldershare_c::b_reject(RID, GUIPARAM)
 bool gui_notice_foldershare_c::b_dismiss(RID, GUIPARAM)
 {
     return b_reject(RID(), nullptr);
+}
+
+bool gui_notice_foldershare_c::b_explore(RID, GUIPARAM par)
+{
+    if (folder_share_c *sh = get())
+        sh->explore();
+    return true;
 }
 
 bool gui_notice_foldershare_c::b_tryagain(RID, GUIPARAM par)
@@ -2725,13 +2744,13 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
             ts::parse_env( iroot );
             ts::fix_path( iroot, FNO_APPENDSLASH );
 
-            ts::extension_s ext;
-            ext.desc = gui->app_loclabel( LL_ANY_FILES );
-            ext.desc.append( CONSTWSTR( " (*.*)" ) );
-            ext.ext = CONSTWSTR( "*.*" );
-            ts::extensions_s exts( &ext, 1, 0 );
+            ts::filefilter_s f;
+            f.desc = gui->app_loclabel(LL_ANY_FILES);
+            f.desc.append(CONSTWSTR(" (*.*)"));
+            f.wildcard = CONSTWSTR("*.*");
+            ts::filefilters_s ff( &f, 1, 0 );
 
-            ts::wstr_c fn = getroot()->load_filename_dialog( iroot, ts::wsptr(), exts, ts::wstr_c(loc_text( loc_import_from_file )) );
+            ts::wstr_c fn = getroot()->load_filename_dialog( iroot, ts::wsptr(), ff, ts::wstr_c(loc_text( loc_import_from_file )) );
 
             if ( !fn.is_empty() && ts::is_file_exists(fn) )
             {
@@ -4779,9 +4798,9 @@ void gui_message_item_c::setup_text( const post_s &post )
             ts::str_c aname = author->get_name();
             text_adapt_user_input(aname);
             if (MTA_ACCEPTED == mt)
-                newtext.append(TTT("Your request was accepted by [b]$[/b]",91) / from_utf8(aname));
+                newtext.append(LOC_ACCEPTED_MESSAGE(aname));
             if (MTA_ACCEPT_OK == mt)
-                newtext.append(TTT("You accepted contact [b]$[/b].",90) / from_utf8(aname));
+                newtext.append(LOC_ACCEPT_OK_MESSAGE(aname));
             textrect.set_text_only(newtext,false);
         }
         break;
@@ -7878,13 +7897,13 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
     ts::wstr_c title(TTT("Send files", 180));
 
-    ts::extension_s ext;
-    ext.desc = loc_text(loc_anyfiles);
-    ext.desc.append(CONSTWSTR(" (*.*)"));
-    ext.ext = CONSTWSTR("*.*");
-    ts::extensions_s exts(&ext, 1, 0);
+    ts::filefilter_s f;
+    f.desc = loc_text(loc_anyfiles);
+    f.desc.append(CONSTWSTR(" (*.*)"));
+    f.wildcard = CONSTWSTR("*.*");
+    ts::filefilters_s ff(&f, 1, 0);
 
-    if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), exts, title))
+    if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), ff, title))
     {
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));

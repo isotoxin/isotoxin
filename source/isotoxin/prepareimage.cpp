@@ -365,7 +365,7 @@ bool dialog_prepareimage_c::open_image(RID, GUIPARAM)
 
     ts::wstr_c title( loc_text(loc_image) );
 
-    ts::extension_s extsarr[2];
+    ts::filefilter_s farr[2];
 
     ts::wstr_c sprtfmts, sprtfmts2(CONSTWSTR("*."));
     ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':', ts::to_wstr(fmt)); });
@@ -373,17 +373,17 @@ bool dialog_prepareimage_c::open_image(RID, GUIPARAM)
     sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
     sprtfmts2.replace_all(CONSTWSTR(":"), CONSTWSTR(";*."));
 
-    extsarr[0].desc = loc_text(loc_images);
-    extsarr[0].desc.append(CONSTWSTR(" (")).append(sprtfmts).append_char(')');
-    extsarr[0].ext = sprtfmts2;
+    farr[0].desc = loc_text(loc_images);
+    farr[0].desc.append(CONSTWSTR(" (")).append(sprtfmts).append_char(')');
+    farr[0].wildcard = sprtfmts2;
 
-    extsarr[1].desc = loc_text(loc_anyfiles);
-    extsarr[1].desc.append(CONSTWSTR(" (*.*)"));
-    extsarr[1].ext = CONSTWSTR("*.*");
+    farr[1].desc = loc_text(loc_anyfiles);
+    farr[1].desc.append(CONSTWSTR(" (*.*)"));
+    farr[1].wildcard = CONSTWSTR("*.*");
 
-    ts::extensions_s exts(extsarr, 2, 0);
+    ts::filefilters_s ff(farr, 2, 0);
 
-    ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), exts, title);
+    ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), ff, title);
 
     if (!fn.is_empty())
     {

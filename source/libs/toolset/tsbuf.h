@@ -438,6 +438,14 @@ public:
         core.change(core.size(), bufmod_fill(0, core.size(), filler));
     }
 
+    void append_fill(uint8 filler, aint sz)
+    {
+        aint oldsize = core.size();
+        aint newsize = oldsize + sz;
+        core.change(newsize, bufmod_preserve(newsize));
+        memset(core() + oldsize, filler, sz);
+    }
+
     template< typename CORE2 > void append_buf(const buf_t<CORE2>&b)
     {
         append_buf( b.data(), b.size() );
@@ -1006,26 +1014,12 @@ public:
         int operator()(const T&t1, const T&t2) const
         {
             if (t1 == t2) return 0;
-            if (t1 < t2) return 1;
-            return -1;
+            if (t1 < t2) return -1;
+            return 1;
         }
     };
 
-    template <typename F> bool  insert_sorted_uniq(const T &t, F &comp)
-    {
-        aint index;
-        if (find_index_sorted(index, t, comp))
-        {
-            return false;
-        }
-        else
-        {
-            insert(index, t);
-        }
-        return true;
-    }
-
-    template <typename F> aint  set_sorted_uniq(const T &t, F &comp)
+    template <typename F> aint  insert_sorted_uniq(const T &t, F &comp)
     {
         aint index;
         if (find_index_sorted(index, t, comp))
@@ -1039,7 +1033,7 @@ public:
     }
 
 
-    template<typename TT, typename F> bool find_index_sorted(aint &index, const TT &t, F &comp) const
+    template<typename TT, typename F> bool find_index_sorted(aint &index, const TT &t, F &compf) const
     {
         if (count() == 0)
         {
@@ -1048,8 +1042,8 @@ public:
         }
         if (count() == 1)
         {
-            aint cmp = comp(get(0), t);
-            index = cmp <= 0 ? 0 : 1;
+            aint cmp = compf(get(0), t);
+            index = cmp < 0 ? 1 : 0;
             return cmp == 0;
         }
 
@@ -1062,13 +1056,13 @@ public:
         {
             test = (rite + left) >> 1;
 
-            int cmp = comp(get(test), t);
+            int cmp = compf(get(test), t);
             if (cmp == 0)
             {
                 index = test;
                 return true;
             }
-            if (cmp < 0)
+            if (cmp > 0)
             {
                 // do left
                 rite = test;
@@ -1086,8 +1080,8 @@ public:
             return false;
         }
 
-        aint cmp = comp(get(left), t);
-        index = cmp <= 0 ? left : left + 1;
+        aint cmp = compf(get(left), t);
+        index = cmp < 0 ? left+1 : left;
         return cmp == 0;
     }
 

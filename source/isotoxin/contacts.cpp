@@ -174,7 +174,6 @@ void contact_c::setmeta(contact_root_c *metac)
 void contact_c::setup(const contacts_s * c, time_t nowtime)
 {
     set_name(c->name);
-    set_customname(c->customname);
     set_statusmsg(c->statusmsg);
     set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
     sombits = (c->options & 0xffff) | (sombits & (~0xffffull));
@@ -192,7 +191,6 @@ bool contact_c::save(contacts_s * c) const
     c->metaid = getmeta()->getkey().contactid;
     c->options = sombits & 0xffff;
     c->name = get_name(false);
-    c->customname = get_customname();
     c->statusmsg = get_statusmsg(false);
     c->protodata = protodata;
     // avatar data copied not here, see profile_c::set_avatar
@@ -260,12 +258,16 @@ const avatar_s *contact_c::get_avatar() const
 
 bool contact_c::b_accept_call_with_video(RID, GUIPARAM)
 {
+    gmsg<ISOGM_KILL_CALL_PANEL>().send();
+
     accept_call( AAAC_NOT, true );
     return true;
 }
 
 bool contact_c::b_accept_call(RID, GUIPARAM prm)
 {
+    gmsg<ISOGM_KILL_CALL_PANEL>().send();
+
     accept_call( (auto_accept_audio_call_e)as_int(prm), false );
     return true;
 }
@@ -462,8 +464,8 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
         ts::make_path(downf, 0);
 
         ts::wstr_c title(TTT("Save file",179));
-        ts::extensions_s exts;
-        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(g_app->file_save_as_path.is_empty() ? downf : g_app->file_save_as_path, ft->filename, exts, title);
+        ts::filefilters_s ff;
+        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(g_app->file_save_as_path.is_empty() ? downf : g_app->file_save_as_path, ft->filename, ff, title);
 
         if (!fn.is_empty())
         {
@@ -552,6 +554,32 @@ bool contact_c::set_protodata(const ts::blob_c &d)
     return false;
 }
 
+ts::str_c contact_c::get_description() const
+{
+    ts::str_c t = get_name();
+    if (t.is_empty())
+        t.set(get_pubid_desc());
+    else
+        text_adapt_user_input(t);
+    return t;
+}
+
+ts::str_c contact_c::makename() const
+{
+    if (const contact_root_c *r = getmeta())
+    {
+        if (!r->getkey().is_conference() && r->subcount() == 1)
+        {
+            ts::str_c n = r->get_customname();
+            if (n.is_empty()) n = r->get_name();
+            text_adapt_user_input(n);
+            return n;
+        }
+    }
+    return get_name();
+}
+
+
 void contact_c::detach()
 {
     if (getmeta())
@@ -592,6 +620,126 @@ contacts_c::~contacts_c()
 {
     for(contact_c *c : arr)
         c->prepare4die(nullptr);
+}
+
+void contacts_c::refresh_details()
+{
+    for (contact_c *c : arr)
+    {
+        if (c->is_rootcontact() && !c->getkey().is_conference() && !c->is_system_user && !c->getkey().is_self)
+        {
+            contact_root_c *ct = (contact_root_c *)c;
+            int scn = ct->subcount();
+            for (int i = 0; i < scn; ++i)
+            {
+                contact_c *sc = ct->subget(i);
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
+                    ap->refresh_details(sc->getkey());
+            }
+
+        }
+    }
+
+}
+
+ts::blob_c contacts_c::save_contacts()
+{
+    auto extractitems = [](ts::astrings_c &pubids, const ts::json_c &ids)
+    {
+        if (ids.is_string())
+        {
+            pubids.add(ids.as_string());
+        }
+        else if (ids.is_array())
+        {
+            ids.iterate([&](const ts::str_c&, const ts::json_c &id) {
+                pubids.add(id.as_string());
+            });
+        }
+    };
+
+
+    ts::blob_c b;
+    for (contact_c *c : arr)
+    {
+        if (c->is_rootcontact() && !c->getkey().is_conference() && !c->is_system_user && !c->getkey().is_self)
+        {
+            contact_root_c *ct = (contact_root_c *)c;
+            b.append_s(ts::str_c("id:").append_as_int(c->getkey().contactid).append_char('\n'));
+            b.append_s(ts::str_c("num-of-subcontacts:").append_as_int(ct->subcount()).append_char('\n'));
+            b.append_s(ts::str_c("custom-name:").append(ct->get_customname()).append_char('\n'));
+            int scn = ct->subcount();
+            for (int i = 0; i < scn; ++i)
+            {
+                contact_c *sc = ct->subget(i);
+                b.append_s(ts::str_c(" sub-contact-").append_as_int(i + 1).append_char('\n'));
+                b.append_s(ts::str_c(" id:").append_as_int(sc->getkey().contactid).append_char('\n'));
+                b.append_s(ts::str_c(" protocol-id:").append_as_int(sc->getkey().protoid).append_char('\n'));
+
+                active_protocol_c *ap = prf().ap(sc->getkey().protoid);
+                if (ap == nullptr)
+                {
+                    b.append_s(ts::str_c(" connection-protocol: <unknown>\n"));
+                    b.append_s(ts::str_c(" connection-name: <unknown>\n"));
+
+                }
+                else
+                {
+                    b.append_s(ts::str_c(" connection-protocol:").append(ap->get_tag()).append_char('\n'));
+                    b.append_s(ts::str_c(" connection-name:").append(ap->get_name()).append_char('\n'));
+                }
+                b.append_s(ts::str_c(" name:").append(sc->get_name()).append_char('\n'));
+                b.append_s(ts::str_c(" contact-key:").append(sc->get_pubid()).append_char('\n'));
+                if (!sc->get_details().is_empty())
+                {
+                    ts::json_c dets;
+                    dets.parse(sc->get_details());
+
+                    dets.iterate([&](const ts::str_c &dname, const ts::json_c &v) {
+
+                        if (dname.equals(CONSTASTR(CDET_PUBLIC_ID)))
+                        {
+                            ts::astrings_c lst;
+                            extractitems(lst, v);
+                            for (const ts::str_c &idx : lst)
+                                b.append_s(ts::str_c(" pub-id:").append(idx).append_char('\n'));
+                        }
+                        else if (dname.equals(CONSTASTR(CDET_PUBLIC_UNIQUE_ID)))
+                        {
+                            ts::astrings_c lst;
+                            extractitems(lst, v);
+                            for (const ts::str_c &idx : lst)
+                                b.append_s(ts::str_c(" unique-id:").append(idx).append_char('\n'));
+                        }
+                        else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID_BAD)))
+                        {
+                            ts::astrings_c lst;
+                            extractitems(lst, v);
+                            for (const ts::str_c &idx : lst)
+                                b.append_s(ts::str_c(" bad-pub-id:").append(idx).append_char('\n'));
+                        }
+                        else if (dname.equals(CONSTASTR(CDET_DNSNAME)))
+                        {
+                            ts::astrings_c lst;
+                            extractitems(lst, v);
+                            for (const ts::str_c &idx : lst)
+                                b.append_s(ts::str_c(" dns-name:").append(idx).append_char('\n'));
+                        }
+                        else if (dname.equals(CONSTASTR(CDET_EMAIL)))
+                        {
+                            ts::astrings_c lst;
+                            extractitems(lst, v);
+                            for (const ts::str_c &idx : lst)
+                                b.append_s(ts::str_c(" email:").append(idx).append_char('\n'));
+                        }
+                    });
+
+                }
+            }
+            b.append_s(ts::str_c("\n"));
+        }
+    }
+    return b;
 }
 
 ts::str_c contacts_c::find_pubid(int protoid) const
@@ -703,8 +851,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_PROTO_CRASHED>&crashed )
             {
                 if ( c->flag_is_av )
                 {
-                    c->get_historian()->stop_av();
-                    notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
+                    if (c->get_historian()->stop_av(crashed.id))
+                        notice_kill_call_s(crashed.id).send();
                 }
 
                 c->set_state( CS_OFFLINE );
@@ -1075,7 +1223,7 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
     contact_c * cc = find(ck);
     if (!cc) return;
 
-    cc->get_historian()->stop_av();
+    cc->get_historian()->stop_av(0);
 
     ts::safe_ptr<gui_contact_item_c> guiitem = cc->get_historian()->gui_item;
     bool selself = !guiitem.expired() && g_app->active_contact_item.get() == guiitem.get();
@@ -1632,7 +1780,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     {
         if ( c_confa->get_state() == CS_ONLINE && contact.state == CS_OFFLINE )
         {
-            c_confa->stop_av();
+            c_confa->stop_av(0);
             c->proto_key = contact_id_s();
 
         } else if ( c_confa->get_state() == CS_OFFLINE && contact.state == CS_ONLINE )
@@ -1743,8 +1891,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                         play_sound(snd_friend_offline, false);
                         if (c_sub->flag_is_av)
                         {
-                            c_sub->get_historian()->stop_av();
-                            notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
+                            c_sub->get_historian()->stop_av(c_sub->getkey().protoid);
+                            notice_kill_call_s(c_sub->getkey().protoid).send();
                         }
                     }
             }
@@ -2931,11 +3079,41 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
             }
         };
 
+        ts::astrings_c expcolors;
+
+        auto prepareexp = [&](int index) ->ts::str_c
+        {
+            if (expcolors.size() == 0)
+                expcolors.split(gui->theme().conf().get_string(CONSTASTR("exportcolors")).as_sptr(),',');
+            if (index < expcolors.size())
+                return expcolors.get(index);
+            return ts::str_c(CONSTASTR("#000000"));
+        };
+
+        static const ts::asptr colors[] = {
+            CONSTASTR("{COLOR.MINE.FORE}"),
+            CONSTASTR("{COLOR.MINE.BG}"),
+            CONSTASTR("{COLOR.OTHER.FORE}"),
+            CONSTASTR("{COLOR.OTHER.BG}"),
+            CONSTASTR("{COLOR.TIME.MINE.FORE}"),
+            CONSTASTR("{COLOR.TIME.OTHER.FORE}"),
+            CONSTASTR("{COLOR.TITLE.BG}"),
+            CONSTASTR("{COLOR.DATESEP.BG}"),
+            CONSTASTR("{COLOR.NAME.MINE.FORE}"),
+            CONSTASTR("{COLOR.NAME.OTHER.FORE}"),
+            CONSTASTR("{COLOR.TEXT}"),
+            CONSTASTR("{COLOR.BG}"),
+        };
+
         auto do_repls = [&](ts::str_c &s)
         {
             s.replace_all(CONSTASTR("{TIME}"), time);
             s.replace_all(CONSTASTR("{NAME}"), tname);
             s.replace_all(CONSTASTR("{TEXT}"), text);
+
+            for (int i = 0; i < ARRAY_SIZE(colors); ++i)
+                s.replace_all_lazy(colors[i], [&]() { return prepareexp(i); });
+          
         };
 
         auto store = [&](const ts::str_c &s)
@@ -3043,7 +3221,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
                     if (cs->getkey().is_self && post->receiver.protoid)
                         cs = contacts().find_subself(post->receiver.protoid);
 
-                    tname = cs->get_name();
+                    tname = cs->makename();
                     bbrepls(tname);
 
                 }
@@ -3052,6 +3230,14 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
             }
 
             text = post->message_utf8->cstr();
+
+            bool noname = false;
+            if (post->mt() == MTA_ACCEPTED)
+                text.set( ts::to_utf8(LOC_ACCEPTED_MESSAGE(tname)) ), noname = true;
+
+            if (post->mt() == MTA_ACCEPT_OK)
+                text.set(ts::to_utf8(LOC_ACCEPT_OK_MESSAGE(tname))), noname = true;
+
             text.replace_all(CONSTASTR("\n"), linebreak);
             if (!link.is_empty())
             {
@@ -3066,7 +3252,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
             }
             bbrepls(text);
 
-            if (prev_sender != sender)
+            if (prev_sender != sender && !noname)
                 store(is_mine ? namedmine : namedother);
             else
                 store(is_mine ? mine : other);
@@ -3237,8 +3423,11 @@ namespace
                 param.replace_all( CONSTWSTR( "<param>" ), fn );
             }
 
+            ts::wstrings_c params;
+            params.qsplit(param);
+
             ts::process_handle_s ph;
-            ts::master().start_app( cmd, param, &ph, false );
+            ts::master().start_app( cmd, params, &ph, false );
             if (ts::master().wait_process( ph, 10000 ))
             {
                 if (!fn.is_empty())
@@ -3310,17 +3499,41 @@ void contact_root_c::send_file(ts::wstr_c fn)
     }
 }
 
-void contact_root_c::stop_av()
+bool contact_root_c::stop_av(int apid)
 {
     if ( getkey().is_conference() )
     {
-        av( nullptr, false, false );
-        return;
+        if (getkey().protoid == (unsigned)apid)
+        {
+            av(nullptr, false, false);
+            return true;
+        }
+        return false;
     }
 
-    ringtone(nullptr, false);
-    av(nullptr, false, false);
-    calltone(nullptr, CALLTONE_HANGUP);
+    bool rv = false;
+    if (apid == 0)
+    {
+        ringtone(nullptr, false);
+        av(nullptr, false, false);
+        calltone(nullptr, CALLTONE_HANGUP);
+        rv = true;
+    }
+    else
+    {
+
+        for (contact_c *c : subcontacts)
+        {
+            if (c->getkey().protoid == (unsigned)apid)
+            {
+                ringtone(c, false);
+                av(c, false, false);
+                calltone(c, CALLTONE_HANGUP);
+                rv = true;
+            }
+        }
+    }
+    return rv;
 }
 
 bool contact_root_c::ringtone( contact_c *sub, bool activate, bool play_stop_snd )
@@ -3519,6 +3732,8 @@ void contact_root_c::add_message( const ts::str_c& utf8msg )
 void contact_root_c::setup(const contacts_s * c, time_t nowtime)
 {
     super::setup( c, nowtime );
+
+    set_customname(c->customname);
 
     set_comment(c->comment);
     greeting = c->greeting;

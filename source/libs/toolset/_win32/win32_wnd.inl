@@ -987,8 +987,14 @@ public:
                         break;
                     case SW_RESTORE:
                         maxmon = -1;
-                        MoveWindow( hwnd, sr.lt.x, sr.lt.y, sr.width(), sr.height(), !shp->layered );
+                        MoveWindow(hwnd, sr.lt.x, sr.lt.y, sr.width(), sr.height(), !shp->layered);
                         if ( odp == D_MICRO ) ShowWindow( hwnd, SW_SHOWNA );
+
+                        {
+                            master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+                            istuff.move_hwnd = hwnd;
+                            istuff.move_rect = sr;
+                        }
                         // no break here
                     case SW_MINIMIZE:
                         maxmon = -1;
@@ -1180,7 +1186,7 @@ public:
         }
     };
 
-    /*virtual*/ wstr_c get_load_filename_dialog( const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title ) override
+    /*virtual*/ wstr_c get_load_filename_dialog( const wsptr &iroot, const wsptr &name, filefilters_s &ff, const wchar *title ) override
     {
         modal_use_s muse;
 
@@ -1197,10 +1203,10 @@ public:
         o.hInstance = GetModuleHandle( nullptr );
 
         wstr_c filter;
-        if ( exts.exts.size() )
+        if ( ff.filters.size() )
         {
-            for ( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char( '/' ).append( e.ext ).append_char( '/' );
+            for ( const filefilter_s &e : ff.filters)
+                filter.append(e.desc).append_char('/').append(e.wildcard).append_char('/');
             filter.append_char( '/' );
             filter.replace_all( '/', 0 );
         }
@@ -1212,7 +1218,7 @@ public:
         o.lpstrTitle = title;
         o.lpstrFile = buffer.str();
         o.nMaxFile = 2048;
-        o.lpstrDefExt = exts.defext();
+        o.lpstrDefExt = ff.defwildcard();
 
         o.lpstrFilter = filter;
         o.lpstrInitialDir = root;
@@ -1230,7 +1236,7 @@ public:
         return buffer;
 
     }
-    /*virtual*/ bool get_load_filename_dialog( wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title ) override
+    /*virtual*/ bool get_load_filename_dialog( wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::filefilters_s & ff, const wchar *title ) override
     {
         modal_use_s muse;
 
@@ -1247,10 +1253,10 @@ public:
         o.hInstance = GetModuleHandle( nullptr );
 
         wstr_c filter;
-        if ( exts.exts.size() )
+        if ( ff.filters.size() )
         {
-            for ( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char( '/' ).append( e.ext ).append_char( '/' );
+            for ( const filefilter_s &e : ff.filters )
+                filter.append(e.desc).append_char('/').append(e.wildcard).append_char('/');
             filter.append_char( '/' );
             filter.replace_all( '/', 0 );
         }
@@ -1261,7 +1267,7 @@ public:
         o.lpstrTitle = title;
         o.lpstrFile = buffer.str();
         o.nMaxFile = 16384;
-        o.lpstrDefExt = exts.defext();
+        o.lpstrDefExt = ff.defwildcard();
 
         o.lpstrFilter = filter.cstr();
         o.lpstrInitialDir = root.cstr();
@@ -1348,13 +1354,13 @@ public:
         return buffer;
     }
 
-    /*virtual*/ wstr_c get_save_filename_dialog( const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title ) override
+    /*virtual*/ wstr_c get_save_filename_dialog( const wsptr &iroot, const wsptr &name, filefilters_s &ff, const wchar *title ) override
     {
         ts::wstr_c filter;
-        if ( exts.exts.size() )
+        if ( ff.filters.size() )
         {
-            for ( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char( '/' ).append( e.ext ).append_char( '/' );
+            for ( const filefilter_s &e : ff.filters )
+                filter.append(e.desc).append_char('/').append(e.wildcard).append_char('/');
             filter.append_char( '/' );
             filter.replace_all( '/', 0 );
         }
@@ -1377,7 +1383,7 @@ public:
         o.lpstrTitle = title;
         o.lpstrFile = buffer.str();
         o.nMaxFile = MAX_PATH_LENGTH;
-        o.lpstrDefExt = exts.defext();
+        o.lpstrDefExt = ff.defwildcard();
 
         o.lpstrFilter = filter.is_empty() ? nullptr : filter.cstr();
         o.lpstrInitialDir = root;
@@ -1389,7 +1395,7 @@ public:
             return wstr_c();
         }
 
-        exts.index = o.nFilterIndex - 1;
+        ff.index = o.nFilterIndex - 1;
         SetCurrentDirectoryW( cdp );
         buffer.set_length( CHARz_len( buffer.cstr() ) );
 

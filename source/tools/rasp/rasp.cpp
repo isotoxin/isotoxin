@@ -181,6 +181,9 @@ void Print(const char *format, ...)
 #ifdef _NIX
     vsnprintf(buf.str(), buf.get_capacity(), format, arglist);
 #endif
+
+    //static spinlock::long3264 sync = 0;
+    //SIMPLELOCK(sync);
     printf("%s", buf.cstr());
 }
 
@@ -453,4 +456,8 @@ extern "C"
 {
 #include "dlmalloc/dlmalloc.c"
 }
+#endif
+
+#ifdef _NIX
+#include "win32emu/win32emu.inl"
 #endif

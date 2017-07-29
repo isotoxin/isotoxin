@@ -166,7 +166,7 @@ struct generated_button_data_s
 {
     ts::bitmap_c src;
     int num_states = 0;
-    static generated_button_data_s *generate( const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face );
+    static generated_button_data_s *generate( const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face, const ts::asptr *filter = nullptr);
     generated_button_data_s() {}
     virtual ~generated_button_data_s() {}
 

@@ -573,7 +573,7 @@ bool check_autoupdate()
         if (u.updfail)
             return true; // continue run
 
-        ts::master().start_app(ts::wstr_c(CONSTWSTR("isotoxin")), ts::wstr_c(), nullptr, false);
+        ts::master().start_app(ts::wstr_c(CONSTWSTR("isotoxin")), ts::wstrings_c(), nullptr, false);
 
         return false;
     }

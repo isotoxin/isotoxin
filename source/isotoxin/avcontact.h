@@ -58,6 +58,11 @@ public:
     av_contact_s( contact_root_c *c, contact_c *sub, state_e st );
     ~av_contact_s();
 
+    bool with_apid(int apid) const
+    {
+        return sub.get() && sub.get()->getkey().protoid == (unsigned)apid;
+    }
+
     void call_tick();
 
     void on_frame_ready( const ts::bmpcore_exbody_s &ebm );
@@ -128,6 +133,8 @@ class av_contacts_c
 
     bool clean_indicators(RID, GUIPARAM);
 
+    void remove_by_apid(int apid);
+
 public:
 
     ~av_contacts_c();
@@ -157,7 +164,7 @@ public:
         SIMPLELOCK(sync);
         for ( av_contact_s *avc : m_contacts ) r( *avc );
     }
-    void stop_all_av();
+    void stop_all_av(int apid);
     void clear();
 
     bool tick();

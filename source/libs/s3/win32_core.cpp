@@ -106,8 +106,11 @@ namespace s3
     {
         LPDIRECTSOUNDBUFFER8 buffer;
         LPDIRECTSOUND3DBUFFER8 buffer3D;
+        int origfreq;
         int bufferSize;
-        unsigned long prevPlayPos;
+        unsigned long prevPos;
+        unsigned long filledBytes;
+        bool prevposEqPlaypos;
 
         static slot_data_s & cvt(Slot *slot)
         {
@@ -150,6 +153,11 @@ namespace s3
         buf->QueryInterface(MY_IID_IDirectSoundBuffer8, (LPVOID*)&sd.buffer);//на всякий случай получаем новый интерфейс буфера
         if (is3d) buf->QueryInterface(MY_IID_IDirectSound3DBuffer, (LPVOID*)&sd.buffer3D);
         buf->Release();
+
+        DWORD f = 0;
+        sd.buffer->GetFrequency(&f);
+        sd.origfreq = f;
+
         return true;
     }
 
@@ -216,8 +224,10 @@ namespace s3
     {
         slot_data_s &sd = slot_data_s::cvt(slot);
 
-        sd.buffer->GetCurrentPosition(&sd.prevPlayPos, nullptr);
-        slot->update(player, 0, true);
+        sd.buffer->GetCurrentPosition(&sd.prevPos, nullptr);
+        sd.filledBytes = 0;
+        sd.prevposEqPlaypos = true;
+        slot->update(player, 0);
         if (player->params.ctrlFrequency) sd.buffer->SetFrequency(DWORD(slot->decoder->format.sampleRate * slot->source->pitch));
         sd.buffer->Play(0, 0, DSBPLAY_LOOPING);
 
@@ -229,17 +239,132 @@ namespace s3
         sd.buffer->Stop();
     }
     
-    void slot_coredata_update(Slot *slot, Player *player, bool full)
+    struct pos_s
     {
+        DWORD playpos;
+        DWORD writepos;
+        DWORD prevpos;
+    };
+
+    static pos_s pp[32] = {};
+    static int ppn = 0;
+
+    void slot_coredata_update(Slot *slot, Player *player)
+    {
+
         player_data_s &pd = player_data_s::cvt(player);
         slot_data_s &sd = slot_data_s::cvt(slot);
 
         sd.buffer->SetVolume(LinearToDirectSoundVolume(slot->fade * slot->source->volume * pd.soundGroups[slot->source->soundGroup].volume));
 
         // fill sound buffer
-        DWORD playPos;
-        if (SUCCEEDED(sd.buffer->GetCurrentPosition(&playPos, nullptr)))
+        DWORD playPos, writePos;
+        bool initial = false;
+        if (SUCCEEDED(sd.buffer->GetCurrentPosition(&playPos, &writePos)))
         {
+            initial = playPos == sd.prevPos && sd.filledBytes == 0;
+
+            DWORD readSize = 0;
+            if (initial)
+            {
+                readSize = sd.bufferSize;
+
+                ppn = 0;
+                pp[0].playpos = playPos;
+                pp[0].writepos = writePos;
+                pp[0].prevpos = sd.prevPos;
+            }
+            else
+            {
+
+                if (ppn < 32)
+                {
+                    pp[ppn].playpos = playPos;
+                    pp[ppn].writepos = writePos;
+                    pp[ppn].prevpos = sd.prevPos;
+                    ++ppn;
+                }
+
+
+                if (sd.prevposEqPlaypos && sd.prevPos == playPos)
+                {
+                    return; // not yet played
+                }
+
+                if ((sd.prevPos >= playPos && sd.prevPos < writePos) ||
+                    (writePos < playPos && !(sd.prevPos >= writePos && sd.prevPos < playPos)))
+                {
+                    player->nodata = true;
+                    sd.prevPos = writePos; // oops. we can only write to write pos;
+                }
+
+                DWORD newfreespace = (playPos >= sd.prevPos) ? playPos - sd.prevPos : playPos + sd.bufferSize - sd.prevPos;
+
+                if (newfreespace >= sd.filledBytes)
+                {
+                    sd.filledBytes = 0;
+
+                    if (slot->silenceSize >= sd.bufferSize)
+                    {
+                        slot->stop();
+                        return;
+                    }
+
+                } else
+                    sd.filledBytes -= newfreespace;
+                readSize = sd.bufferSize - sd.filledBytes;
+            }
+
+            if (readSize == 0)
+                return;
+
+            char * buf = (char *)_alloca(readSize);
+            s3int r = slot->read(buf, readSize);
+            if (r <= 0)
+            {
+                if (!initial)
+                    return;
+            }
+
+            if (pd.pitchchanged)
+            {
+                DWORD newfreq = 0;
+                {
+                    pd.pitchchanged = false; // because new pitch will be applied right now
+                    newfreq = (DWORD)((float)sd.origfreq * pd.pitch);
+                }
+                if (newfreq)
+                    sd.buffer->SetFrequency(newfreq);
+            } 
+
+            LPVOID ptr1, ptr2;
+            DWORD size1, size2;
+            HRESULT hr = sd.buffer->Lock(sd.prevPos, initial ? readSize : (DWORD)r, &ptr1, &size1, &ptr2, &size2, 0);
+            if (hr == DSERR_BUFFERLOST)
+            {
+                sd.buffer->Restore();
+                hr = sd.buffer->Lock(sd.prevPos, initial ? readSize : (DWORD)r, &ptr1, &size1, &ptr2, &size2, 0);
+            }
+            memcpy(ptr1,buf,size1);
+            if (ptr2)
+                memcpy(ptr2, buf+size1, size2);
+
+            sd.buffer->Unlock(ptr1, size1, ptr2, size2);
+
+            sd.filledBytes += (DWORD)r;
+            sd.prevPos += (DWORD)r;
+            if ((int)sd.prevPos > sd.bufferSize)
+                sd.prevPos -= sd.bufferSize;
+            sd.prevposEqPlaypos = sd.prevPos == playPos;
+
+            if (slot->silenceSize >= sd.bufferSize)
+            {
+                slot->stop();
+                return;
+            }
+
+
+            /*
             DWORD readSize = (playPos >= sd.prevPlayPos && !full) ? playPos - sd.prevPlayPos : sd.bufferSize - sd.prevPlayPos + playPos;//если в условии оставить только playPos > prevPlayPos, то в случае если позиция не успела измениться (playPos == prevPlayPos), будет ошибочно прочитан весь буфер
 
             LPVOID ptr1, ptr2;
@@ -254,14 +379,27 @@ namespace s3
 
             if (SUCCEEDED(hr))
             {
-                slot->read(ptr1, size1);
-                if (ptr2) slot->read(ptr2, size2);
-                sd.buffer->Unlock(ptr1, size1, ptr2, size2);
+                s3int r = slot->read(ptr1, size1);
+                if (r < size1)
+                {
+                    playPos = sd.prevPlayPos + r;
 
+                } else if (ptr2)
+                {
+                    r = slot->read(ptr2, size2);
+                    if (r < size2)
+                    {
+                        playPos = r; // from begining of buffer - second buffer is always from begining
+                    }
+                }
+
+                sd.buffer->Unlock(ptr1, size1, ptr2, size2);
                 sd.prevPlayPos = playPos;
+
 
                 if (slot->silenceSize >= sd.bufferSize) { slot->stop(); return; }//как только весь буфер заполнили тишиной, это значит, что play cursor прошел последний семпл звука и проигрывание можно останавливать
             }
+            */
         }
 
         //Обновляем 3D-параметры
@@ -280,7 +418,7 @@ namespace s3
             pars.flMinDistance = slot->source->minDist;
             pars.flMaxDistance = slot->source->maxDist;
             pars.dwMode = DS3DMODE_NORMAL;
-            sd.buffer3D->SetAllParameters(&pars, full/*целиком буфер обновляется только в одном случае - сразу перед началом проигрывания*/ ? DS3D_IMMEDIATE : DS3D_DEFERRED);
+            sd.buffer3D->SetAllParameters(&pars, initial/*целиком буфер обновляется только в одном случае - сразу перед началом проигрывания*/ ? DS3D_IMMEDIATE : DS3D_DEFERRED);
         }
 
     }

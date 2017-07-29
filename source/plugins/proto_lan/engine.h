@@ -289,6 +289,7 @@ class lan_engine : public packetgen
     bool avatar_set = false;
     bool media_data_transfer = false;
     bool fatal_error = false;
+    bool need_save = false;
 
     int nextmastertaggeneration = 0;
     int nexthallo = 0;

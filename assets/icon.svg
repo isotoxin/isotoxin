@@ -1,5 +1,16 @@
 <svg width="256" height="256">
 
+<!--
+	This svg file is used to generate icon if Isotoxin
+	Isotoxin will use this file 3*4=12 times (3 places: notification area, app icon, gui icon; 4 states: online, away, dnd, offline)
+	If you want to define different icons for different states, just put svg-data to corresponding condition blocks ( {if-...}{fi-...} )
+	
+
+	[scale] - scale of icon (size-of-icon * 0.01, so 0.32 for 32)
+	[color] - color of state
+-->
+
+
 	<filter id="blr">
 		<feGaussianBlur stdDeviation="2"/>
 	</filter>
@@ -18,4 +29,10 @@
      fill="#000000" stroke="none"
      d="M 49.881889,0.18230546 C 26.375251,0.18228556 7.3193507,19.238186 7.3193706,42.744824 7.6126753,72.913175 33.949494,85.048163 49.007112,85.21016 45.394155,91.773297 44.12643,93.27275 38.881036,100.11687 71.049765,99.143013 91.997496,74.138896 92.444408,42.744824 92.444428,19.238186 73.388528,0.18228556 49.881889,0.18230546 Z m 0,3.76334304 c 20.402515,-3.898e-4 37.499352,15.4247455 38.799176,38.7991755 0.365591,16.630254 -9.107814,45.637535 -42.027793,53.037805 3.483539,-4.598004 5.829903,-9.236112 8.328026,-14.631657 0,0 0.0012,0.393124 -5.099409,0.393026 C 29.479376,81.544386 10.896583,63.333082 10.896971,42.930569 11.082326,20.856353 29.479376,3.9452604 49.881889,3.9456485 Z" />
   </g>
+
+{if-online}<!-- put here svg data for online icon  -->{fi-online}
+{if-away}<!-- put here svg data for away icon  -->{fi-away}
+{if-dnd}<!-- put here svg data for dnd icon  -->{fi-dnd}
+{if-offline}<!-- put here svg data for offline icon  -->{fi-offline}
+
 </svg>

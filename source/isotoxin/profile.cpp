@@ -1975,8 +1975,8 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
                 int operator()(const ff& f) const
                 {
-                    if (filetime < f.filetime) return 1;
-                    if (filetime > f.filetime) return -1;
+                    if (filetime > f.filetime) return 1;
+                    if (filetime < f.filetime) return -1;
                     return 0;
                 }
             };
@@ -1994,7 +1994,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
                 }
             }
 
-            fls.sort();
+            fls.dsort();
 
             ts::aint clampn = fls.size();
             if (0 != (MISCF_DONT_LIM_BACKUP_COUNT & miscf))
@@ -2119,8 +2119,8 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         auto fix = [](const ts::wstr_c &p)
         {
             ts::wstr_c s(p);
-            s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR("{ConfigPath}"));
-            s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR("{ContactId}"));
+            s.replace_all(CONSTWSTR("%CONFIG%"), CONSTWSTR(PATH_MACRO_CONFIG));
+            s.replace_all(CONSTWSTR("%CONTACTID%"), CONSTWSTR(PATH_MACRO_CONTACTID));
             return s;
         };
 
@@ -3108,7 +3108,7 @@ bool profile_c::protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt
 ts::wstr_c profile_c::download_folder_prepared(const contact_root_c *r)
 {
     ts::wstr_c downf = download_folder();
-    downf.replace_all(CONSTWSTR("%DOWNLOAD%"), ts::wsptr()); // avoid recursion
+    downf.replace_all(CONSTWSTR(PATH_MACRO_DOWNLOAD), ts::wsptr()); // avoid recursion
     path_expand_env(downf, r);
     return downf;
 }

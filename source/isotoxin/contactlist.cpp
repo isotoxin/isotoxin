@@ -1120,6 +1120,37 @@ bool gui_contact_item_c::allow_drop() const
                         check_always_ok));
                 }
 
+                static void m_export_contacts(const ts::str_c&cks)
+                {
+                    contacts().refresh_details();
+
+                    ts::wstr_c downf = prf().download_folder_prepared(nullptr);
+                    ts::make_path(downf, 0);
+
+                    ts::wstr_c title(TTT("Export contacts",399));
+
+                    ts::filefilter_s e[2];
+                    e[0].desc = CONSTWSTR("txt");
+                    e[0].wildcard = CONSTWSTR("*.txt");
+                    e[1].desc = CONSTWSTR("(*.*)");
+                    e[1].wildcard = CONSTWSTR("*.*");
+                    ts::filefilters_s ff(e, 2);
+
+                    ts::wstr_c n(CONSTWSTR("contacts of "), cfg().profile(), CONSTWSTR(".txt"));
+
+                    ts::wstr_c fn = HOLD(g_app->main)().getroot()->save_filename_dialog(downf, n, ff, title);
+
+                    if (!fn.is_empty() && ff.index >= 0)
+                    {
+                        DEFERRED_EXECUTION_BLOCK_BEGIN(0.5)
+                            ts::wstr_c fn(ts::wsptr(gui->temp_restore<const ts::wchar>(as_int(param))));
+                            ts::blob_c b = contacts().save_contacts();
+                            b.save_to_file(fn);
+                        DEFERRED_EXECUTION_BLOCK_END(gui->temp_store(fn))
+                    }
+
+                }
+
                 static void m_export_history(const ts::str_c&cks)
                 {
                     contact_key_s ck(cks);
@@ -1138,7 +1169,7 @@ bool gui_contact_item_c::allow_drop() const
                             ts::wstrings_c fns, fnsa;
                             ts::g_fileop->find(fns, CONSTWSTR("*.template"), false);
 
-                            ts::tmp_array_inplace_t<ts::extension_s,1> es;
+                            ts::tmp_array_inplace_t<ts::filefilter_s,1> es;
 
                             for (const ts::wstr_c &tn : fns)
                             {
@@ -1146,21 +1177,21 @@ bool gui_contact_item_c::allow_drop() const
                                 if (tnn.size() < 2) continue;
                                 int exti = 0; if (tnn.size() > 2) exti = 1;
                                 ts::wstr_c saveas(tnn.get(0));
-                                ts::extension_s &e = es.add(); fnsa.add(tn);
+                                ts::filefilter_s &e = es.add(); fnsa.add(tn);
                                 e.desc = TTT("As $ file", 326) / saveas;
-                                e.ext = tnn.get(exti);
-                                e.desc.append(CONSTWSTR(" (*.")).append(e.ext).append_char(')');
+                                e.wildcard.set( CONSTWSTR("*.")).append(tnn.get(exti));
+                                e.desc.append(CONSTWSTR(" (")).append(e.wildcard).append_char(')');
                             }
 
-                            ts::extensions_s exts(es.begin(), es.size());
-                            exts.index = 0;
+                            ts::filefilters_s ff(es.begin(), es.size());
+                            ff.index = 0;
 
                             ts::wstr_c title( TTT("Export history",324) );
-                            ts::wstr_c fn = c->gui_item->getroot()->save_filename_dialog(downf, n, exts, title);
+                            ts::wstr_c fn = c->gui_item->getroot()->save_filename_dialog(downf, n, ff, title);
 
-                            if (!fn.is_empty() && exts.index >= 0)
+                            if (!fn.is_empty() && ff.index >= 0)
                             {
-                                c->export_history(fnsa.get(exts.index), fn);
+                                c->export_history(fnsa.get(ff.index), fn);
                             }
                         }
                     }
@@ -1276,6 +1307,7 @@ bool gui_contact_item_c::allow_drop() const
                 if (fns.size())
                 {
                     m.add_separator();
+                    m.add(TTT("Export contacts to file...",398), 0, handlers::m_export_contacts, contact->getkey().as_str());
                     m.add(TTT("Export history to file...", 325), 0, handlers::m_export_history, contact->getkey().as_str());
                     m.add(TTT("Clear history",531), 0, handlers::m_clear_history, contact->getkey().as_str());
                 }
@@ -1385,6 +1417,7 @@ INLINE int statev(contact_state_e v)
     return static_cast<int>( prf().protogroupsort( tprots.data16(), tprots.count() ) );
 }
 
+/*
 bool gui_contact_item_c::same_prots( const gui_contact_item_c &itm ) const
 {
     if ( contact->subcount() != itm.getcontact().subcount() )
@@ -1404,6 +1437,7 @@ bool gui_contact_item_c::same_prots( const gui_contact_item_c &itm ) const
 
     return tprots1 == tprots2;
 }
+*/
 
 bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
 {

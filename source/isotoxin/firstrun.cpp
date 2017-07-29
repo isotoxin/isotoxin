@@ -510,9 +510,9 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
 
     if (is_portable)
     {
-        cfg().folder_backup(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "backup")));
-        cfg().temp_folder_sendimg(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "temp" NATIVE_SLASH_S "sendimg")));
-        cfg().temp_folder_handlemsg(ts::wstr_c(CONSTWSTR("{ConfigPath}" NATIVE_SLASH_S "temp" NATIVE_SLASH_S "handlemsg")));
+        cfg().folder_backup(ts::wstr_c(CONSTWSTR(PATH_MACRO_CONFIG NATIVE_SLASH_S "backup")));
+        cfg().temp_folder_sendimg(ts::wstr_c(CONSTWSTR(PATH_MACRO_CONFIG NATIVE_SLASH_S "temp" NATIVE_SLASH_S "sendimg")));
+        cfg().temp_folder_handlemsg(ts::wstr_c(CONSTWSTR(PATH_MACRO_CONFIG NATIVE_SLASH_S "temp" NATIVE_SLASH_S "handlemsg")));
     }
 
     if (exit) 
@@ -522,8 +522,9 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         if (run_another_place)
         {
             ts::wstr_c another_exe = ts::fn_join(copyto, ts::fn_get_name_with_ext(ts::get_exe_full_name()));
-            ts::wstr_c another_exe_par( CONSTWSTR( "wait " ) );  another_exe_par.append_as_uint( ts::master().process_id() );
-            ts::master().start_app(another_exe, another_exe_par, nullptr, false);
+            ts::wstrings_c prms(CONSTWSTR("wait"));
+            prms.add().set_as_uint(ts::master().process_id());
+            ts::master().start_app(another_exe, prms, nullptr, false);
         }
 
         on_close();

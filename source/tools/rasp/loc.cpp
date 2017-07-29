@@ -253,7 +253,7 @@ int proc_loc(const wstrings_c & pars)
     if (lneschanged)
         savelines(prevfile, lines);
 
-    need2rpl.sort();
+    need2rpl.asort();
 
     FILE *f = fopen(to_str(fn_join(ptl, CONSTWSTR("en.labels.lng"))), "wb");
     swstr_c buf;

@@ -2,6 +2,8 @@
 
 #define MAX_RAW_PLAYERS 32
 
+#define VOICE_AUDIO_BUFFER_LENGTH (180.0f / 1000.0f)
+
 #define SOUNDS \
     SND( incoming_message ) \
     SND( incoming_message2 ) \
@@ -67,6 +69,12 @@ class mediasystem_c
 
     struct voice_player : s3::RawSource
     {
+        ts::Time nodatatime = ts::Time::past();
+        int threshold = 80;
+        int asum = 0;
+        int valptr = 0;
+        int vals[16] = {};
+
         struct protected_data_s
         {
             UNIQUE_PTR(fmt_converter_s) cvt;
@@ -74,7 +82,6 @@ class mediasystem_c
             int readbuf = 0;
             int newdata = 0;
             int readpos = 0;
-            int nodata = 0;
             bool begining = true;
             void clear()
             {
@@ -128,6 +135,7 @@ public:
 
     mediasystem_c()
     {
+        talks.params.bufferLength = VOICE_AUDIO_BUFFER_LENGTH;
     }
     ~mediasystem_c();
 

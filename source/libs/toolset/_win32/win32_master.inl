@@ -855,6 +855,16 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                     --istuff.cnttick;
             }
 
+            if (istuff.move_hwnd)
+            {
+                //MoveWindow(hwnd, sr.lt.x, sr.lt.y, sr.width(), sr.height(), TRUE);
+
+                SetWindowPos(istuff.move_hwnd, nullptr, istuff.move_rect.lt.x, istuff.move_rect.lt.y, istuff.move_rect.width(), istuff.move_rect.height(), SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_SHOWWINDOW /*| SWP_FRAMECHANGED*/);
+                //SetFocus(hwnd);
+                //SetForegroundWindow(hwnd);
+                istuff.move_hwnd = nullptr;
+            }
+
             if (istuff.folder_spy_evt)
             {
                 auto w = istuff.fspystate.lock_write();
@@ -1202,7 +1212,7 @@ process_handle_s::~process_handle_s()
         CloseHandle( ( (phi_s*)this )->processhandle );
 }
 
-/*virtual*/ bool sys_master_win32_c::start_app( const wstr_c &exe, const wstr_c& prms, process_handle_s *process_handle, bool elevate )
+/*virtual*/ bool sys_master_win32_c::start_app( const wstr_c &exe, const wstrings_c& prmsa, process_handle_s *process_handle, bool elevate )
 {
     if ( process_handle )
     {
@@ -1211,6 +1221,17 @@ process_handle_s::~process_handle_s()
             CloseHandle( ( (phi_s*)process_handle )->processhandle );
             ( (phi_s*)process_handle )->processhandle = nullptr;
         }
+    }
+
+    wstr_c prms;
+    for (const wstr_c& s : prmsa)
+    {
+        if (!prms.is_empty())
+            prms.append_char(' ');
+        if (s.find_pos(' ') >= 0)
+            prms.append_char('\"').append(s).append_char('\"');
+        else
+            prms.append(s);
     }
 
     if (!elevate)

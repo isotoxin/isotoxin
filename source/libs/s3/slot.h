@@ -5,9 +5,9 @@
 
 #ifdef CORE_WIN32
 #ifdef _M_X64
-#define SLOT_COREDATA_SIZE (sizeof(void *)*3)
+#define SLOT_COREDATA_SIZE (sizeof(void *)*5)
 #else
-#define SLOT_COREDATA_SIZE (sizeof(void *)*4)
+#define SLOT_COREDATA_SIZE (sizeof(void *)*7)
 #endif
 #define PLAYER_COREDATA_SIZE (sizeof(void *)*6)
 #elif defined CORE_NIX
@@ -21,7 +21,7 @@ namespace s3
     bool slot_coredata_prepare(Slot *slot, Player *player, bool is3d);
     void slot_coredata_start_play(Slot *slot, Player *player);
     void slot_coredata_stop_play(Slot *slot);
-    void slot_coredata_update(Slot *slot, Player *player, bool full);
+    void slot_coredata_update(Slot *slot, Player *player);
     bool slot_coredata_fail(Slot *slot);
 
 class Slot
@@ -56,8 +56,8 @@ public:
 	void stop();
 	void stop(float time) {if (time == 0) stop(); else fadeSpeed = -1/time;}
 
-	void read(void *buffer, s3int size, bool afterRewind = false);
-	void update(Player *player, float dt, bool full);
+    s3int read(void *buffer, s3int size, bool afterRewind = false); // return data size actually read
+	void update(Player *player, float dt);
 };
 
 }

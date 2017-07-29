@@ -376,7 +376,6 @@ class contact_c : public ts::shared_object
     ts::shared_ptr<contact_root_c> metacontact; // valid for non-meta contacts
     ts::str_c pubid;
     ts::str_c name;
-    ts::str_c customname;
     ts::str_c statusmsg;
     ts::str_c details;
     UNIQUE_PTR( avatar_s ) avatar;
@@ -479,7 +478,6 @@ public:
 
     void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
     void set_name( const ts::str_c &name_ ) { name = name_; }
-    void set_customname( const ts::str_c &name_ ) { customname = name_; }
     void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
     void set_details( const ts::str_c &details_ ) { details = details_; }
     void set_state( contact_state_e st ) { state = st; is_unknown = (st == CS_UNKNOWN) ? 1 : 0; }
@@ -490,17 +488,10 @@ public:
 
     const ts::str_c &get_pubid() const {return pubid;};
     virtual const ts::str_c get_pubid_desc() const { return get_pubid(); }
-    ts::str_c get_description() const
-    {
-        ts::str_c t = get_name();
-        if (t.is_empty())
-            t.set(get_pubid_desc());
-        else
-            text_adapt_user_input(t);
-        return t;
-    }
+    ts::str_c get_description() const;
+    ts::str_c makename() const;
+
     ts::str_c get_name(bool metacompile = true) const;
-    const ts::str_c &get_customname() const { return customname; }
     ts::str_c get_statusmsg(bool metacompile = true) const;
     contact_state_e get_state() const {return (contact_state_e)state;}
     contact_online_state_e get_ostate() const {return (contact_online_state_e)ostate;}
@@ -579,6 +570,7 @@ class contact_root_c : public contact_c // metas and conferences
     ts::struct_buf_t< post_s, 128 > posts;
     ts::str_c comment;
     ts::str_c greeting; // utf8 greeting; send as message on contact online
+    ts::str_c customname;
     ts::wstr_c mhc;
     ts::astrings_c tags;
     ts::buf0_c tags_bits; // rebuilt
@@ -600,6 +592,9 @@ public:
     contact_root_c( const contact_key_s &key ):contact_c(key) {}
     ~contact_root_c() { unload_history(); }
 
+    void set_customname(const ts::str_c &name_) { customname = name_; }
+    const ts::str_c &get_customname() const { return customname; }
+
     /*virtual*/ void setup(const contacts_s * c, time_t nowtime) override;
     /*virtual*/ bool save(contacts_s * c) const override;
     
@@ -612,7 +607,7 @@ public:
 
     void send_file(ts::wstr_c fn);
 
-    void stop_av();
+    bool stop_av(int apid);
     
     bool ringtone( contact_c *sub, bool activate = true, bool play_stop_snd = true);
     void av( contact_c *sub, bool f, bool video);
@@ -1170,6 +1165,9 @@ public:
 
     contacts_c();
     ~contacts_c();
+
+    void refresh_details();
+    ts::blob_c save_contacts();
 
     const ts::astrings_c &get_all_tags() const { return all_tags; }
     const ts::buf0_c &get_tags_bits() const { return enabled_tags; };

@@ -152,10 +152,63 @@ void test_cairo()
 void dotests0()
 {
     //test_cairo();
+
+    auto icmp = [](int a, int b)
+    {
+        int rslt = ts::SIGN( a - b );
+        return rslt;
+        //if (a < b)
+        //    return -1;
+        //if (a > b)
+        //    return 1;
+        //return 0;
+    };
+
+
+    ts::tbuf_t<int> b;
+    for (int i = 0; i < 100; ++i)
+    {
+        b.insert_sorted_uniq(IRND(100), icmp);
+    }
+
+    struct somval : public ts::movable_flag<true>
+    {
+        int v;
+        somval() :v(-1) {}
+        somval(int v) :v(v) {}
+        int operator()(somval othv) const
+        {
+            return ts::SIGN(v - othv.v);
+        }
+        int operator()(int othv) const
+        {
+            return ts::SIGN(v - othv);
+        }
+    };
+
+    ts::array_inplace_t< somval, 10 > bb;
+
+    bb.insert_sorted_next(somval(1), 1);
+    bb.insert_sorted_next(somval(5), 5);
+    bb.insert_sorted_next(somval(2), 2);
+    bb.insert_sorted_next(somval(0), 0);
+    bb.insert_sorted_next(somval(1), 1);
+
+    bb.add().v = 1;
+    bb.add().v = 5;
+    bb.add().v = 2;
+    bb.add().v = 0;
+    bb.add().v = 1;
+
+    bb.asort();
+
+    //__debugbreak();
+
 }
 
 void dotests()
 {
+    //dotests0();
     //test_ipc();
 
     /*

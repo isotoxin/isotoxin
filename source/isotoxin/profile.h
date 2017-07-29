@@ -1,5 +1,10 @@
 #pragma once
 
+#define PATH_MACRO_CONFIG "{ConfigPath}"
+#define PATH_MACRO_DOWNLOAD "{DownloadPath}"
+#define PATH_MACRO_CONTACTNAME "{ContactName}"
+#define PATH_MACRO_CONTACTID "{ContactId}"
+
 
 #define PROFILE_TABLES \
     TAB( active_protocol ) \
@@ -763,9 +768,9 @@ public:
 
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
-    TEXTWPAR( download_folder, "{ConfigPath}" NATIVE_SLASH_S "download" )
-    TEXTWPAR( download_folder_images, "{ConfigPath}" NATIVE_SLASH_S "images" NATIVE_SLASH_S "{ContactId}" )
-    TEXTWPAR( download_folder_fshare, "{DownloadPath}" NATIVE_SLASH_S "{ContactName}" )
+    TEXTWPAR( download_folder, PATH_MACRO_CONFIG NATIVE_SLASH_S "download" )
+    TEXTWPAR( download_folder_images, PATH_MACRO_CONFIG NATIVE_SLASH_S "images" NATIVE_SLASH_S PATH_MACRO_CONTACTID)
+    TEXTWPAR( download_folder_fshare, PATH_MACRO_DOWNLOAD NATIVE_SLASH_S PATH_MACRO_CONTACTNAME)
     TEXTWPAR( last_filedir, "" )
 
     TEXTWPAR( emoticons_pack, "" )

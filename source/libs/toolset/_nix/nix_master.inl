@@ -190,10 +190,17 @@ return nullptr;
     STOPSTUB("");
 }
 
-/*virtual*/ bool sys_master_nix_c::start_app( const wstr_c &exe, const wstr_c& prms, process_handle_s *process_handle, bool elevate )
+process_handle_s::~process_handle_s()
+{
+    //if ( ( ( phi_s* )this )->processhandle )
+    //    CloseHandle( ( (phi_s*)this )->processhandle );
+}
+
+
+/*virtual*/ bool sys_master_nix_c::start_app( const wstr_c &exe, const wstrings_c& prms, process_handle_s *process_handle, bool elevate )
 {
     STOPSTUB("");
-   return false;
+    return false;
 }
 
 /*virtual*/ bool sys_master_nix_c::wait_process( process_handle_s &phandle, int timeoutms )
@@ -335,4 +342,64 @@ return 0;
 //        return ( GetAsyncKeyState( vk ) & 0x8000 ) == 0x8000;
 
     return false;
+}
+
+
+/*virtual*/ uint32 sys_master_nix_c::folder_spy(const ts::wstr_c &path, folder_spy_handler_s *handler)
+{
+//    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+//    master_internal_stuff_s::spystate_s::maintenance_s &m = istuff.fspystate.lock_write()().threads.add();
+//    m.h = handler;
+//    CloseHandle(CreateThread(NULL, 0, spy_folder, (LPVOID)path.cstr(), 0, &m.threadid));
+
+//    for (;;)
+//    {
+//        Sleep(0);
+//        if (m.started) break;
+//    }
+
+//    return m.threadid;
+  return 0;
+}
+
+/*virtual*/ void sys_master_nix_c::folder_spy_stop(uint32 spyid)
+{
+/*
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    auto s = istuff.fspystate.lock_write();
+    s().stop(spyid);
+    s.unlock();
+
+    for (;;)
+    {
+        Sleep(0);
+
+        {
+            auto sr = istuff.fspystate.lock_read();
+
+            bool wait_again = false;
+            int cnt = sr().threads.size();
+            for (int i = 0; i < cnt; ++i)
+            {
+                const auto & _m = sr().threads.get(i);
+                if (spyid != 0 && spyid != _m.threadid)
+                    continue;
+                if (!_m.finished)
+                    wait_again = true;
+            }
+
+            if (wait_again) continue;
+        }
+
+        break;
+    }
+
+    if (spyid == 0)
+    {
+        auto ss = istuff.fspystate.lock_write();
+        ss().threads.clear();
+        ss.unlock();
+    }
+*/
+
 }

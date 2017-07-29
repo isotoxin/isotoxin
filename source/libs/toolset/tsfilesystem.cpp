@@ -419,16 +419,80 @@ namespace ts
     }
 #endif
 #ifdef _NIX
+
+    static str_c fncvt(const wsptr&fn)
+    {
+        if (fn.l)
+        {
+            if (fn.s[0] != '~')
+                return to_utf8(fn);
+
+            const char *homedir;
+            if ((homedir = getenv("HOME")) == nullptr)
+                homedir = getpwuid(getuid())->pw_dir;
+            if (homedir)
+                return str_c(asptr(homedir), to_utf8(fn.skip(1)));
+
+            return to_utf8(fn);
+
+        }
+        return str_c();
+    }
+
+
     void scan_dir_file_descriptor_c::prepare(const wstr_c &path, const pstr_c &name)
     {
         path_ = path;
-        pa_name_ = name;
+        p_name_ = name;
         name_.clear();
         full_.clear();
         sz_ = 0xffffffffffffffffull;
         tm_ = 0;
     }
 #endif
+
+    uint64 scan_dir_file_descriptor_c::size()
+    {
+        if (0xffffffffffffffffull == sz_)
+        {
+#ifdef _WIN32
+            void *fh = f_open(fullname());
+            sz_ = f_size(fh);
+            tm_ = f_time_last_write(fh);
+            f_close(fh);
+#endif
+#ifdef _NIX
+            struct stat s;
+            if (-1 == stat(fncvt(fullname()), &s))
+                return 0;
+            sz_ = s.st_size;
+            tm_ = (uint64)s.st_mtime * 10000000;
+#endif
+        }
+        return sz_;
+    }
+
+    uint64 scan_dir_file_descriptor_c::modtime() // modification time
+    {
+        if (0 == tm_)
+        {
+#ifdef _WIN32
+            void *fh = f_open(fullname());
+            sz_ = f_size(fh);
+            tm_ = f_time_last_write(fh);
+            f_close(fh);
+#endif
+#ifdef _NIX
+            struct stat s;
+            if (-1 == stat(fncvt(fullname()), &s))
+                return 0;
+            sz_ = s.st_size;
+            tm_ = (uint64)s.st_mtime * 10000000;
+#endif
+        }
+        return tm_;
+    };
+
 
     void scan_dir(int lv, const wstr_c &path, scan_dir_file_descriptor_c &fd, SCAN_DIR_CALLBACK_H cb)
     {
@@ -1285,6 +1349,10 @@ namespace ts
         ts::wstr_c fn;
         bool ready;
         bool folder;
+        bool operator()() const
+        {
+            return ready;
+        }
     };
 
     enum_files_c::enum_files_c( const wstr_c &base, const wstr_c &path, const wstr_c &wildcard )
@@ -1320,28 +1388,6 @@ namespace ts
         d.wildcard.~wstr_c();
         d.fn.~wstr_c();
         FindClose( d.h );
-    }
-    enum_files_c::operator bool() const
-    {
-        efd_s &d = (efd_s &)data;
-        return d.ready;
-    }
-
-    const wstr_c &enum_files_c::operator* () const
-    {
-        efd_s &d = (efd_s &)data;
-        return  d.fn;
-    }
-    const wstr_c *enum_files_c::operator->() const
-    {
-        efd_s &d = (efd_s &)data;
-        return &d.fn;
-    }
-
-    bool enum_files_c::is_folder() const
-    {
-        const efd_s &d = (const efd_s &)data;
-        return d.folder;
     }
 
     bool enum_files_c::prepare_file()
@@ -1387,26 +1433,97 @@ namespace ts
 
 #ifdef _NIX
 
-    TS_STATIC_CHECK( sizeof(off_t) == 8, "off_t size" );
-
-    static str_c fncvt( const wsptr&fn )
+    struct efd_s
     {
-        if ( fn.l )
+        DIR *dir;
+        struct dirent *dp;
+        ts::wstr_c base;
+        ts::wstr_c path;
+        ts::wstr_c wildcard;
+        ts::wstr_c fn;
+        bool folder;
+
+        bool operator()() const
         {
-            if (fn.s[0] != '~' )
-                return to_utf8(fn);
-
-            const char *homedir;
-            if ((homedir = getenv("HOME")) == nullptr)
-                homedir = getpwuid(getuid())->pw_dir;
-            if (homedir)
-                return str_c( asptr(homedir), to_utf8(fn.skip(1)) );
-
-            return to_utf8(fn);
-
+            return dp != nullptr;
         }
-        return str_c();
+
+    };
+
+    enum_files_c::enum_files_c(const wstr_c &base, const wstr_c &path, const wstr_c &wildcard)
+    {
+        TS_STATIC_CHECK(sizeof(efd_s) <= sizeof(data), "bad size");
+        memset(data, 0, sizeof(efd_s));
+        efd_s &d = (efd_s &)data;
+
+        TSPLACENEW(&d.base);
+        TSPLACENEW(&d.path);
+        TSPLACENEW(&d.wildcard);
+        TSPLACENEW(&d.fn);
+
+        d.dir = opendir(fncvt(fn_join(base, path)));
+        if (!d.dir)
+        {
+            d.folder = false;
+        }
+        else
+        {
+            d.folder = false;
+            d.dp = readdir(d.dir);
+            for (; d() && !prepare_file(); )
+                next_int();
+        }
+
     }
+    enum_files_c::~enum_files_c()
+    {
+        efd_s &d = (efd_s &)data;
+        d.base.~wstr_c();
+        d.path.~wstr_c();
+        d.wildcard.~wstr_c();
+        d.fn.~wstr_c();
+        closedir(d.dir);
+    }
+
+    bool enum_files_c::prepare_file()
+    {
+        efd_s &d = (efd_s &)data;
+        str_c sFileName(d.dp->d_name);
+
+        if (d.dp->d_type & DT_DIR)
+        {
+            if (sFileName == CONSTASTR(".") || sFileName == CONSTASTR(".."))
+                return false;
+
+
+            //if ( !enum_files( base, pred, fn_join( path, sFileName ), wildcard ) ) { FindClose( h ); return false; }
+            d.folder = true;
+        }
+        else
+        {
+            d.folder = false;
+        }
+
+        d.fn = fn_join(d.path, from_utf8(sFileName));
+        return true;
+    }
+
+    void enum_files_c::next_int()
+    {
+        efd_s &d = (efd_s &)data;
+        if (!d()) return;
+        d.dp = readdir(d.dir);
+    }
+    void enum_files_c::next()
+    {
+        efd_s &d = (efd_s &)data;
+        if (!d()) return;
+
+        do { next_int(); } while (d() && !prepare_file());
+    }
+
+
+    TS_STATIC_CHECK( sizeof(off_t) == 8, "off_t size" );
 
     wstr_c f_create( const wsptr&fn )
     {
@@ -1478,6 +1595,29 @@ namespace ts
 
 
 #endif // _NIX
+
+    enum_files_c::operator bool() const
+    {
+        efd_s &d = (efd_s &)data;
+        return d();
+    }
+
+    const wstr_c &enum_files_c::operator* () const
+    {
+        efd_s &d = (efd_s &)data;
+        return  d.fn;
+    }
+    const wstr_c *enum_files_c::operator->() const
+    {
+        efd_s &d = (efd_s &)data;
+        return &d.fn;
+    }
+
+    bool enum_files_c::is_folder() const
+    {
+        const efd_s &d = (const efd_s &)data;
+        return d.folder;
+    }
 
 
     bool TSCALL is_64bit_os()

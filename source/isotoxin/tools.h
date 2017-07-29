@@ -263,6 +263,7 @@ enum isogmsg_e
     ISOGM_FOLDER_SHARE,
     ISOGM_FOLDER_SHARE_UPDATE,
     ISOGM_CONFIGURABLE,
+    ISOGM_KILL_CALL_PANEL,
 
     ISOGM_ON_EXIT,
 
@@ -478,6 +479,8 @@ ts::wsptr loc_text(loctext_e);
 #define LOC_IDLE TTT("Idle", 544)
 #define LOC_PASTEIMAGEFROMCLIPBOARD (TTT("Paste image from clipboard ($)", 211) / CONSTWSTR("Ctrl+V"))
 #define LOC_LANGUAGE TTT("Language", 107)
+#define LOC_ACCEPTED_MESSAGE(aname) TTT("Your request was accepted by [b]$[/b]", 91) / from_utf8(aname)
+#define LOC_ACCEPT_OK_MESSAGE(aname) TTT("You accepted contact [b]$[/b].", 90) / from_utf8(aname)
 
 ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only = false );
 ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1);

@@ -521,7 +521,7 @@ bitmap_c TSCALL get_clipboard_bitmap()
 void TSCALL open_link(const ts::wstr_c &lnk0)
 {
     ts::wstr_c lnk( lnk0 );
-    if ( lnk.find_pos( CONSTWSTR( "://" ) ) < 0 && lnk.find_pos( '@' ) >= 0 )
+    if (lnk.find_pos(CONSTWSTR("://")) < 0 && lnk.find_pos('@') >= 0)
         lnk.insert( 0, CONSTWSTR( "mailto:" ) );
 
 #ifdef _WIN32
@@ -532,13 +532,18 @@ void TSCALL open_link(const ts::wstr_c &lnk0)
 #endif
 }
 
+#ifdef _WIN32
+#include "_win32/win32_common.inl"
+#endif // _WIN32
+
 void TSCALL explore_path( const wsptr &path, bool path_only )
 {
 #ifdef _WIN32
+
     if ( path_only )
-        ShellExecuteW( nullptr, L"explore", ts::tmp_wstr_c( path ), nullptr, nullptr, SW_SHOWDEFAULT );
+        ShellExecuteW(wnd2hwnd(master().mainwindow), L"explore", ts::tmp_wstr_c(path), nullptr, nullptr, SW_SHOWDEFAULT);
     else
-        ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path(ts::wstr_c(path )).cstr(), SW_SHOWDEFAULT );
+        ShellExecuteW(wnd2hwnd(master().mainwindow), L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(path)), ts::fn_get_path(ts::wstr_c(path)).cstr(), SW_SHOWDEFAULT);
 #endif // _WIN32
 #ifdef _NIX
     DEBUG_BREAK();

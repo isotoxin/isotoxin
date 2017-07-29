@@ -65,6 +65,9 @@ struct master_internal_stuff_s
     HICON get_icon( const bitmap_c &bmp );
     void release_icon( HICON icn );
 
+    HWND move_hwnd = nullptr;
+    ts::irect move_rect = ts::irect(0);
+
     sys_master_c::_HANDLER_T popup_notify = nullptr;
     volatile HANDLE popup_event = nullptr;
     //HWND looper_hwnd = nullptr;

@@ -38,10 +38,10 @@ void path_expand_env(ts::wstr_c &path, const contact_root_c *r)
 {
     ts::parse_env(path);
     //ts::wstr_c cfgfolder = cfg().get_path();
-    path.replace_all(CONSTWSTR("{ConfigPath}"), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
-    path.replace_all_lazy(CONSTWSTR("{DownloadPath}"), [r]() { return prf().download_folder_prepared(r); });
-    path.replace_all_lazy(CONSTWSTR("{ContactId}"), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("0")); return ts::wmake<uint>(r->getkey().contactid); });
-    path.replace_all_lazy(CONSTWSTR("{ContactName}"), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("unknown")); return fn_fix_path(r->showname(), FNO_MAKECORRECTNAME); });
+    path.replace_all(CONSTWSTR(PATH_MACRO_CONFIG), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
+    path.replace_all_lazy(CONSTWSTR(PATH_MACRO_DOWNLOAD), [r]() { return prf().download_folder_prepared(r); });
+    path.replace_all_lazy(CONSTWSTR(PATH_MACRO_CONTACTID), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("0")); return ts::wmake<uint>(r->getkey().contactid); });
+    path.replace_all_lazy(CONSTWSTR(PATH_MACRO_CONTACTNAME), [r]() { if (r == nullptr) return ts::wstr_c(CONSTWSTR("unknown")); return fn_fix_path(r->showname(), FNO_MAKECORRECTNAME); });
 }
 
 
@@ -671,7 +671,7 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
     if (memba != 0)
         return;
 
-    if (!ts::master().start_app(ts::wstr_c(PLGHOSTNAME), ts::to_wstr(tag), &plughost, false))
+    if (!ts::master().start_app(ts::wstr_c(PLGHOSTNAME), ts::wstrings_c(ts::to_wstr(tag)), &plughost, false))
     {
         junct.stop();
         return;
@@ -1744,7 +1744,7 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h, menu_c *mp)
             }
     }
 
-    langs.sort();
+    langs.asort();
 
     for (const lang_s &l : langs)
     {
@@ -1927,14 +1927,16 @@ void sound_capture_handler_c::stop_capture()
 
 bool elevate()
 {
-    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint(ts::master().process_id());
+    ts::wstrings_c params(CONSTWSTR("wait"));
+    params.add().set_as_uint(ts::master().process_id());
     ts::wstr_c exe(ts::get_exe_full_name());
-    return ts::master().start_app( exe, prm, nullptr, true );
+    return ts::master().start_app( exe, params, nullptr, true );
 }
 
 static void ChuckNorrisCopy(const ts::wstr_c &copyto)
 {
-    ts::wstr_c prm( CONSTWSTR( "installto " ), copyto ); prm.replace_all( 10, ' ', '*' );
+    ts::wstrings_c prm(CONSTWSTR("installto"), copyto);
+    prm.get(1).replace_all( ' ', '*' );
     ts::wstr_c exe( ts::get_exe_full_name() );
 
     ts::process_handle_s ph;

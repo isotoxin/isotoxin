@@ -35,6 +35,8 @@ conf
   state_online_color=##state_online
   state_away_color=##state_away
   state_dnd_color=##state_dnd
+
+  exportcolors=##msg_mine_text,##msg_mine_bg,##msg_other_text,##msg_other_bg,##msg_mine_time,##msg_other_time,##c_bg_ah,##date_sep_bg,##msg_mine_name,##msg_other_name,##text_def,##notice_net_bg
 }
 
 rects
@@ -2150,6 +2152,36 @@ buttons
     }
   }
 
+  fsh_explore
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<g fill="##gen_shf1">
+					<circle cx="35" cy="50" r="4" />
+					<circle cx="50" cy="50" r="4" />
+					<circle cx="65" cy="50" r="4" /></g>
+			</g>
+		</svg>`
+
+      color=##gen_shf
+      k-press=0.97
+	  shift=5
+	  shift-press=2
+	  center=26.5,26.5 // 26.5 = 10 + 50*0.33
+
+    }
+  }
 
   explore
   {

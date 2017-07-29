@@ -2,6 +2,8 @@
 
 #define WIN32EMU
 
+#include <sys/eventfd.h>
+
 #include <sys/cdefs.h>
 #include <string.h>
 #include <malloc.h>
@@ -22,13 +24,14 @@ enum w32e_bool
     TRUE
 };
 
+typedef uint32_t DWORD;
+
 enum w32e_consts
 {
     WAIT_OBJECT_0 = 0,
     WAIT_TIMEOUT = 258,
     WAIT_FAILED = 0xFFFFFFFF,
     INFINITE = 0xFFFFFFFF,
-    INVALID_HANDLE_VALUE = 0xFFFFFFFF,
 
     CSTR_NOTEQUAL = 0,
     CSTR_EQUAL = 1,
@@ -40,9 +43,29 @@ enum w32e_consts
 
     ERROR_SUCCESS = 0,
     ERROR_PIPE_LISTENING = 536,
+    ERROR_PIPE_BUSY = 231,
+
+    GENERIC_READ = (0x80000000L),
+    GENERIC_WRITE = (0x40000000L),
+
+    CREATE_NEW = 1,
+    CREATE_ALWAYS = 2,
+    OPEN_EXISTING = 3,
+    OPEN_ALWAYS = 4,
+    TRUNCATE_EXISTING = 5,
+    FILE_ATTRIBUTE_NORMAL = 0x00000080,
+
+    PIPE_ACCESS_INBOUND = 0x00000001,
+    PIPE_ACCESS_OUTBOUND = 0x00000002,
+    FILE_FLAG_FIRST_PIPE_INSTANCE = 2,
+
+    PIPE_TYPE_BYTE = 1,
+    PIPE_READMODE_BYTE = 2,
+    PIPE_WAIT = 4,
 };
 
-#ifdef __linux__
+#define sprintf_s snprintf
+#define __debugbreak __builtin_trap
 
 typedef union _LARGE_INTEGER {
     struct {
@@ -78,11 +101,21 @@ protected:
 
 struct w32e_handle_event_s : public w32e_handle_s
 {
-    int h;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
     bool manualreset;
+    bool signaled;
+
+    w32e_handle_event_s(bool manualreset, bool initstate):manualreset(manualreset), signaled(initstate)
+    {
+        pthread_mutex_init(&mutex, 0);
+        pthread_cond_init(&cond, 0);
+    }
+
     virtual void close() override
     {
-        ::close( h );
+        pthread_cond_destroy(&cond);
+        pthread_mutex_destroy(&mutex);
         delete this;
     }
 };
@@ -106,9 +139,42 @@ struct w32e_handle_shm_s : public w32e_handle_s
 
 struct w32e_handle_pipe_s : public w32e_handle_s
 {
+    int h;
+
+    w32e_handle_pipe_s(int h):h(h)
+    {
+    }
+
     virtual void close() override
     {
+        delete this;
+    }
+    virtual uint32_t read(void *b, uint32_t sz, uint32_t *rdb) override
+    {
 
+
+        if (rdb) *rdb = 0;
+        return 0;
+    }
+
+    virtual uint32_t write(const void *b, uint32_t sz, uint32_t *wrrn) override
+    {
+        if (wrrn) *wrrn = 0;
+        return 0;
+    }
+};
+
+struct w32e_handle_thread_s : public w32e_handle_s
+{
+    pthread_t tid;
+
+    w32e_handle_thread_s(pthread_t tid):tid(tid)
+    {
+    }
+
+    virtual void close() override
+    {
+        delete this;
     }
     virtual uint32_t read(void *b, uint32_t sz, uint32_t *rdb) override
     {
@@ -125,66 +191,51 @@ struct w32e_handle_pipe_s : public w32e_handle_s
 };
 
 
-typedef w32e_handle_s * HANDLE;
 
-#if defined _SYS_EVENTFD_H
+typedef w32e_handle_s * HANDLE;
+#define INVALID_HANDLE_VALUE ((HANDLE)(-1))
+
+HANDLE CreateFileA(const char *name, w32e_consts readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *);
+
+typedef DWORD (THREADPROC)(void *);
+
+HANDLE CreateThread(void *, int, THREADPROC *proc, void *par, int, void *);
+
 inline HANDLE CreateEvent(void *, w32e_bool bManualReset, w32e_bool bInitialState, void *)
 {
-    int h = eventfd( bInitialState ? 1 : 0, 0 );
-    if (h < 0)
-        return nullptr;
-
-    w32e_handle_event_s *e = new w32e_handle_event_s;
-    e->manualreset = bManualReset != FALSE;
-    e->h = h;
-    return e;
+    return new w32e_handle_event_s(bManualReset, bInitialState);
 }
-#endif
 
 inline void SetEvent( HANDLE evt )
 {
     if (w32e_handle_event_s *e = dynamic_cast<w32e_handle_event_s *>(evt))
     {
-        int64_t inc1 = 1;
-        write( e->h, &inc1, 8 );
+        pthread_mutex_lock(&e->mutex);
+        e->signaled = true;
+        pthread_cond_signal(&e->cond);
+        pthread_mutex_unlock(&e->mutex);
     }
 }
+
+inline void ResetEvent( HANDLE evt )
+{
+    if (w32e_handle_event_s *e = dynamic_cast<w32e_handle_event_s *>(evt))
+    {
+        pthread_mutex_lock(&e->mutex);
+        e->signaled = false;
+        pthread_mutex_unlock(&e->mutex);
+    }
+}
+
 
 inline void CloseHandle( HANDLE h )
 {
-    h->close();
+    if (h && h != INVALID_HANDLE_VALUE)
+        h->close();
 }
 
 unsigned int WaitForSingleObject( HANDLE evt, int timeout );
-
-inline void Sleep(int ms)
-{
-    if (0 == ms)
-    {
-        pthread_yield();
-        return;
-    }
-    struct timespec req;
-    req.tv_sec = ms >= 1000 ? (ms / 1000) : 0;
-    req.tv_nsec = (ms - req.tv_sec * 1000) * 1000000;
-
-    // Loop until we've slept long enough
-    do
-    {
-        // Store remainder back on top of the original required time
-        if( 0 != nanosleep( &req, &req ) )
-        {
-            /* If any error other than a signal interrupt occurs, return an error */
-            if(errno != EINTR)
-                return;
-        }
-        else
-        {
-            // nanosleep succeeded, so exit the loop
-            break;
-        }
-    } while( req.tv_sec > 0 || req.tv_nsec > 0 );
-}
+void Sleep(int ms);
 
 inline int timeGetTime()
 {
@@ -231,11 +282,7 @@ void CharLowerBuffA( char *s1, int len );
 void CharUpperBuffW( char16_t *s1, int len );
 void CharUpperBuffA( char *s1, int len );
 
-inline w32e_consts GetLastError()
-{
-
-    return ERROR_SUCCESS;
-}
+w32e_consts GetLastError();
 
 // mmf
 
@@ -246,7 +293,7 @@ inline off_t w32e_shm_size(off_t sz)
     return sz & ~(psz-1);
 }
 
-inline HANDLE CreateFileMappingA(w32e_consts, int, int ofl, int, off_t sz, const char *name)
+inline HANDLE CreateFileMappingA(void *, int, int ofl, int, off_t sz, const char *name)
 {
     if (PAGE_READWRITE != ofl)
         return nullptr;
@@ -298,6 +345,7 @@ inline uint32_t WriteFile(HANDLE h, const void *b, uint32_t sz, uint32_t *wrrn, 
     return h->write(b,sz,wrrn);
 }
 
+HANDLE CreateNamedPipeA( const char *name, int dwOpenMode, int dwPipeMode, int nMaxInstances, int nOutBufferSize, int nInBufferSize, int nDefaultTimeOut, void *secur );
 
 #define MAX_PATH 256
 
@@ -316,5 +364,3 @@ typedef sockaddr SOCKADDR;
 struct WSADATA {};
 
 
-
-#endif

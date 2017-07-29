@@ -78,6 +78,7 @@ void folder_share_toc_unpacked_s::decode(const folder_share_toc_packed_s &toc)
         el.sz = ts::lendian(r.get<uint64>());
         el.modtime = ts::lendian(r.get<uint64>());
     }
+    elements.asort();
 }
 
 void folder_share_toc_unpacked_s::merge(const folder_share_toc_unpacked_s &from)
@@ -102,6 +103,7 @@ folder_share_toc_unpacked_s::toc_element_s &folder_share_toc_unpacked_s::findcre
     if (elements.find_sorted(index, el))
         return elements.get(index);
 
+    if (index < elements.size())
     for (ts::aint i=index; i > 0; --i)
     {
         toc_element_s &e = elements.get(i);
@@ -161,11 +163,13 @@ namespace
                     el.fn = fd.fullname(), el.sz = fd.size(), el.modtime = fd.modtime();
 
                 el.fn.cut(0, path.get_length());
+                if (el.fn.get_length() == 0)
+                    toc.elements.remove_fast(toc.elements.size()-1);
 
                 return ts::SD_CONTINUE;
             });
 
-            toc.elements.sort();
+            toc.elements.asort();
 
             toc_pack.encode(toc);
 
@@ -436,6 +440,11 @@ folder_share_c::pstate_s &folder_share_c::getcreate(int apid)
     TS_STATIC_CHECK(sizeof(pstate_s) == sizeof(int), "!");
     *(int *)&s = apid; // it also clears other bit fields
     return s;
+}
+
+void folder_share_c::explore()
+{
+    explore_path( path, true );
 }
 
 void folder_share_c::update_data()

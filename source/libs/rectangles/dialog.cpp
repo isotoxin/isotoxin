@@ -659,13 +659,13 @@ bool gui_dialog_c::file_selector(RID, GUIPARAM param)
         curp = tf.get_customdata_obj<ts::wstr_c>();
     gui->app_path_expand_env(curp);
 
-    ts::extension_s ext;
-    ext.desc = gui->app_loclabel(LL_ANY_FILES);
-    ext.desc.append(CONSTWSTR(" (*.*)"));
-    ext.ext = CONSTWSTR("*.*");
-    ts::extensions_s exts(&ext, 1, 0);
+    ts::filefilter_s f;
+    f.desc = gui->app_loclabel(LL_ANY_FILES);
+    f.desc.append(CONSTWSTR(" (*.*)"));
+    f.wildcard = CONSTWSTR("*.*");
+    ts::filefilters_s ff(&f, 1, 0);
 
-    ts::wstr_c fn = getroot()->load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), exts, label_file_selector_caption);
+    ts::wstr_c fn = getroot()->load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), ff, label_file_selector_caption);
 
     if (!fn.is_empty())
     {
@@ -1666,12 +1666,16 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     if ( qp == SQ_KEYDOWN && data.kbd.casw == 0 )
     {
         if (data.kbd.scan == ts::SSK_ESC)
+        {
             on_close();
+            return true;
+        }
 
         if (data.kbd.scan == ts::SSK_ENTER)
+        {
             on_confirm();
-
-        return true;
+            return true;
+        }
     }
 
     return gui_vscrollgroup_c::sq_evt(qp, rid, data);

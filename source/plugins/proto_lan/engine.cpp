@@ -325,11 +325,13 @@ void lan_engine::media_stuff_s::add_audio( u64 msmonotonic, const void *data, in
 
     if ( (int)enc_fifo.available() > audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).avgBytesPerSec() )
     {
+        int overbuf = (int)enc_fifo.available() - audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerSec() / 2;
+
         // remove some overbuffer data
 
-        enc_fifo.read_data( nullptr, datasize );
+        enc_fifo.read_data( nullptr, overbuf);
         if ( a_msmonotonic )
-            a_msmonotonic += audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).bytesToMSec( datasize );
+            a_msmonotonic += audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).bytesToMSec(overbuf);
     }
 }
 
@@ -1155,7 +1157,6 @@ enum chunks_e // HADR ORDER!!!!!!!!
     chunk_video_quality,
     chunk_video_bitrate,
     chunk_video_telemetry,
-
 };
 
 //lan_engine::contact_s *contact;
@@ -1334,6 +1335,8 @@ void lan_engine::tick(int *sleep_time_ms)
         *sleep_time_ms = -1;
         return;
     }
+    if (need_save)
+        hf->save(), need_save = false;
 
     if (first->state != contact_s::ONLINE || listen_port < 0) 
     {
@@ -1624,7 +1627,7 @@ void lan_engine::tick(int *sleep_time_ms)
     {
         ASSERT(!rotten->data_changed, "sure \'rotten\' state was sent to host");
         del(rotten);
-        hf->save();
+        need_save = true;
     }
 
     if (first->data_changed) // send self status
@@ -2088,7 +2091,7 @@ void lan_engine::signal(contact_id_s id, signal_e s)
                 c->state = contact_s::ACCEPT;
                 c->key_sent = false;
                 c->invitemessage.clear();
-                hf->save();
+                need_save = true;
             }
 
         break;
@@ -2136,6 +2139,19 @@ void lan_engine::signal(contact_id_s id, signal_e s)
         break;
 
     case REQS_DETAILS:
+        if (contact_s *c = find(id))
+        {
+            std::string idstr = c->public_id;
+            std::string tmps;
+            tmps.set(STD_ASTR("{\"" CDET_PUBLIC_ID "\":\""));
+            tmps.append(idstr).append(STD_ASTR("\"}"));
+            
+            contact_data_s cd(contact_id_s(), CDM_DETAILS);
+            cd.id = id;
+            cd.details = tmps.cstr();
+            cd.details_len = tmps.get_length();
+            hf->update_contact(&cd);
+        }
         break;
     case REQS_AVATAR:
         if (contact_s *c = find(id))
@@ -2328,12 +2344,16 @@ bool lan_engine::load_contact(contact_id_s cid, loader &l)
     return loaded;
 }
 
+#define ADVCHANGE(a,b) decltype(a) nv = b; if (a != nv) { a = nv; need_save = true; }
+
 void lan_engine::adv_video_codec(const std::pstr_c &val)
 {
+    video_codec_e nvc = vc_vp8;
     if (val.equals(STD_ASTR("vp8")))
-        use_vcodec = vc_vp8;
+        nvc = vc_vp8;
     if (val.equals(STD_ASTR("vp9")))
-        use_vcodec = vc_vp9;
+        nvc = vc_vp9;
+    ADVCHANGE(use_vcodec, nvc);
 }
 
 std::string lan_engine::adv_video_codec() const
@@ -2349,7 +2369,7 @@ std::string lan_engine::adv_video_codec() const
 
 void lan_engine::adv_video_bitrate(const std::pstr_c &val)
 {
-    use_vbitrate = val.as_int();
+    ADVCHANGE(use_vbitrate, val.as_int());
 }
 std::string lan_engine::adv_video_bitrate() const
 {
@@ -2360,7 +2380,7 @@ std::string lan_engine::adv_video_bitrate() const
 
 void lan_engine::adv_video_quality(const std::pstr_c &val)
 {
-    use_vquality = val.as_int();
+    ADVCHANGE(use_vquality, val.as_int());
 }
 
 std::string lan_engine::adv_video_quality() const
@@ -2372,7 +2392,7 @@ std::string lan_engine::adv_video_quality() const
 
 void lan_engine::adv_video_telemetry(const std::pstr_c &val)
 {
-    tlmflags = val.as_int() != 0? -1 : 0;
+    ADVCHANGE(tlmflags, val.as_int() != 0? -1 : 0);
 }
 std::string lan_engine::adv_video_telemetry() const
 {
@@ -2560,7 +2580,7 @@ void lan_engine::del_message( u64 utag )
     for (contact_s *i = first->next; i; i = i->next)
         if (i->del_block(utag))
         {
-            hf->save();
+            need_save = true;
             break;
         }
 }
@@ -3137,7 +3157,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             contact_data_s cd(id, CDM_AVATAR_TAG);
                             cd.avatar_tag = avatar_tag;
                             engine->hf->update_contact(&cd);
-                            engine->hf->save();
+                            engine->need_save = true;
                         }
                         break;
                     case BT_AVATARDATA:

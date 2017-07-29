@@ -14,6 +14,7 @@
 				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
 				<Option type="1" />
 				<Option compiler="gcc" />
+				<Option parameters="ut 2" />
 				<Compiler>
 					<Add option="-std=c++14" />
 					<Add option="-m64" />

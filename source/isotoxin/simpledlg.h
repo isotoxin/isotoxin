@@ -307,9 +307,10 @@ class incoming_call_panel_c : public gui_control_c
     typedef gui_control_c super;
     GM_RECEIVER(incoming_call_panel_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(incoming_call_panel_c, GM_UI_EVENT);
+    GM_RECEIVER(incoming_call_panel_c, ISOGM_KILL_CALL_PANEL);
 
     ts::shared_ptr<contact_c> sender;
-    ts::shared_ptr< button_desc_s > buttons[4];
+    ts::shared_ptr<button_desc_s> buttons[4];
     ts::ivec2 sz = ts::ivec2(0);
     ts::ivec2 tsz = ts::ivec2(0);
     ts::str_c aname;

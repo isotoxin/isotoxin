@@ -918,8 +918,20 @@ bool incoming_call_panel_c::b_ignore_call(RID, GUIPARAM)
     return true;
 }
 
-ts::uint32 incoming_call_panel_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
+ts::uint32 incoming_call_panel_c::gm_handler(gmsg<ISOGM_KILL_CALL_PANEL> &)
 {
+    stop_sound(snd_ringtone);
+    stop_sound(snd_ringtone2);
+
+    TSDEL(this);
+    return 0;
+}
+
+ts::uint32 incoming_call_panel_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &)
+{
+    stop_sound(snd_ringtone);
+    stop_sound(snd_ringtone2);
+
     TSDEL(this);
     return 0;
 }

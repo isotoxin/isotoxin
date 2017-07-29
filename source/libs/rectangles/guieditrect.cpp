@@ -384,19 +384,23 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				res = true;
 				break;
 			case ts::SSK_A:
-				selectall();
+                if ((casw & (ts::casw_alt | ts::casw_shift)) == 0)
+                    selectall();
 				res = true;
 				break;
             case ts::SSK_W:
-                selectword();
+                if ((casw & (ts::casw_alt| ts::casw_shift)) == 0)
+                    selectword();
                 res = true;
                 break;
             case ts::SSK_Z:
-                undo();
+                if ((casw & (ts::casw_alt | ts::casw_shift)) == 0)
+                    undo();
                 res = true;
                 break;
             case ts::SSK_Y:
-                redo();
+                if ((casw & (ts::casw_alt | ts::casw_shift)) == 0)
+                    redo();
                 res = true;
                 break;
 			case ts::SSK_HOME:

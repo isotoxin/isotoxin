@@ -2,7 +2,7 @@
 
 namespace ts
 {
-
+class task_executor_c;
 class task_c
 {
     friend class task_executor_c;

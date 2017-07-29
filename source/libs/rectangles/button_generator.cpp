@@ -259,7 +259,7 @@ struct gb_svg_s : public generated_button_data_s
     ts::ivec2 rshift;
     virtual rsvg_svg_c *get_svg(ts::ivec2 &s) { s = rshift;  rsvg_svg_c *r = asvg; asvg = nullptr; return r; }
 
-    gb_svg_s(const ts::abp_c *gen, const colors_map_s &colsmap, const ts::str_c &svgs, bool one_face)
+    gb_svg_s(const ts::abp_c *gen, const colors_map_s &colsmap, const ts::str_c &svgs, bool one_face, const ts::asptr *ifilter)
     {
         ts::TSCOLOR col[button_desc_s::numstates];
         float shift[button_desc_s::numstates] = {};
@@ -304,6 +304,32 @@ struct gb_svg_s : public generated_button_data_s
         for (int i = 0; i < num_states; ++i)
         {
             ts::str_c svg(svgs);
+
+            if (ifilter)
+            {
+                ts::str_c keep_b( CONSTASTR("{if-"), ifilter[i], CONSTASTR("}") );
+                ts::str_c keep_e(CONSTASTR("{fi-"), ifilter[i], CONSTASTR("}"));
+                svg.replace_all(keep_b, ts::asptr());
+                svg.replace_all(keep_e, ts::asptr());
+
+                for (int index = 0;;)
+                {
+                    int s = svg.find_pos(index, CONSTASTR("{if-"));
+                    if (s < 0)
+                        break;
+                    index = s;
+                    int s1 = svg.find_pos(s, '}');
+                    if (s1 < 0)
+                        break;
+                    keep_e.set_length(4).append( svg.substr(s+4,s1+1) );
+                    int s2 = svg.find_pos(s1, keep_e);
+                    if (s2 < 0)
+                        break;
+                    svg.cut(s,s2+keep_e.get_length()-s);
+
+                }
+            }
+
             
             svg.replace_all(CONSTASTR("[insert]"), ins[i]);
 
@@ -459,11 +485,11 @@ struct gb_svg_s : public generated_button_data_s
 
 
 
-generated_button_data_s *generated_button_data_s::generate(const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face)
+generated_button_data_s *generated_button_data_s::generate(const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face, const ts::asptr *filter)
 {
     if (const ts::abp_c *svg = gen->get(CONSTASTR("svg")))
     {
-        gb_svg_s *g = TSNEW(gb_svg_s, gen, colsmap, svg->as_string(), one_face);
+        gb_svg_s *g = TSNEW(gb_svg_s, gen, colsmap, svg->as_string(), one_face, filter);
         if (g->is_valid())
             return g;
         TSDEL(g);

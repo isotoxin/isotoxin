@@ -67,13 +67,14 @@ void test_ipc_0( ts::wstr_c exe )
     int memba = junct.start("test_0");
     if (memba != 0)
     {
-        Print("Fail 1");
+        Print("Fail 1\n");
         return;
     }
 
     ts::process_handle_s ph;
-    if (!ts::master().start_app( exe, ts::wstr_c(CONSTWSTR("utp test_0")), &ph, false))
+    if (!ts::master().start_app( exe, ts::wstrings_c(CONSTWSTR("utp"), CONSTWSTR("test_0")), &ph, false))
     {
+        Print("Fail 2\n");
         junct.stop();
         return;
     }
@@ -81,6 +82,7 @@ void test_ipc_0( ts::wstr_c exe )
     junct.set_data_callback(processor_func, nullptr);
     if (!junct.wait_partner(10000))
     {
+        Print("Fail 3\n");
         junct.stop();
         return;
     }
@@ -130,8 +132,173 @@ void test_ipc_1( const char *n )
 
 
 
+void expe()
+{
+    /*
+    int fifo1 = mkfifo("/tmp/abcdxxx", O_RDONLY);
+    unlink("/tmp/abcdxxx");
+    int fifo2 = mkfifo("/tmp/abcdxxx", O_RDONLY);
+
+    int er1 = EEXIST;
+    __debugbreak();
+    */
+}
+
+struct threaddata_s
+{
+    HANDLE evt1 = nullptr;
+    HANDLE evt2 = nullptr;
+    HANDLE evt3 = nullptr;
+    HANDLE evt4 = nullptr;
+    int ev1c = 0;
+    int ev2c = 0;
+    int ev3c = 0;
+    int ev4c = 0;
+
+    bool stop = false;
+
+    ~threaddata_s()
+    {
+        CloseHandle(evt1);
+        CloseHandle(evt2);
+        CloseHandle(evt3);
+        CloseHandle(evt4);
+    }
+
+    static DWORD __stdcall th1(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        WaitForSingleObject(d->evt1, INFINITE);
+        ++d->ev1c;
+        WaitForSingleObject(d->evt1, INFINITE);
+        ++d->ev1c;
+        WaitForSingleObject(d->evt1, INFINITE);
+        ++d->ev1c;
+        WaitForSingleObject(d->evt1, INFINITE);
+        ++d->ev1c;
+
+        return 0;
+    }
+    static DWORD __stdcall th2(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        for (; !d->stop;)
+        {
+            WaitForSingleObject(d->evt2, INFINITE);
+            ++d->ev2c;
+            Sleep(1);
+        }
+        return 0;
+    }
+    static DWORD __stdcall th3(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        WaitForSingleObject(d->evt3, INFINITE);
+        ++d->ev3c;
+        WaitForSingleObject(d->evt3, INFINITE);
+        ++d->ev3c;
+        WaitForSingleObject(d->evt3, INFINITE);
+        ++d->ev3c;
+        WaitForSingleObject(d->evt3, INFINITE);
+        ++d->ev3c;
+
+        return 0;
+    }
+    static DWORD __stdcall th4(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        for (;!d->stop;)
+        {
+            WaitForSingleObject(d->evt4, INFINITE);
+            ++d->ev4c;
+            Sleep(1);
+        }
+
+        return 0;
+    }
+};
+
+void logresult(const char *step, bool ok)
+{
+    Print("Step %s is %s\n", step, ok ? "passed" : "failed");
+}
+
+void threadtest()
+{
+    Print("threadtest begin\n");
+
+    threaddata_s thd;
+    thd.evt1 = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    thd.evt2 = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    thd.evt3 = CreateEvent(nullptr, FALSE, TRUE, nullptr);
+    thd.evt4 = CreateEvent(nullptr, TRUE, TRUE, nullptr);
+
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::th1, &thd, 0, nullptr));
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::th2, &thd, 0, nullptr));
+
+    Sleep(1000);
+    logresult("Thread 1.1", thd.ev1c == 0);
+    ++thd.ev1c;
+    SetEvent(thd.evt1);
+    Sleep(1000);
+    logresult("Thread 1.2", thd.ev1c == 2);
+    SetEvent(thd.evt1);
+    Sleep(1000);
+    SetEvent(thd.evt1);
+    Sleep(1000);
+    logresult("Thread 1.3", thd.ev1c == 4);
+
+    ResetEvent(thd.evt2);
+    Sleep(1000);
+    logresult("Thread 2.1", thd.ev2c == 0);
+    SetEvent(thd.evt2);
+    Sleep(1000);
+    logresult("Thread 2.2", thd.ev2c > 100);
+    int nnn = thd.ev2c;
+    ResetEvent(thd.evt2);
+    Sleep(1000);
+    logresult("Thread 2.3", thd.ev2c == nnn);
+    SetEvent(thd.evt2);
+    thd.stop = true;
+    Sleep(1000);
 
 
+
+    thd.stop = false;
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::th3, &thd, 0, nullptr));
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::th4, &thd, 0, nullptr));
+
+    Sleep(1000);
+    logresult("Thread 3.1", thd.ev3c == 1);
+    ++thd.ev3c;
+    SetEvent(thd.evt3);
+    Sleep(1000);
+    logresult("Thread 3.2", thd.ev3c == 3);
+    SetEvent(thd.evt3);
+    Sleep(1000);
+    SetEvent(thd.evt3);
+    Sleep(1000);
+    logresult("Thread 3.3", thd.ev3c == 5);
+
+    ResetEvent(thd.evt4);
+    Sleep(1000);
+    int nn = thd.ev4c;
+    logresult("Thread 4.1", thd.ev4c > 100);
+    Sleep(1000);
+    logresult("Thread 4.2", thd.ev4c == nn);
+    SetEvent(thd.evt4);
+    Sleep(1000);
+    logresult("Thread 4.3", thd.ev4c > nn);
+    thd.stop = true;
+
+
+    Print("threadtest end\n");
+    Sleep(100000);
+}
 
 int proc_ut(const ts::wstrings_c & pars)
 {
@@ -145,8 +312,14 @@ int proc_ut(const ts::wstrings_c & pars)
     case 0:
         test_ipc_0( ts::get_exe_full_name() );
         return 0;
+    case 1:
+        expe();
+        return 0;
+    case 2:
+        threadtest();
+        return 0;
     }
-    
+
 
     return 0;
 }

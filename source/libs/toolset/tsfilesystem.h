@@ -106,46 +106,8 @@ public:
     }
 
     wstr_c fullname();
-    uint64 size()
-    {
-        if (0xffffffffffffffffull == sz_)
-        {
-#ifdef _WIN32
-            void *fh = f_open(fullname());
-            sz_ = f_size(fh);
-            tm_ = f_time_last_write(fh);
-            f_close(fh);
-#endif
-#ifdef _NIX
-            struct stat s;
-            if (-1 == stat(fncvt(fullname()), &s))
-                return 0;
-            sz_ = s.st_size;
-            tm_ = (uint64)s.st_mtime * 10000000;
-#endif
-        }
-        return sz_;
-    }
-    uint64 modtime() // modification time
-    {
-        if (0 == tm_)
-        {
-#ifdef _WIN32
-            void *fh = f_open(fullname());
-            sz_ = f_size(fh);
-            tm_ = f_time_last_write(fh);
-            f_close(fh);
-#endif
-#ifdef _NIX
-            struct stat s;
-            if (-1 == stat(fncvt(fullname()), &s))
-                return 0;
-            sz_ = s.st_size;
-            tm_ = (uint64)s.st_mtime * 10000000;
-#endif
-        }
-        return tm_;
-    };
+    uint64 size();
+    uint64 modtime(); // modification time
 };
 
 typedef fastdelegate::FastDelegate< scan_dir_e(int , scan_dir_file_descriptor_c &) > SCAN_DIR_CALLBACK_H;
@@ -187,22 +149,22 @@ bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
 uint64 TSCALL get_free_space( const wstr_c &path );
 
-struct extension_s : public movable_flag<true>
+struct filefilter_s : public movable_flag<true>
 {
-    ts::wstr_c ext;
+    ts::wstr_c wildcard;
     ts::wstr_c desc;
 };
 
-struct extensions_s
+struct filefilters_s
 {
-    extensions_s():exts(nullptr, 0) {}
-    extensions_s(const extension_s *e, ts::aint cnt, int def = -1):exts(e,cnt), index(def) {}
-    array_wrapper_c<const extension_s> exts;
+    filefilters_s():filters(nullptr, 0) {}
+    filefilters_s(const filefilter_s *f, ts::aint cnt, int def = -1):filters(f,cnt), index(def) {}
+    array_wrapper_c<const filefilter_s> filters;
     aint index = -1;
-    const wchar *defext() const
+    const wchar *defwildcard() const
     {
-        if (index < 0 || index >= exts.size()) return nullptr;
-        return (exts.begin() + index)->ext.cstr();
+        if (index < 0 || index >= filters.size()) return nullptr;
+        return (filters.begin() + index)->wildcard.cstr();
     }
 };
 
@@ -297,12 +259,13 @@ class enum_files_c
 {
 #ifdef _WIN32
     uint8 data[ 768 ];
-    bool prepare_file();
-    void next_int();
 #endif
 #ifdef _NIX
-    STUB("");
+    uint8 data[ARCHBITS];
 #endif
+
+    bool prepare_file();
+    void next_int();
 
 public:
 

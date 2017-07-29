@@ -59,6 +59,13 @@ template<notice_e N> struct notice_t : public notice_s
     notice_t() :notice_s(N) {}
 };
 
+struct notice_kill_call_s : public notice_s
+{
+    int apid;
+    notice_kill_call_s(int apid) :notice_s(NOTICE_KILL_CALL_INPROGRESS), apid(apid) {}
+};
+
+
 struct notice_historian_s : public notice_s
 {
     contact_root_c *owner;
@@ -489,6 +496,7 @@ class gui_notice_foldershare_c : public gui_notice_c
     bool b_accept2(RID, GUIPARAM par); // select folder
     bool b_reject(RID, GUIPARAM par);
     bool b_dismiss(RID, GUIPARAM par);
+    bool b_explore(RID, GUIPARAM par);
     bool b_tryagain(RID, GUIPARAM par);
     bool b_refresh(RID, GUIPARAM par);
     

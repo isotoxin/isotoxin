@@ -312,13 +312,19 @@ void av_contact_s::play_audio( const s3::Format &fmt, const void *data, ts::aint
 }
 
 
-void av_contact_s::send_audio( const s3::Format& ifmt, const void *data, ts::aint size, bool clear_cvt_buffer )
+void av_contact_s::send_audio(const s3::Format& ifmt, const void *data, ts::aint size, bool clear_cvt_buffer)
 {
-    if ( clear_cvt_buffer || core->ap == nullptr )
+    if (clear_cvt_buffer || core->ap == nullptr)
+    {
         core->cvt.clear();
+        return; // just skip 1st portion of sound in clear_cvt_buffer
+    }
 
-    if ( 0 == ( remote_so & SO_RECEIVING_AUDIO ) || core->ap == nullptr )
+    if (0 == (remote_so & SO_RECEIVING_AUDIO))
+    {
+        core->cvt.clear();
         return;
+    }
 
     struct s
     {
@@ -493,18 +499,35 @@ void av_contacts_c::del( int tag )
     }
 }
 
-void av_contacts_c::stop_all_av()
+void av_contacts_c::remove_by_apid(int apid)
 {
-    notice_t<NOTICE_KILL_CALL_INPROGRESS>().send();
+    for (ts::aint i = m_contacts.size() - 1; i >= 0; --i)
+    {
+        av_contact_s *av = m_contacts.get(i);
+        if (av->with_apid(apid))
+            m_contacts.remove_slow(i);
+    }
+
+}
+
+void av_contacts_c::stop_all_av(int apid)
+{
+    bool ntf = false;
 
     ts::tmp_pointers_t< contact_root_c, 0 > tmp;
     for ( av_contact_s *av : m_contacts )
         tmp.set( av->core->c.get() );
 
-    for ( contact_root_c *c : tmp )
-        c->stop_av();
+    for (contact_root_c *c : tmp)
+        if (c->stop_av(apid))
+            ntf = true;
 
-    m_contacts.clear();
+    if (ntf)
+    {
+        remove_by_apid(apid);
+        notice_kill_call_s(apid).send();
+    }
+
 }
 
 void av_contacts_c::clear()

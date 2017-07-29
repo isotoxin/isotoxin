@@ -165,11 +165,11 @@ inline void _mm_pause() { usleep( 0 ); }
 #define SLxInterlockedCompareExchange32(a,b,c)   __sync_val_compare_and_swap(a,c,b)
 #define SLxInterlockedCompareExchange2(a,b,c)    __sync_val_compare_and_swap(a,c,b)
 #define SLxInterlockedCompareExchange64(a,b,c)   __sync_val_compare_and_swap(a,c,b)
-#define SLxInterlockedAdd  __sync_fetch_and_add
-#define SLxInterlockedAdd64 __sync_fetch_and_add
-#define SLxInterlockedAnd64 __sync_fetch_and_and
-#define SLxInterlockedIncrement(a) __sync_fetch_and_add(a,1)
-#define SLxInterlockedDecrement(a) __sync_fetch_and_sub(a,1)
+#define SLxInterlockedAdd  __sync_add_and_fetch
+#define SLxInterlockedAdd64 __sync_add_and_fetch
+#define SLxInterlockedAnd64 __sync_and_and_fetch
+#define SLxInterlockedIncrement(a) __sync_add_and_fetch(a,1)
+#define SLxInterlockedDecrement(a) __sync_sub_and_fetch(a,1)
 
 inline int64 SLlInterlockedExchangeAdd64(volatile int64* lock, int64 adding)
 {
@@ -454,14 +454,14 @@ struct auto_simple_lock
 
 #define SIMPLELOCK( ll ) spinlock::auto_simple_lock UNIQIDLINE(__slock)( ll )
 
-inline void increment( volatile long3264 &lock )
+inline long3264 increment( volatile long3264 &lock )
 {
-    SLxInterlockedIncrement( &lock );
+    return SLxInterlockedIncrement( &lock );
 }
 
-inline void decrement( volatile long3264 &lock )
+inline long3264 decrement( volatile long3264 &lock )
 {
-    SLxInterlockedDecrement( &lock );
+    return SLxInterlockedDecrement( &lock );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -482,7 +482,7 @@ template <typename VARTYPE> class syncvar
         read_c & operator = (const read_c &);
         read_c(const read_c &);
     public:
-        read_c( read_c &&r ): var(r.var), host(r.host), locked(r.locked)
+        read_c( read_c &&r ): var(r.var), host(r.host)
         {
             r.var = nullptr;
             r.host = nullptr;
