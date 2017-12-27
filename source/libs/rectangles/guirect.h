@@ -515,9 +515,10 @@ public:
 class MODIFY : public rectprops_c
 {
 	guirect_c *client;
+    bool by_system = false; // modification from system
 public:
 	MODIFY(RID id);
-	MODIFY(guirect_c &r);
+	MODIFY(guirect_c &r, bool no_apply = false);
 	~MODIFY();
 
     template<typename T> T & as() { return SAFE_REF(dynamic_cast<T *>(client)); }
@@ -784,7 +785,7 @@ public:
         maxsz = tmin(maxsz, get_max_size());
     }
 
-	virtual void apply(const rectprops_c &pss);
+    void change(const rectprops_c &pss, bool by_system);
 
     // sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID _rid, evt_data_s &data ) override;

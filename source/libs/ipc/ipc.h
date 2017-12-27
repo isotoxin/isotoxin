@@ -37,9 +37,9 @@ namespace ipc
     struct ipc_junction_s
     {
 #if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
-        enum { internal_data_size = 191 * 2 - 37 };
+        enum { internal_data_size = 192 * 2 - 22 };
 #else
-        enum { internal_data_size = 191 };
+        enum { internal_data_size = 292 };
 #endif
 
         char buffer[ internal_data_size ]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine

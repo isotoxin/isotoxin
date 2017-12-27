@@ -1,42 +1,61 @@
 #pragma once
 
 #ifdef _WIN32
-#include <crtdefs.h>
-#endif
-#ifdef _NIX
-#include <stdlib.h>
-#endif // _NIX
-
-#include <malloc.h>
-#include <memory.h>
-
 // disable std::string (msvc)
-#ifdef _WIN32
+#include <crtdefs.h>
 #define _STRING_
 #define _XSTRING_
 #define _CSTDIO_
 #define _IOSFWD_
+#define _HAS_OLD_IOSTREAMS_MEMBERS 0
+#define _FSTREAM_
+#define _SSTREAM_
+#include <stdio.h>
+#endif
+
+#ifndef _NIX
+#ifdef __GNUC__
+#define _NIX
+#endif
 #endif
 
 // disable std::string (g++)
 #ifdef _NIX
 #define _GLIBCXX_STRING
-#define _CHAR_TRAITS_H
-#define _LOCALE_CLASSES_H
-#define _GLIBCXX_SYSTEM_ERROR
 #define _GLIBCXX_IOSFWD
 #define _LOCALE_FWD_H
-#define _IOS_BASE_H
-#define _GLIBXX_STREAMBUF
-#define _STREAMBUF_ITERATOR_H
 #define _LOCALE_FACETS_H
 #define _BASIC_IOS_H
 #define _OSTREAM_INSERT_H
+#define _GLIBCXX_STDEXCEPT
+#define _GLIBCXX_SSTREAM
+#define _GLIBCXX_FSTREAM
 #define _GLIBCXX_OSTREAM
 #define _GLIBCXX_ISTREAM
-#define _STREAM_ITERATOR_H
-#define _GLIBCXX_STDEXCEPT
+#define _GLIBCXX_IOSTREAM
+#define _GLIBCXX_RANDOM
+#define _GLIBCXX_SYSTEM_ERROR 1
+#define _GLIBXX_STREAMBUF 1
+#define _CHAR_TRAITS_H 1
+#define _BASIC_STRING_H 1
+#define _BASIC_STRING_TCC 1
+#define _LOCALE_CLASSES_H 1
+#define _IOS_BASE_H 1
+#define _STREAM_ITERATOR_H 1
+#define _STREAMBUF_ITERATOR_H 1
+#include <stdlib.h>
+#include <type_traits>
+#include <iterator>
+
+namespace std
+{
+    template< class IntType = int > class uniform_int_distribution {};
+}
+
 #endif
+
+#include <malloc.h>
+#include <memory.h>
 
 
 namespace std
@@ -49,10 +68,6 @@ namespace std
 
 #ifdef _WIN32
 #include <xutility>
-#endif
-#ifdef _NIX
-#include <type_traits>
-#include <iterator>
 #endif
 
 #pragma push_macro("CONSTASTR")
@@ -354,6 +369,12 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
 
             TCH & operator*() { return *super::p; }
 
+            ptrdiff_t operator-(iterator d) const
+            {
+                return super::p - d.p;
+            }
+
+
             bool operator==( const iterator&itr )
             {
                 return super::p == itr.p;
@@ -402,7 +423,7 @@ void    str_wrap_text_uppercase( char *out, ZSTRINGS_SIGNED maxlen );
             return *this;
         }
 
-        template<typename TT> string_t &assign( iterator_t<TT> f, iterator_t<TT> l ) { set( sptr<TCH>( f.p, static_cast<int>(l.p - f.p) ) ); return *this; }
+        template<typename TT> string_t &assign( iterator_t<TT> f, iterator_t<TT> l ) { super::set( sptr<TCH>( f.p, static_cast<int>(l.p - f.p) ) ); return *this; }
 
         string_t(size_t n, bool set0len) : str_t<TCH>(static_cast<int>(n), set0len) {}
         string_t(size_t n, TCH c) { super::fill(static_cast<int>(n), c); }

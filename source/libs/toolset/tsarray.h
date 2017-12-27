@@ -252,7 +252,7 @@ protected:
             subcopy1<TFROM, std::is_same<T, typename std::remove_reference<TFROM>::type>::value, is_movable<T>::value>::copy(to,from);
         }
     };
-    template<typename TFROM> struct copy<TFROM, true, false>
+    template<typename TFROM> struct copy<TFROM, true, false> // target initialized, copy
     {
         static void c(T &to, TFROM from)
         {

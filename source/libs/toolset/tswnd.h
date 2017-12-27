@@ -68,6 +68,7 @@ struct wnd_show_params_s
     bool toolwindow = false;
     bool layered = false;
     bool acceptfiles = false;
+    bool onchangebysystem = false;
 
     virtual void apply( bool update_frame, bool force_apply_now ) {};
 };

@@ -1,5 +1,9 @@
 #include "hunspell_io.h"
 
+#ifdef __GNUC__
+#define __forceinline inline
+#endif
+
 __forceinline bool is_nl( char c, char breakchar )
 {
     if ( breakchar ) return breakchar == c;

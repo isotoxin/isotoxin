@@ -3,12 +3,15 @@
 #include "glyphscache.h"
 
 #ifndef TS_SKIP_FREETYPE
+#ifdef _MSC_VER
 #pragma pack(push,1)
+#endif
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#ifdef _MSC_VER
 #pragma pack(pop)
+#endif
 #include <freetype/ftmodapi.h>
-#include <freetype/ftttdrv.h>
 #endif
 
 //-V:idata:807
@@ -311,6 +314,15 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
             buf = g_fileop->load(sysdir);
             if (buf) break;
 #endif
+#ifdef _NIX
+            // use nix_fonts.conf to find system linux fonts
+            ts::blob_c alsb = g_fileop->load(CONSTWSTR("nix_fonts.conf"));
+            ts::wstrmap_c als(ts::from_utf8(alsb.cstr()));
+            ts::wstr_c nfn = als.get(face,face);
+            buf = g_fileop->load(nfn);
+            if (buf) break;
+
+#endif // _NIX
 
             ERROR("Font '%s' not found. Check path! Current path is: %s", to_str(face).cstr(), to_str(idta.fonts_dirs.join(CONSTWSTR("\r\n"))).cstr());
 

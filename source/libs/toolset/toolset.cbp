@@ -21,6 +21,8 @@
 					<Add option="-std=c++14" />
 					<Add option="-m64" />
 					<Add option="-g" />
+					<Add option="-Wno-unused-variable" />
+					<Add option="-Wno-unknown-pragmas" />
 					<Add option="-D_DEBUG" />
 					<Add option="-D_NIX" />
 					<Add directory="$(PROJECTDIR)" />
@@ -78,6 +80,9 @@
 		<Unit filename="_nix/nix_master.inl">
 			<Option virtualFolder="src/_nix/" />
 			<Option target="&lt;{~None~}&gt;" />
+		</Unit>
+		<Unit filename="_nix/nix_wnd.inl">
+			<Option virtualFolder="src/_nix/" />
 		</Unit>
 		<Unit filename="asm/a64_resample_yasm_linux.asm">
 			<Option virtualFolder="src/internal/asm/" />

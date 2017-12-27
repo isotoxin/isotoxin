@@ -1032,7 +1032,12 @@ public:
     }
     /*virtual*/ ts::ivec2 get_max_size() const override
     {
-        return ts::ivec2(maximum<ts::int16>::value, height);
+        enum
+        {
+            max_of_int16 = maximum<ts::int16>::value,
+        };
+
+        return ts::ivec2(max_of_int16, height);
     }
     /*virtual*/ void created() override
     {

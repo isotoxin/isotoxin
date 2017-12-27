@@ -10,7 +10,7 @@
 #endif // _NIX
 
 
-#define IPCVER 2
+#define IPCVER 3
 
 #ifndef __STR1__
 #define __STR2__(x) #x
@@ -38,12 +38,33 @@ enum datatype_e
     DATATYPE_DATA_BIG,
 };
 
+struct instance_id_s
+{
+    uint32_t pid = 0;
+    uint32_t inst = 0;
+    //operator bool() const { return pid != 0; }
+    void clear() { pid = 0; inst = 0; }
+    void init()
+    {
+        static spinlock::long3264 instpool = 0;
+        pid = GetCurrentProcessId();
+        inst = static_cast<uint32_t>(spinlock::increment(instpool));
+    }
+    bool operator!=(const instance_id_s&iid) const
+    {
+        return pid != iid.pid || inst != iid.inst;
+    }
+
+};
+
+
 struct handshake_ask_s
 {
     int datasize = sizeof(handshake_ask_s);
     int datatype = DATATYPE_HANDSHAKE_ASK;
     int version = IPCVER;
-    uint32_t pid = GetCurrentProcessId(); // processid
+    instance_id_s iid;
+    handshake_ask_s(instance_id_s iid) :iid(iid) {}
 };
 
 struct handshake_answer_s
@@ -51,7 +72,8 @@ struct handshake_answer_s
     int datasize = sizeof(handshake_ask_s);
     int datatype = DATATYPE_HANDSHAKE_ANSWER;
     int version = IPCVER;
-    uint32_t pid = GetCurrentProcessId(); // processid
+    instance_id_s iid;
+    handshake_answer_s(instance_id_s iid) :iid(iid) {}
 };
 
 struct new_xchg_buffer_s
@@ -84,7 +106,7 @@ struct xchg_buffer_header_s
     spinlock::long3264 sync;
     int allocated;
     int sendsize;
-    uint32_t pid; // owner / sender
+    instance_id_s iid; // owner's / sender's uid
     uint32_t lastusetime;
     bstate_e st;
 
@@ -125,7 +147,7 @@ struct ipc_data_s
     idlejob_func *idlejobhandler;
     void *par_data;
     void *par_idlejob;
-
+    instance_id_s iid; // instance uid
 
     struct exchange_buffer_s
     {
@@ -156,7 +178,7 @@ struct ipc_data_s
 
 
     HANDLE watchdog[2];
-    uint32_t other_pid;
+    instance_id_s other_iid;
     volatile bool quit_quit_quit;
     volatile bool watch_dog_works;
     volatile bool cleaup_buffers_signal;
@@ -239,7 +261,6 @@ struct ipc_data_s
             __debugbreak(); // sync must be locked
 #endif // _DEBUG
 
-        //DWORD pid = GetCurrentProcessId();
         uint32_t timestump = GetTickCount();
 
         for (int i = xchg_buffers_count-1; i >= 0 ; --i)
@@ -295,19 +316,19 @@ struct ipc_data_s
         switch(d.datatype)
         {
         case DATATYPE_HANDSHAKE_ASK:
-            if (other_pid || d.datasize != sizeof(handshake_ask_s))
+            if (other_iid.pid || d.datasize != sizeof(handshake_ask_s))
                 OOPS;
 
             {
-                handshake_ask_s hsh;
+                handshake_ask_s hsh(iid);
 
                 ReadFile(pipe_in, ((char *)&hsh) + sizeof(data_s), sizeof(handshake_ask_s) - sizeof(data_s), &r, nullptr);
                 if (r != sizeof(handshake_ask_s) - sizeof(data_s) || hsh.version != IPCVER)
                     OOPS;
-                other_pid = hsh.pid;
+                other_iid = hsh.iid;
             }
 
-            send( handshake_answer_s() );
+            send( handshake_answer_s(iid) );
             return true;
         case DATATYPE_IDLEJOB_ASK:
             send(signal_s<DATATYPE_IDLEJOB_ANSWER>());
@@ -362,16 +383,15 @@ struct ipc_data_s
             return true;
         case DATATYPE_BUFFER_SENT:
             {
-                uint32_t pid = GetCurrentProcessId();
                 spinlock::auto_simple_lock l(sync);
                 for (int i = 0; i < xchg_buffers_count;++i)
                 {
                     exchange_buffer_s &b = xchg_buffers[i];
                     spinlock::auto_simple_lock x(b.ptr->sync);
-                    if (b.ptr->st == xchg_buffer_header_s::BST_SEND && b.ptr->pid != pid)
+                    if (b.ptr->st == xchg_buffer_header_s::BST_SEND && b.ptr->iid != iid)
                     {
                         b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
-                        b.ptr->pid = pid;
+                        b.ptr->iid = iid;
                         b.ptr->lastusetime = GetTickCount();
 
                         xchg_buffer_header_s *hdr = b.ptr;
@@ -453,9 +473,9 @@ DWORD WINAPI watchdog(LPVOID p)
 
     for(;!d.quit_quit_quit;)
     {
-        if (d.other_pid)
+        if (d.other_iid.pid)
         {
-            d.watchdog[0] = OpenProcess(SYNCHRONIZE,FALSE, d.other_pid);
+            d.watchdog[0] = OpenProcess(SYNCHRONIZE,FALSE, d.other_iid.pid);
             if (!d.watchdog[0])
             {
                 d.quit_quit_quit = true;
@@ -475,12 +495,12 @@ DWORD WINAPI watchdog(LPVOID p)
             break;
         }
 
-        if (d.other_pid)
+        if (d.other_iid.pid)
         {
-            HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, d.other_pid);
+            HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, d.other_iid.pid);
             if (h)
             {
-                DWORD info = GetProcessVersion(d.other_pid);
+                DWORD info = GetProcessVersion(d.other_iid.pid);
                 if (info == 0) { CloseHandle(h); h = nullptr; }
             }
             if (!h) d.send(signal_s<DATATYPE_FIN_ASK>());
@@ -497,7 +517,34 @@ DWORD WINAPI watchdog(LPVOID p)
 #ifdef _NIX
 uint32_t watchdog(void *p)
 {
+    ipc_data_s &d = *(ipc_data_s *)p;
+    d.watch_dog_works = true;
 
+    for(;!d.quit_quit_quit;)
+    {
+        if (d.other_iid.pid)
+        {
+            if ( getpgid(d.other_iid.pid) < 0 )
+            {
+                d.quit_quit_quit = true;
+                d.send(signal_s<DATATYPE_FIN_ASK>());
+                break;
+            }
+            DWORD rtn = WaitForSingleObject(d.watchdog[1], 1001);
+
+            if (rtn - WAIT_OBJECT_0 == 0)
+            {
+                d.quit_quit_quit = true; // terminate partner process - is always emergency_state
+                d.send(signal_s<DATATYPE_FIN_ASK>());
+            }
+            break;
+        } else
+        {
+            Sleep(10);
+        }
+    }
+
+    d.watch_dog_works = false;
     return 0;
 }
 #endif
@@ -508,6 +555,7 @@ int ipc_junction_s::start( const char *junction_name )
     char buf[ MAX_PATH ];
     static_assert( ipc_junction_s::internal_data_size >= sizeof(ipc_data_s), "update size of ipc_junction_s" );
     ipc_data_s &d = (ipc_data_s &)(*this);
+    d.iid.init();
 
     bool is_client = false;
 
@@ -563,7 +611,7 @@ int ipc_junction_s::start( const char *junction_name )
     }
 
     d.sync = 0;
-    d.other_pid = 0;
+    d.other_iid.clear();
     d.datahandler = nullptr;
     d.idlejobhandler = nullptr;
     d.watchdog[0] = nullptr;
@@ -576,7 +624,7 @@ int ipc_junction_s::start( const char *junction_name )
 
     if (is_client)
     {
-        if ( !d.send( handshake_ask_s() ))
+        if ( !d.send( handshake_ask_s(d.iid) ))
         {
         byebye:
             if (d.pipe_in) CloseHandle(d.pipe_in);
@@ -586,7 +634,7 @@ int ipc_junction_s::start( const char *junction_name )
         }
 
         DWORD r;
-        handshake_answer_s hsh;
+        handshake_answer_s hsh(d.iid);
         for(;;)
         {
             ReadFile(d.pipe_in, &hsh, sizeof(hsh), &r, nullptr);
@@ -605,7 +653,7 @@ int ipc_junction_s::start( const char *junction_name )
         if (hsh.datasize != sizeof(hsh) || hsh.datatype != DATATYPE_HANDSHAKE_ANSWER || hsh.version != IPCVER)
             goto byebye;
 
-        d.other_pid = hsh.pid;
+        d.other_iid = hsh.iid;
 
     }
 
@@ -646,7 +694,7 @@ void ipc_junction_s::stop()
                 ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
                 spinlock::auto_simple_lock x(b.ptr->sync);
                 if (b.ptr->st == xchg_buffer_header_s::BST_LOCKED)
-                    if (d.other_pid != b.ptr->pid)
+                    if (d.other_iid != b.ptr->iid)
                         continue; // we cant kill locked buffer due memory access violation
 
                 b.ptr->st = xchg_buffer_header_s::BST_DEAD;
@@ -718,7 +766,7 @@ void *ipc_junction_s::lock_buffer(int size)
             if (b.ptr->allocated >= size)
             {
                 b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
-                b.ptr->pid = pid;
+                b.ptr->iid = d.iid;
                 b.ptr->lastusetime = timestump;
                 return b.ptr->getptr();
             }
@@ -754,7 +802,7 @@ void *ipc_junction_s::lock_buffer(int size)
         return nullptr;
     }
     b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
-    b.ptr->pid = pid;
+    b.ptr->iid = d.iid;
     b.ptr->allocated = size;
     b.ptr->lastusetime = timestump;
 
@@ -779,7 +827,7 @@ void ipc_junction_s::unlock_send_buffer(const void *ptr, int sendsize)
         if (b.ptr->isptr( ptr ))
         {
 #ifdef _DEBUG
-            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->pid != GetCurrentProcessId())
+            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->iid.pid != GetCurrentProcessId())
                 __debugbreak();
 #endif // _DEBUG
 
@@ -824,7 +872,7 @@ void ipc_junction_s::unlock_buffer(const void *ptr)
             }
 
 #ifdef _DEBUG
-            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->pid != GetCurrentProcessId())
+            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->iid.pid != GetCurrentProcessId())
                 __debugbreak();
 #endif // _DEBUG
 
@@ -874,7 +922,7 @@ bool ipc_junction_s::wait_partner(int ms)
     {
         if (!d.tick())
             return false;
-        if (d.other_pid) return true;
+        if (d.other_iid.pid) return true;
     }
 
     return false;

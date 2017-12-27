@@ -1522,7 +1522,7 @@ public:
 #error "sorry, big endian not yet supported"
 #endif
 
-        if (!ASSERT(index >= 0 && index < NUM_OF_ELEMENTS)) return TYPEOFRV(0);
+        if (!ASSERT(index >= 0 && index < NUM_OF_ELEMENTS)) return (TYPEOFRV)0;
         aint disp = (index * BITS_PER_ELEMENT) >> 3;
         aint bitsshift = (index * BITS_PER_ELEMENT) - (disp * 8);
         return (MAKEMASK(BITS_PER_ELEMENT, bitsshift) & (*(TYPEOFRV *)(data+disp))) >> bitsshift;

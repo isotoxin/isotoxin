@@ -84,10 +84,10 @@ __pragma( message( "SLERROR undefined" ) )
 #ifdef _WINDOWS_
 #ifndef INLINE_PTHREAD_SELF
 #define INLINE_PTHREAD_SELF
-SLINLINE unsigned long pthread_self() { return ::GetCurrentThreadId(); }
+SLINLINE unsigned long tid_self() { return ::GetCurrentThreadId(); }
 #endif
 #else
-unsigned long pthread_self();
+unsigned long tid_self();
 #endif
 
 #pragma intrinsic (_InterlockedExchangeAdd, _InterlockedCompareExchange64)
@@ -185,8 +185,7 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
 {
     return __sync_lock_test_and_set(lock, newValue);
 }
-
-SLINLINE unsigned long pthread_self() { return ::pthread_self(); }
+SLINLINE uint32_t tid_self() { return ::pthread_self() & 0xffffffff; }
 
 #else
 #error "Sorry, can't compile: unknown target system"
@@ -222,7 +221,7 @@ SLINLINE unsigned long pthread_self() { return ::pthread_self(); }
 
 SLINLINE void lock_write(RWLOCK &lock)
 {
-	RWLOCKVALUE thread = pthread_self();
+	RWLOCKVALUE thread = tid_self();
 	RWLOCKVALUE val = lock;
 	if ((val & LOCK_THREAD_MASK) == thread) // second lock same thread
 	{
@@ -254,7 +253,7 @@ SLINLINE void lock_write(RWLOCK &lock)
 
 SLINLINE void lock_read(RWLOCK &lock)
 {
-	RWLOCKVALUE thread = pthread_self();
+	RWLOCKVALUE thread = tid_self();
 	RWLOCKVALUE val = lock;
 	if ((val & LOCK_THREAD_MASK) == thread)
 	{
@@ -277,7 +276,7 @@ SLINLINE void lock_read(RWLOCK &lock)
 
 SLINLINE bool try_lock_read( RWLOCK &lock )
 {
-    RWLOCKVALUE thread = pthread_self();
+    RWLOCKVALUE thread = tid_self();
     RWLOCKVALUE val = lock;
     if ( ( val & LOCK_THREAD_MASK ) == thread )
     {
@@ -296,7 +295,7 @@ SLINLINE bool try_lock_read( RWLOCK &lock )
 
 SLINLINE bool try_lock_write(RWLOCK &lock)
 {
-	RWLOCKVALUE thread = pthread_self();
+	RWLOCKVALUE thread = tid_self();
 	RWLOCKVALUE val = lock;
 	if ((val & LOCK_THREAD_MASK)==thread) // second lock
 	{
@@ -312,7 +311,7 @@ SLINLINE void unlock_write(RWLOCK &lock)
 {
 	RWLOCKVALUE tmp = lock;
 
-	RWLOCKVALUE thread=pthread_self();
+	RWLOCKVALUE thread = tid_self();
     if((tmp & LOCK_THREAD_MASK)!=thread)
         SLERROR("DEAD LOCK: %llu", lock);
 
@@ -363,7 +362,7 @@ struct auto_lock_read
 
 inline void simple_lock(volatile long3264 &lock)
 {
-    long3264 myv = pthread_self();
+    long3264 myv = tid_self();
     #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock == myv)
         __debugbreak();
@@ -387,7 +386,9 @@ inline void simple_lock(volatile long3264 &lock)
 
 inline bool try_simple_lock(volatile long3264 &lock)
 {
-    long3264 myv = pthread_self();
+    long3264 myv = 0;
+    uint32_t x = tid_self();
+    myv = x;
     #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock == myv)
         __debugbreak();
@@ -404,7 +405,7 @@ inline bool try_simple_lock(volatile long3264 &lock)
 
 inline void simple_unlock(volatile long3264 &lock)
 {
-    long3264 myv = pthread_self();
+    long3264 myv = tid_self();
     #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock != myv)
         __debugbreak();

@@ -18,7 +18,7 @@ namespace ts
 
 task_executor_c::task_executor_c()
 {
-    base_thread_id = spinlock::pthread_self();
+    base_thread_id = spinlock::tid_self();
     evt = CreateEvent(nullptr,FALSE,FALSE,nullptr);
     maximum_workers = g_cpu_cores - 1;
     if (maximum_workers < 1) maximum_workers = 1;
@@ -195,7 +195,7 @@ void task_executor_c::tick()
 
     int finished_tasks = 0;
 
-    if ( spinlock::pthread_self() == base_thread_id )
+    if ( spinlock::tid_self() == base_thread_id )
     {
         while (results.try_pop(t))
         {

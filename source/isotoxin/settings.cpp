@@ -23,6 +23,10 @@
 #define PROTO_ICON_SIZE 32
 
 
+#define DIALOG_ADVANCED_MINW 400
+
+
+
 #define AM_TOOLS TTT("Tools", 432)
 #define AM_MISC TTT("Misc", 435)
 #define AM_DEBUG TTT("Debug", 395)
@@ -1013,7 +1017,7 @@ namespace
 
             int ctln = 1;
             int prevtype = 0;
-            ts::str_c props; props.set_as_int(minw - 100).append(CONSTASTR(",100"));
+            ts::str_c props; props.set_as_int(DIALOG_ADVANCED_MINW - 100).append(CONSTASTR(",100"));
 
             for (ts::token<char> t(setts->get_advanced(), '/'); t; ++t)
             {
@@ -1061,7 +1065,7 @@ namespace
                     setitem_int_s *i = TSNEW(setitem_int_s, value.as_int(), aname);
                     setitems.add(i);
 
-                    dm().hgroup(ts::wsptr(), props, minw);
+                    dm().hgroup(ts::wsptr(), props, DIALOG_ADVANCED_MINW);
                     dm().label(name).sethint(hint);
                     dm().textfield(ts::wsptr(),ts::from_utf8(value), DELEGATE(i, onchange)).sethint(hint);
 
@@ -1080,7 +1084,7 @@ namespace
                     if (prevtype == 0 || prevtype == 2 || prevtype == 3)
                         dm().vspace();
 
-                    dm().hgroup(ts::wsptr(), props, minw);
+                    dm().hgroup(ts::wsptr(), props, DIALOG_ADVANCED_MINW);
                     dm().label(name).sethint(hint);
                     dm().combik(ts::wsptr()).setmenu( i->menu() ).setname(cn).sethint(hint);
 
@@ -1122,8 +1126,6 @@ namespace
             return true;
         }
 
-        static const int minw = 400;
-
         ts::wstrmap_c labels;
 
     public:
@@ -1155,7 +1157,7 @@ namespace
 
         /*virtual*/ int unique_tag() override { return UD_ADVANCED_NETWORK_SETTINGS; }
 
-        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(minw, 420); }
+        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(DIALOG_ADVANCED_MINW, 420); }
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
         {
             return super::sq_evt(qp, rid, data);

@@ -37,14 +37,15 @@ void LogMessage(const char *caption, const char *msg)
 	if (f)
 	{
 		char module[MAX_PATH_LENGTH];
-        get_exe_full_name(module, ARRAY_SIZE(module));
+        aint l = get_exe_full_name(module, ARRAY_SIZE(module));
+        aint lastslash = 1 + pstr_c(asptr(module,l)).find_last_pos_of(CONSTASTR("\\/"));
 		time_t curtime;
 		time(&curtime);
 		const tm &t = *localtime(&curtime);
         if (caption)
-		    fprintf(f, "-------------------------\r\nMODULE: %s\r\nDATETIME: %i-%02i-%02i %02i:%02i\r\nCAPTION: %s\r\nMESSAGE: %s\r\n\r\n", strrchr(module, '\\')+1, t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, caption, msg);
+		    fprintf(f, "-------------------------\r\nMODULE: %s\r\nDATETIME: %i-%02i-%02i %02i:%02i\r\nCAPTION: %s\r\nMESSAGE: %s\r\n\r\n", module+lastslash, t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, caption, msg);
         else
-            fprintf(f, "%s (%i-%02i-%02i %02i:%02i) : %s\r\n", strrchr(module, '\\') + 1, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, msg);
+            fprintf(f, "%s (%i-%02i-%02i %02i:%02i) : %s\r\n", module+lastslash, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, msg);
 		fclose(f);
 	}
 #endif
@@ -128,9 +129,12 @@ smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options )
     case IDCANCEL:
         return SMBR_CANCEL;
     }
-#endif
-
     return SMBR_UNKNOWN;
+#endif
+#ifdef _NIX
+    return master().sys_mb(caption, text, options);
+#endif // _NIX
+
 }
 
 
@@ -272,7 +276,7 @@ namespace
                 return;
             }
 
-            // Fill an IP address structure, to send an IP broadcast. The 
+            // Fill an IP address structure, to send an IP broadcast. The
             // packet will be broadcasted to the specified port.
             saUdpServ.sin_family = AF_INET;
             //InetPton(AF_INET, "127.0.0.1", &saUdpServ.sin_addr.s_addr);

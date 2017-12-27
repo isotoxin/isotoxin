@@ -843,7 +843,7 @@ bool gui_contact_item_c::allow_drop() const
                     };
 
 
-                    if ( CS_INVITE_RECEIVE != st && achtung->is_file_download() || achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
+                    if ( (CS_INVITE_RECEIVE != st && achtung->is_file_download()) || achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
                     {
                         draw_bg();
 

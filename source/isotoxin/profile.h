@@ -326,6 +326,27 @@ struct conference_s
 
     void change_keywords( const ts::wstr_c& newkeywords );
     bool is_hl_message( const ts::wsptr &message, const ts::wsptr &my_name ) const;
+
+    conference_s & operator=(conference_s && othc)
+    {
+        confa = othc.confa;
+        textmatchkeywords = std::move(othc.textmatchkeywords);
+
+        readtime = othc.readtime;
+        pubid = othc.pubid;
+        name = othc.name;
+        comment = othc.name;
+        keywords = othc.keywords;
+        proto_key = othc.proto_key;
+        tags = std::move(othc.tags);
+        flags = othc.flags;
+        id = othc.id;
+        proto_id = proto_id;
+
+    }
+private:
+    conference_s & operator=(const conference_s&othc) UNUSED;
+
 };
 
 DECLARE_MOVABLE(conference_s, true)
@@ -405,6 +426,9 @@ template<typename T, profile_table_e tabi> struct tableview_t
         bool is_deleted() const {return st == s_delete || st == s_deleted;}
         void temp() { st = s_temp; }
         bool is_temp() const { return st == s_temp; }
+
+        row_s(const row_s&r) {} // do nothing empty fake copy constructor never called, but required for instancing of template
+        row_s operator=(const row_s&r) { return *this; }  // do nothing empty fake operator never called, but required for instancing of template
     };
     ts::tmp_tbuf_t<int> *read_ids = nullptr;
     ts::array_inplace_t<row_s, 0> rows;

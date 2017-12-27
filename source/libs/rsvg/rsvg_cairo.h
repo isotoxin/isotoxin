@@ -25,6 +25,8 @@ class cairo_paths_c
         cairo_path_el_s() {};
     };
 
+    TS_STATIC_CHECK( sizeof(cairo_path_data_t) == sizeof(cairo_path_el_s), "!" );
+
     ts::array_inplace_t< cairo_path_el_s, 16 > paths;
     int last_move_to_index = -1;
 public:

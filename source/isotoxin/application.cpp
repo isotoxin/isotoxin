@@ -186,7 +186,7 @@ struct check_word_task : public ts::task_c
     {
         if ( g_app )
         {
-            ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+            ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
             if ( !splchk.expired() )
                 splchk->check_result( w, is_valid, std::move( suggestions ) );
@@ -197,7 +197,7 @@ struct check_word_task : public ts::task_c
     {
         if (g_app)
         {
-            ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+            ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
             if ( !canceled && !w.is_empty() )
                 result();

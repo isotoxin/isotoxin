@@ -23,21 +23,15 @@
 //	3.	This notice may not be removed or altered from any source
 //		distribution.
 
+#pragma once
+
 #ifndef f_VD2_SYSTEM_VDTYPES_H
 #define f_VD2_SYSTEM_VDTYPES_H
-
-#ifdef _MSC_VER
-	#pragma once
-#endif
 
 #include <algorithm>
 #include <stdio.h>
 #include <stdarg.h>
 #include <new>
-
-#ifndef NULL
-#define NULL 0
-#endif
 
 ///////////////////////////////////////////////////////////////////////////
 //
@@ -98,7 +92,7 @@
 	#if defined(_MSC_VER)
 		typedef unsigned __int64	uint64;
 	#elif defined(__GNUC__)
-		typedef unsigned long long	uint64;
+		//typedef unsigned long long	uint64;
 	#endif
 	typedef signed int			sint32;
 	typedef unsigned int		uint32;
@@ -133,7 +127,7 @@
 	#error Please add an entry for your compiler for 64-bit constant literals.
 #endif
 
-	
+
 #define VDAPIENTRY			__cdecl
 
 #endif

@@ -308,24 +308,29 @@ long __stdcall crash_exception_filter( _EXCEPTION_POINTERS* pExp )
     return ts::exception_operator_c::exception_filter( pExp );
 }
 
+#endif
+
 void set_unhandled_exception_filter()
 {
-    ::SetUnhandledExceptionFilter( &ts::exception_operator_c::exception_filter );
-}
-
-void set_dump_filename( const ts::wsptr& n )
-{
-    ts::exception_operator_c::dump_filename.set(n);
-}
-
-void set_dump_type( bool full )
-{
-    MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)( MiniDumpWithFullMemory /*| MiniDumpWithProcessThreadData*/ | MiniDumpWithDataSegs | MiniDumpWithHandleData /*| MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo*/ );
-    if ( !full )
-        dump_type = (MINIDUMP_TYPE)( MiniDumpWithDataSegs | MiniDumpWithHandleData );
-    ts::exception_operator_c::set_dump_type( dump_type );
-
-}
-
-
+#ifdef _WIN32
+    ::SetUnhandledExceptionFilter(&ts::exception_operator_c::exception_filter);
 #endif
+}
+
+void set_dump_filename(const ts::wsptr& n)
+{
+#ifdef _WIN32
+    ts::exception_operator_c::dump_filename.set(n);
+#endif
+}
+
+void set_dump_type(bool full)
+{
+#ifdef _WIN32
+    MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory /*| MiniDumpWithProcessThreadData*/ | MiniDumpWithDataSegs | MiniDumpWithHandleData /*| MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo*/);
+    if (!full)
+        dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
+    ts::exception_operator_c::set_dump_type(dump_type);
+#endif
+}
+

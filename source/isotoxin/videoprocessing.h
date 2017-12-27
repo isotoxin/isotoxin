@@ -1,6 +1,8 @@
 #pragma once
 
+#ifdef _WIN32
 #include "dshowcap/dshowcapture.hpp"
+#endif // _WIN32
 
 struct vsb_descriptor_s
 {
@@ -156,6 +158,7 @@ public:
 
 };
 
+#ifdef _WIN32
 class vsb_dshow_camera_c : public vsb_c
 {
     class core_c : public ts::shared_object
@@ -221,6 +224,11 @@ public:
     // /*virtual*/ bool set_config( video_config_s& cfg ) override;
 
 };
+#define REAL_CAMERA_CLASS vsb_dshow_camera_c
+#define DSHOW_CAM_DEFINED
+#endif
+
+
 
 class vsb_desktop_c : public vsb_c
 {

@@ -1,7 +1,7 @@
 /*
     Simple Sound System
     (C) 2010-2015 TAV, ROTKAERMOTA (TOX: ED783DA52E91A422A48F984CAC10B6FF62EE928BE616CE41D0715897D7B7F6050B2F04AA02A1)
-    Original: 
+    Original:
         (code) https://code.google.com/p/s-3/downloads/list
         (Russian doc) http://www.gamedev.ru/projects/forum/?id=133398
 */
@@ -66,6 +66,7 @@ enum SoundGroup {S3_SOUND_GROUPS SG_COUNT};
 //typedef char SoundGroupsCountStaticCheck[SG_COUNT <= SG_MAX ? 1 : 0];
 
 class Player;
+class Slot;
 
 class Source // base for any sound (better use MSource/PSource)
 {

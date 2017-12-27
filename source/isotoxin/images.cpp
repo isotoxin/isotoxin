@@ -1,16 +1,5 @@
 #include "isotoxin.h"
 
-#ifdef _WIN32
-#define _NTOS_
-#pragma push_macro("ERROR")
-#undef ERROR
-#include <winsock2.h> // htonl
-#pragma pop_macro("ERROR")
-#endif // _WIN32
-#ifdef _NIX
-#include <arpa/inet.h> // htonl
-#endif // _NIX
-
 void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
     ts::irect r;
@@ -363,15 +352,20 @@ namespace
         }
     };
 
+#if TS_BENDIAN
+
 #define _SWAP_LONG(l)                \
             ( ( ((l) >> 24) & 0x000000FFL ) |       \
               ( ((l) >>  8) & 0x0000FF00L ) |       \
               ( ((l) <<  8) & 0x00FF0000L ) |       \
               ( ((l) << 24) & 0xFF000000L ) )
 
-#if LITTLEENDIAN
-    long INLINE htonl( long l ) {
+    long INLINE llong( long l ) {
         return _SWAP_LONG( l );
+    }
+#else
+    long INLINE llong(long l) {
+        return l;
     }
 #endif
 
@@ -449,8 +443,8 @@ namespace
                 b.load_from_disk_file(filename,false,10*1024*1024);
                 if (b.size() > 8)
                 {
-                    ts::uint32 sign = htonl(*(ts::uint32 *)b.data());
-                    if (1195984440 == sign)
+                    ts::uint32 sign = llong(*(ts::uint32 *)b.data());
+                    if (0x38464947 /*0x47494638*/ == sign)
                         pic.reset( TSNEW(gif_thumb_s) );
                     else
                         pic.reset( TSNEW(static_thumb_s) );
@@ -518,7 +512,7 @@ namespace
 
         void cleanup()
         {
-            if (size > 10000000) // FREE MEMORY
+            if (size > 10000000 && stuff.size() > 2) // FREE MEMORY
             {
                 ts::Time oldest = ts::Time::current();
                 ts::wstr_c fn;

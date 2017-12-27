@@ -33,7 +33,7 @@ int proc_upd(const ts::wstrings_c & pars)
     rslt = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50);
     rslt = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl");
-    
+
     rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
     rslt = curl_easy_setopt(curl, CURLOPT_HEADER, 0);
     rslt = curl_easy_setopt(curl, CURLOPT_PROXY, nullptr);
@@ -111,7 +111,7 @@ int proc_upd(const ts::wstrings_c & pars)
         rslt = curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pt);
     }
 
-    
+
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
     rslt = curl_easy_perform(curl);
 

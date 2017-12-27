@@ -419,7 +419,7 @@ void av_contacts_c::set_tag( contact_root_c *cr, int tag )
 
 av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
 {
-    ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+    ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
     for ( av_contact_s *avc : m_contacts )
         if ( avc->avkey == avkey )
@@ -459,7 +459,7 @@ av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
 
 void av_contacts_c::del( active_protocol_c *ap )
 {
-    ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+    ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
     for ( ts::aint i = m_contacts.size() - 1; i >= 0; --i )
     {
@@ -473,7 +473,7 @@ void av_contacts_c::del( active_protocol_c *ap )
 
 void av_contacts_c::del( contact_root_c *c )
 {
-    ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+    ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
     for ( ts::aint i = m_contacts.size() - 1; i >= 0; --i )
     {
@@ -487,7 +487,7 @@ void av_contacts_c::del( contact_root_c *c )
 
 void av_contacts_c::del( int tag )
 {
-    ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+    ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
     for ( ts::aint i = m_contacts.size() - 1; i >= 0; --i )
     {

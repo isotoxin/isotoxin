@@ -43,6 +43,10 @@ s3int Decoder::readCompressed(char *buffer, s3int size)
 	return (*readFunc)(buffer, (int)size, userPtr);
 }
 
+#ifdef __GNUC__
+#define _set_errno(x) (void)x
+#endif // __GNUC__
+
 class Decoder::DecIl//Decoder Internal
 {
 public:

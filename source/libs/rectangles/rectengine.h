@@ -217,14 +217,14 @@ public:
         {
             ts::aint j = i;
             while ( ++i < children.size() )
-                if ( rectengine_c * re = children.get( i ) )
+                if (!children.get(i).expired())
                 {
                     r.r1 = static_cast<int>( i );
                     break;
                 }
 
             while ( --j >= 0 )
-                if ( rectengine_c * re = children.get( j ) )
+                if (!children.get(j).expired())
                 {
                     r.r0 = static_cast<int>( j );
                     break;
@@ -237,8 +237,8 @@ public:
     {
         if ( index < 0 ) return -1;
         for ( ;index < children.size(); ++index )
-            if ( rectengine_c * re = children.get( index ) )
-                    return index;
+            if (!children.get(index).expired())
+                return index;
         return -1;
     }
 
@@ -254,7 +254,7 @@ public:
     void mouse_unlock();
 
     virtual void redraw(const ts::irect *invalidate_rect=nullptr) {}
-	virtual bool apply(rectprops_c &rpss, const rectprops_c &pss) { return rpss.change_to(pss); }
+	virtual bool change(rectprops_c &rpss, const rectprops_c &pss, bool /*by_system*/) { return rpss.change_to(pss); }
 
 	virtual draw_data_s & begin_draw() { return ts::make_dummy<draw_data_s>(); }
 	virtual void end_draw() {}
@@ -409,7 +409,7 @@ public:
     /*virtual*/ bool detect_hover(const ts::ivec2 & screenmousepos) const override { return getrect().getprops().is_visible() && syswnd.wnd && syswnd.wnd->is_hover( screenmousepos ); };
 
     /*virtual*/ void redraw(const ts::irect *invalidate_rect = nullptr) override;
-	/*virtual*/ bool apply(rectprops_c &rpss, const rectprops_c &pss) override;
+	/*virtual*/ bool change(rectprops_c &rpss, const rectprops_c &pss, bool by_system) override;
 	
 	/*virtual*/ draw_data_s & begin_draw() override;
 	/*virtual*/ void end_draw() override;

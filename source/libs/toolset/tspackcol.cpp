@@ -13,13 +13,12 @@ void    ccollection_c::clear()
     m_containers.clear(true);
 }
 
-uint  ccollection_c::add_container(const wsptr &name, int prior)
+uint  ccollection_c::add_container(const wstr_c &name, int prior)
 {
     for (container_c *pf : m_containers)
         if (pf->fn().equals(name)) return pf->get_id();
     
-    tmp_wstr_c n(name);
-    void * h = f_open(n);
+    void * h = f_open(name);
     if (!h)
     {
         // pack in pack not supported, sorry

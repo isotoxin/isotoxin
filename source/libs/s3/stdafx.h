@@ -6,8 +6,8 @@
 #include <math.h>
 #include <algorithm>
 #define FLAC__NO_DLL
-#include "../libflac/include/flac/stream_decoder.h"
-#include "../libvorbis/include/vorbis/vorbisfile.h"
+#include "libflac/include/FLAC/stream_decoder.h"
+#include "libvorbis/include/vorbis/vorbisfile.h"
 
 #ifdef _WIN32
 #include <dsound.h> // need to be included before spinlock
@@ -27,6 +27,12 @@ namespace s3
     (static_cast<uint32>(a)) | (static_cast<uint32>(b) << 8) | \
     (static_cast<uint32>(c) << 16) | (static_cast<uint32>(d) << 24))
 #endif
+
+#ifdef __GNUC__
+#define _cdecl
+#include "string.h"
+#define _ASSERT(x)
+#endif // __GNUC__
 
 //Для возможности глобальной перегрузки оператора new в использующих либу проектах
 #include <new>

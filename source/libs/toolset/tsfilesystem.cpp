@@ -103,7 +103,8 @@ namespace
         case SPTH_APPDATA:
             {
                 int l = get_system_path( path, SPTH_PERSONAL );
-                memcpy( path + l, L"/.config", 18 );
+                ts::wsptr a(CONSTWSTR("/.config"));
+                memcpy( path + l, a.s, (a.l+1) * sizeof(ts::wchar) );
                 return l + 8;
             }
         case SPTH_TEMP:
@@ -118,12 +119,16 @@ namespace
                     td.trunc_char('/');
                     return td.get_length();
                 }
-                memcpy( path, L"/tmp", 10 );
+                ts::wsptr a(CONSTWSTR("/tmp"));
+                memcpy( path, a.s, (a.l+1) * sizeof(ts::wchar) );
                 return 4;
             }
         case SPTH_BIN:
-            memcpy( path, L"/opt", 10 );
-            return 4;
+            {
+                ts::wsptr a(CONSTWSTR("/opt"));
+                memcpy( path, a.s, (a.l+1) * sizeof(ts::wchar) );
+                return 4;
+            }
         case SPTH_USENAME:
         {
             char username[MAX_PATH_LENGTH];
@@ -871,6 +876,12 @@ namespace ts
 		if (i<0) return name;
 		return wstr_c(name.cstr(), i + 1);
 	}
+    wstr_c TSCALL fn_get_path(const wsptr &name) // with ending slash
+    {
+        int i = pwstr_c(name).find_last_pos_of(CONSTWSTR("/\\"));
+        if (i < 0) return wstr_c(name);
+        return wstr_c(name.s, i + 1);
+    }
 
 	wstr_c TSCALL fn_change_name(const wsptr &full_, const wsptr &name)
 	{
@@ -972,7 +983,9 @@ namespace ts
         return GetModuleFileNameA( nullptr, buf, static_cast<DWORD>(buflen) );
 #endif // _WIN32
 #ifdef _NIX
-        return readlink( "/proc/self/exe", buf, buflen - 1 );
+        aint len = readlink( "/proc/self/exe", buf, buflen - 1 );
+        buf[len] = 0;
+        return len;
 #endif //_NIX
     }
 
@@ -1108,14 +1121,14 @@ namespace ts
 
         auto cvta = []( int a ) ->mode_t
         {
-            if ( a < 0 ) return S_IFDIR | S_IFREG;
-            if ( a & ATTR_DIR ) return S_IFREG;
+            if ( a < 0 ) return DT_DIR | DT_REG;
+            if ( a & ATTR_DIR ) return DT_DIR;
             return 0;
         };
 
         DIR *dir;
         class dirent *ent;
-        class stat st;
+        //class stat st;
 
         str_c path = to_utf8( wildcard );
         int i = path.find_last_pos( '/' );
@@ -1137,17 +1150,17 @@ namespace ts
         if ( nullptr == dir )
             return false;
 
-        mode_t a = cvta( attributes );
-        mode_t sa = cvta( skip_attributes );
+        unsigned char a = cvta( attributes );
+        unsigned char sa = cvta( skip_attributes );
 
         while ( ( ent = readdir( dir ) ) != nullptr )
         {
-            if ( st.st_mode & sa )
+            if ( ent->d_type & sa )
                 continue;
 
-            pstr_c sFileName( asptr( ent->d_name ) );
-            if ( st.st_mode & a )
+            if ( ent->d_type & a )
             {
+                pstr_c sFileName( asptr( ent->d_name ) );
                 if (fn_mask_match<char>( sFileName, mask ))
                 {
                     bResult = true;

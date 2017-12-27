@@ -54,6 +54,10 @@ DECLARE_MOVABLE( contact_id_s, true )
 #define LIBSUFFIX ".lib"
 #endif
 
+#ifdef __GNUC__
+#define _alloca alloca
+#endif // __GNUC__
+
 #ifdef _FINAL
 #define USELIB(ln) comment(lib, #ln LIBSUFFIX)
 #elif defined _DEBUG_OPTIMIZED

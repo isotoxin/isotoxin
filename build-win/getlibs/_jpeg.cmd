@@ -10,7 +10,7 @@ set op=%cd%
 set JPGARCHIVE=jpegsr6.zip
 set JPGURL=http://downloads.sourceforge.net/project/libjpeg/libjpeg/6b/%JPGARCHIVE%
 
-..\wget %JPGURL%
+..\wget --no-check-certificate %JPGURL%
 cd %libdir%\jpeg
 md src
 cd src

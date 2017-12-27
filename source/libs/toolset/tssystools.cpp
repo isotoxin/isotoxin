@@ -155,7 +155,8 @@ int     TSCALL monitor_count()
     return cnt;
 #endif
 #ifdef _NIX
-    DEBUG_BREAK();
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    return istuff.monitor_count();
 #endif
 }
 
@@ -182,7 +183,9 @@ irect   TSCALL monitor_get_max_size_fs(int monitor)
     return mm.rr;
 #endif
 #ifdef _NIX
-    DEBUG_BREAK();
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    return istuff.monitor_fs(monitor);
+
 #endif
 }
 
@@ -361,7 +364,7 @@ irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
 #endif // _WIN32
 #ifdef _NIX
     master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
-    DEBUG_BREAK();
+    return istuff.max_window_size(pt);
 #endif
 }
 
@@ -382,7 +385,7 @@ irect    TSCALL wnd_get_max_size(const irect &rfrom)
 #endif // _WIN32
 #ifdef _NIX
     master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
-    DEBUG_BREAK();
+    return istuff.max_window_size(rfrom);
 #endif
 }
 

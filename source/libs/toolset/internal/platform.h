@@ -3,6 +3,7 @@
 #ifdef _WIN32
 
 #include "../_win32/win32_inc.inl"
+#include <stdint.h>
 
 #ifndef _FINAL
 #include <DbgHelp.h>

@@ -3,7 +3,8 @@
 #define WIN32EMU
 
 #include <sys/eventfd.h>
-
+#include <sys/mman.h>
+#include <sys/time.h>
 #include <sys/cdefs.h>
 #include <string.h>
 #include <malloc.h>
@@ -23,6 +24,8 @@ enum w32e_bool
     FALSE,
     TRUE
 };
+
+#define __stdcall
 
 typedef uint32_t DWORD;
 
@@ -45,8 +48,8 @@ enum w32e_consts
     ERROR_PIPE_LISTENING = 536,
     ERROR_PIPE_BUSY = 231,
 
-    GENERIC_READ = (0x80000000L),
-    GENERIC_WRITE = (0x40000000L),
+    GENERIC_READ = (0x80000000U),
+    GENERIC_WRITE = (0x40000000),
 
     CREATE_NEW = 1,
     CREATE_ALWAYS = 2,
@@ -57,7 +60,7 @@ enum w32e_consts
 
     PIPE_ACCESS_INBOUND = 0x00000001,
     PIPE_ACCESS_OUTBOUND = 0x00000002,
-    FILE_FLAG_FIRST_PIPE_INSTANCE = 2,
+    FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000,
 
     PIPE_TYPE_BYTE = 1,
     PIPE_READMODE_BYTE = 2,
@@ -139,10 +142,40 @@ struct w32e_handle_shm_s : public w32e_handle_s
 
 struct w32e_handle_pipe_s : public w32e_handle_s
 {
-    int h;
+    int h = -1;
+    char *name;
 
-    w32e_handle_pipe_s(int h):h(h)
+    w32e_handle_pipe_s(const char *iname)
     {
+        int l = strlen(iname);
+        name = (char *)malloc(l+1);
+        memcpy(name,iname,l+1);
+    }
+    ~w32e_handle_pipe_s()
+    {
+        free(name);
+    }
+
+    void openread()
+    {
+        h = open(name, O_RDONLY);
+        if (h >= 0)
+        {
+            free(name);
+            name = nullptr;
+        }
+
+        //fcntl(h,F_SETFL,mode);
+    }
+    void openwrite()
+    {
+        h = open(name, O_WRONLY);
+        if (h >= 0)
+        {
+            unlink(name);
+            free(name);
+            name = nullptr;
+        }
     }
 
     virtual void close() override
@@ -151,16 +184,30 @@ struct w32e_handle_pipe_s : public w32e_handle_s
     }
     virtual uint32_t read(void *b, uint32_t sz, uint32_t *rdb) override
     {
-
-
-        if (rdb) *rdb = 0;
-        return 0;
+        if (h < 0) openread();
+        if (h < 0)
+        {
+            if (rdb) *rdb = 0;
+            return 0;
+        }
+        int r = ::read(h,b,sz);
+        if (r < 0) return 0;
+        if (rdb) *rdb = (uint32_t)r;
+        return 1;
     }
 
     virtual uint32_t write(const void *b, uint32_t sz, uint32_t *wrrn) override
     {
-        if (wrrn) *wrrn = 0;
-        return 0;
+        if (h < 0) openwrite();
+        if (h < 0)
+        {
+            if (wrrn) *wrrn = 0;
+            return 0;
+        }
+        int w = ::write(h,b,sz);
+        if (w < 0) return 0;
+        if (wrrn) *wrrn = (uint32_t)w;
+        return 1;
     }
 };
 
@@ -195,7 +242,7 @@ struct w32e_handle_thread_s : public w32e_handle_s
 typedef w32e_handle_s * HANDLE;
 #define INVALID_HANDLE_VALUE ((HANDLE)(-1))
 
-HANDLE CreateFileA(const char *name, w32e_consts readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *);
+HANDLE CreateFileA(const char *name, uint32_t readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *);
 
 typedef DWORD (THREADPROC)(void *);
 

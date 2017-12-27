@@ -227,6 +227,7 @@ template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_autoquote(const str_t
 wstr_c TSCALL fn_get_name(const wsptr &name);
 wstr_c TSCALL fn_get_ext(const wsptr &name);
 wstr_c TSCALL fn_get_path(const wstr_c &name); // with ending slash
+wstr_c TSCALL fn_get_path(const wsptr &name); // with ending slash
 
 template<typename TCHARACTER> bool TSCALL fn_mask_match( const sptr<TCHARACTER> &fn, const sptr<TCHARACTER> &mask );
 

@@ -90,7 +90,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="win32_core.cpp" />
+    <ClCompile Include="platform_dsound.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="capture.h" />

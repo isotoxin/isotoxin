@@ -39,5 +39,15 @@ wnd_c *wnd_c::build( wnd_callbacks_s *cbs )
 
 #endif
 
+#ifdef _NIX
+#include "_nix/nix_wnd.inl"
+
+wnd_c *wnd_c::build(wnd_callbacks_s *cbs)
+{
+    return TSNEW(x11_wnd_c, cbs);
+}
+
+#endif
+
 
 } // namespace ts

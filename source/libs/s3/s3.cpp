@@ -51,7 +51,8 @@ bool player_data_s::update(Player *player, float dt)
 Player::Player() //-V730
 {
     player_data_s &pd = player_data_s::cvt(this);
-    pd.player_data_s::player_data_s();
+    //pd.player_data_s::player_data_s();
+    new(&pd) player_data_s();
 }
 Player::~Player()
 {

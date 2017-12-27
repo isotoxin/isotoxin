@@ -28,6 +28,11 @@ public:
 	uint get_id() const {return m_id;}
 
     const wstr_c  &fn() const {return m_filename;}
+    void set_fn(const wsptr &name)
+    {
+        m_filename = name;
+    }
+
 
     virtual bool    open() = 0;
     virtual bool    close() = 0;

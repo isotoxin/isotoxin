@@ -312,8 +312,10 @@ bool TSCALL ts::app_preinit( const ts::wchar *cmdl )
     if (!parsecmdl(cmdl))
         return false;
 
+#ifdef _MSC_VER
     if (!check_autoupdate())
         return false;
+#endif
 
 #ifdef _FINAL
     if (g_commandline().checkinstance)
@@ -345,7 +347,7 @@ bool TSCALL ts::app_preinit( const ts::wchar *cmdl )
     MEMT( MEMT_APP_COMMON );
 
     ts::wstrings_c fns;
-    ts::g_fileop->find( fns, CONSTWSTR( "loc/*.lng*.lng" ), false );
+    ts::g_fileop->find( fns, CONSTWSTR( "loc/*.lng.lng" ), false );
     if (!fns.size() || !ts::is_file_exists( PLGHOSTNAME ))
     {
         //bool download = false;
@@ -362,3 +364,8 @@ bool TSCALL ts::app_preinit( const ts::wchar *cmdl )
 
 	return true;
 }
+
+#ifdef _NIX
+#include "win32emu/win32emu.h"
+#include "win32emu/win32emu.inl"
+#endif

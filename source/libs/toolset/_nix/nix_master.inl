@@ -1,4 +1,16 @@
 #include "nix_common.inl"
+#include <spawn.h>
+#include <sys/wait.h>
+#include <semaphore.h>
+
+#include <X11/X.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/keysym.h>
+
+#include <string.h>
+#include <stdlib.h>
+
 
 TS_STATIC_CHECK( sizeof( master_internal_stuff_s ) <= MASTERCLASS_INTERNAL_STUFF_SIZE, "bad size" );
 
@@ -7,6 +19,7 @@ sys_master_nix_c::sys_master_nix_c()
 {
     master_internal_stuff_s *istuff = (master_internal_stuff_s *)&internal_stuff;
     TSPLACENEW( istuff );
+    XInitThreads();
 }
 
 sys_master_nix_c::~sys_master_nix_c()
@@ -15,20 +28,79 @@ sys_master_nix_c::~sys_master_nix_c()
     istuff.~master_internal_stuff_s();
 }
 
+
+extern "C" __attribute__((weak)) int main(int argc, char* argv[])
+{
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+
+    //ts::wchar *cmdlb = GetCommandLineW();
+    str_c cmdla( asptr((const char *)argv[0]) );
+
+    for(int i=1;i<argc;++i)
+    {
+        int cl = cmdla.get_length()+1;
+        cmdla.append_char(' ').append(argv[i]);
+
+        if (cmdla.find_pos(cl,' ') > 0)
+            cmdla.insert(cl,'\"').append_char('\"');
+    }
+    if (!app_preinit(from_utf8(cmdla.as_sptr()))) return 0;
+
+    master().do_app_loop();
+
+    return 0;
+}
+
+
+
+namespace
+{
+    struct thread_param_s
+    {
+        sys_master_c::_HANDLER_T tp;
+        void run()
+        {
+            sys_master_c::_HANDLER_T tp1 = tp;
+            TSDEL( this );
+            tp1();
+        }
+    };
+}
+
+static void * thread_stub( void *p )
+{
+    ts::tmpalloc_c tmp;
+    thread_param_s *tp = (thread_param_s *)p;
+    tp->run();
+    return nullptr;
+}
+
+
 /*virtual*/ void sys_master_nix_c::sys_start_thread( _HANDLER_T thr )
 {
-    //thread_param_s * tp = TSNEW_T( MEMT_MASTER, thread_param_s );
-    //tp->tp = thr;
+    thread_param_s * tp = TSNEW(thread_param_s);
+    tp->tp = thr;
 
-    //CloseHandle( CreateThread( nullptr, 0, thread_stub, tp, 0, nullptr ) );
-    STOPSTUB("");
+    pthread_attr_t threadAttr;
+    pthread_attr_init(&threadAttr);
+    pthread_attr_setdetachstate(&threadAttr, PTHREAD_CREATE_DETACHED);
+
+    pthread_t tid;
+    pthread_create(&tid, &threadAttr, thread_stub, tp);
+    //pthread_attr_destroy(&threadAttr);
 }
 
 /*virtual*/ wstr_c sys_master_nix_c::sys_language()
 {
-    STOPSTUB("");
     ts::wchar x[ 32 ] = { 'e', 'n', 0 };
-    //GetLocaleInfoW( NULL, LOCALE_SISO639LANGNAME, x, 32 );
+
+    char *s = getenv("LANG");
+    if (s != nullptr)
+    {
+        x[0] = s[0];
+        x[1] = s[1];
+    }
+
     return ts::wstr_c( ts::wsptr( x, 2 ) );
 }
 
@@ -47,20 +119,13 @@ sys_master_nix_c::~sys_master_nix_c()
 
 /*virtual*/ global_atom_s *sys_master_nix_c::sys_global_atom( const ts::wstr_c &n )
 {
-#if 0
-    HANDLE mutex = CreateMutexW( nullptr, FALSE, n );
-    if ( !mutex )
+    sem_t *sem = sem_open( to_utf8(n), O_CREAT|O_EXCL );
+    if ( sem == SEM_FAILED )
         return nullptr;
-
-    if ( ERROR_ALREADY_EXISTS == GetLastError() )
-    {
-        CloseHandle( mutex );
-        return nullptr;
-    }
 
     class my_global_atom_c : public global_atom_s
     {
-        HANDLE mutex;
+        sem_t *sem;
 
         my_global_atom_c( const my_global_atom_c & ) UNUSED;
         my_global_atom_c( my_global_atom_c && ) UNUSED;
@@ -69,18 +134,14 @@ sys_master_nix_c::~sys_master_nix_c()
 
     public:
 
-        my_global_atom_c( HANDLE mutex ) :mutex( mutex ) {}
+        my_global_atom_c( sem_t *sem ) :sem(sem) {}
         ~my_global_atom_c()
         {
-            CloseHandle( mutex );
+            sem_close(sem);
         }
     };
 
-    return TSNEW( my_global_atom_c, mutex );
-#endif
-
-    STOPSTUB("");
-	return nullptr;
+    return TSNEW( my_global_atom_c, sem );
 }
 
 /*virtual*/ bool sys_master_nix_c::sys_one_instance( const ts::wstr_c &n, _HANDLER_T notify_cb )
@@ -122,9 +183,179 @@ sys_master_nix_c::~sys_master_nix_c()
     STOPSTUB("");
 }
 
+static void looper()
+{
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+
+    istuff.looper = true;
+    istuff.looper_staring = false;
+
+    while ( !master().is_shutdown && !master().is_app_need_quit )
+    {
+        ts::Time ct = ts::Time::current();
+
+        if ( master().is_sys_loop )
+        {
+            istuff.cnttick = 0;
+            istuff.looper_allow_tick = true;
+            istuff.lasttick = ct;
+            Sleep( 100 );
+            continue;
+        }
+
+        int d = ct - istuff.lasttick;
+        int sleep = master().sleep;
+
+        if ( master().mainwindow && ( d > 100 || istuff.looper_allow_tick ) )
+        {
+            Window w = wnd2x11( master().mainwindow );
+
+            if ( d > 1000 )
+                istuff.cnttick = 0;
+
+            istuff.looper_allow_tick = false;
+            if ( istuff.cnttick < 10 )
+            {
+                ++istuff.cnttick;
+                istuff.lasttick = ct;
+
+                XEvent event = {};
+                //event.xclient.window = 0;
+                event.xclient.type = ClientMessage,
+                event.xclient.message_type = EVT_LOOPER_TICK,
+                event.xclient.format = 8,
+
+                //memcpy(&event.xclient.data.s[2], &data, sizeof(void*));
+
+                XSendEvent(istuff.X11, w, False, 0, &event);
+                XFlush(istuff.X11);
+
+            }
+        }
+        else if ( !istuff.looper_allow_tick )
+            sleep = 1;
+
+        if ( sleep >= 0 )
+            Sleep( sleep );
+    }
+    istuff.looper = false;
+    return;
+}
+
 /*virtual*/ void sys_master_nix_c::sys_loop()
 {
-    STOPSTUB("");
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    istuff.prepare();
+
+    if ( !istuff.looper && !istuff.looper_staring )
+    {
+        istuff.looper_staring = true;
+        ts::master().sys_start_thread( looper );
+    }
+
+    XEvent e;
+    while( !master().is_shutdown && !master().is_app_need_quit )
+    {
+        XNextEvent( istuff.X11, &e );
+
+        switch( e.type )
+        {
+        case ClientMessage:
+            if (e.xclient.message_type == EVT_LOOPER_TICK)
+            {
+                --istuff.cnttick;
+                if ( istuff.cnttick > 0)
+                {
+                    //MSG msgm;
+                    //while ( PeekMessage( &msgm, nullptr, WM_LOOPER_TICK, WM_LOOPER_TICK, PM_REMOVE ) )
+                        --istuff.cnttick;
+                }
+                istuff.cnttick = 0;
+
+                if ( master().on_loop )
+                    master().on_loop();
+
+                istuff.lasttick = Time::current();
+                istuff.looper_allow_tick = true;
+
+            }
+            break;
+        case ButtonPress: {
+            ivec2 clp( e.xbutton.x, e.xbutton.y );
+            ivec2 scrp(e.xbutton.x_root, e.xbutton.y_root);
+
+            mouse_event_e me = MEVT_NOPE;
+            switch(e.xbutton.button)
+            {
+            case Button1: me = MEVT_LDOWN; break;
+            case Button2: me = MEVT_MDOWN; break;
+            case Button3: me = MEVT_RDOWN; break;
+            }
+
+            if (me != MEVT_NOPE)
+            {
+                master().on_mouse( me, clp, scrp );
+                if (wnd_c *wnd = (wnd_c *)istuff.x112wnd(e.xbutton.window))
+                    wnd->get_callbacks()->evt_mouse( me, clp, scrp );
+            }
+            break;
+        }
+
+        case ButtonRelease: {
+            ivec2 clp( e.xbutton.x, e.xbutton.y );
+            ivec2 scrp(e.xbutton.x_root, e.xbutton.y_root);
+
+            mouse_event_e me = MEVT_NOPE;
+            switch(e.xbutton.button)
+            {
+            case Button1: me = MEVT_LUP; break;
+            case Button2: me = MEVT_MUP; break;
+            case Button3: me = MEVT_RUP; break;
+            }
+
+            if (me != MEVT_NOPE)
+            {
+                master().on_mouse( me, clp, scrp );
+                if (wnd_c *wnd = (wnd_c *)istuff.x112wnd(e.xbutton.window))
+                    wnd->get_callbacks()->evt_mouse( me, clp, scrp );
+            }
+            break;
+        }
+        case MotionNotify:
+            {
+                //Window cw = 0;
+                //int x = 0, y = 0;
+                //XTranslateCoordinates(istuff.X11, e.xbutton.window, istuff.root, e.xbutton.x, e.xbutton.y, &x, &y, &cw);
+                ivec2 clp( e.xmotion.x, e.xmotion.y );
+                ivec2 scrp(e.xmotion.x_root, e.xmotion.y_root);
+                master().on_mouse(MEVT_MOVE, clp, scrp);
+                if (wnd_c *wnd = (wnd_c *)istuff.x112wnd(e.xbutton.window))
+                    wnd->get_callbacks()->evt_mouse( MEVT_MOVE, clp, scrp );
+            }
+            break;
+
+        case Expose:
+        case MapNotify:
+            if (x11_wnd_c *wnd = istuff.x112wnd(e.xany.window))
+                x11expose(wnd, e.type == MapNotify);
+
+            XFlush( istuff.X11 );
+            break;
+        case ConfigureNotify: {
+            if (x11_wnd_c *wnd = istuff.x112wnd(e.xconfigure.window))
+                x11configure(wnd,e.xconfigure);
+
+
+            } break;
+        case KeyRelease:
+            //if( XLookupKeysym( &e.xkey, 0 ) == XK_Escape )
+            //    do_loop = false;
+            break;
+
+        }
+    }
+
+    DEBUG_BREAK();
 }
 
 /*virtual*/ void sys_master_nix_c::sys_idle()
@@ -136,11 +367,11 @@ sys_master_nix_c::~sys_master_nix_c()
         TranslateMessage( &m );
         DispatchMessageW( &m );
     }
+#endif
+    STOPSTUB("");
 
     if ( master().on_loop )
         master().on_loop();
-#endif
-    STOPSTUB("");
 
 }
 /*virtual*/ void sys_master_nix_c::sys_exit( int iErrCode )
@@ -156,38 +387,52 @@ sys_master_nix_c::~sys_master_nix_c()
 
 /*virtual*/ wnd_c *sys_master_nix_c::get_focus()
 {
-#if 0
-    HWND fhwnd = GetFocus();
-    if ( !fhwnd ) return nullptr;
-    return (wnd_c *)hwnd2wnd( fhwnd );
-#endif
-    STOPSTUB("");
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    Window w = 0; int r;
+    XGetInputFocus(istuff.X11, &w, &r);
+    if (wnd_c *wnd = (wnd_c *)istuff.x112wnd(w))
+        return wnd;
 
-return nullptr;
+    return nullptr;
 }
 
 /*virtual*/ wnd_c *sys_master_nix_c::get_capture()
 {
-#if 0
-    HWND chwnd = GetCapture();
-    if ( !chwnd ) return nullptr;
-    return (wnd_c *)hwnd2wnd(chwnd);
-#endif
-    STOPSTUB("");
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    if (istuff.grabbing)
+    {
+        Window w = 0; int r;
+        XGetInputFocus(istuff.X11, &w, &r);
+        if (wnd_c *wnd = (wnd_c *)istuff.x112wnd(w))
+            if (wnd == istuff.grabbing.get())
+                return wnd;
+    }
 
-return nullptr;
+    return nullptr;
 }
 
 /*virtual*/ void sys_master_nix_c::release_capture()
 {
-    STOPSTUB("");
+
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+    XUngrabPointer(istuff.X11, CurrentTime);
+    istuff.grabbing = nullptr;
 }
 
 /*virtual*/ void sys_master_nix_c::set_notification_icon_text( const ts::wsptr& text )
 {
     if ( !mainwindow ) return;
 
-    STOPSTUB("");
+    //STOPSTUB("");
+    UNFINISHED(aaa);
+}
+
+namespace
+{
+    struct phi_s
+    {
+        pid_t pid;
+    };
 }
 
 process_handle_s::~process_handle_s()
@@ -197,48 +442,88 @@ process_handle_s::~process_handle_s()
 }
 
 
-/*virtual*/ bool sys_master_nix_c::start_app( const wstr_c &exe, const wstrings_c& prms, process_handle_s *process_handle, bool elevate )
+/*virtual*/ bool sys_master_nix_c::start_app( const wstr_c &exe, const wstrings_c& prmsa, process_handle_s *process_handle, bool elevate )
 {
-    STOPSTUB("");
+    astrings_c prms;
+    for (const wstr_c& s : prmsa)
+    {
+        if (s.find_pos(' ') >= 0)
+        {
+            str_c &p = prms.add();
+            p.append_char('\"');
+            p.append(to_utf8(s));
+            p.append_char('\"');
+        } else
+            prms.add(to_utf8(s));
+    }
+
+    str_c exe_a( to_utf8(exe) );
+
+    int pcnt = prms.size();
+    const char ** argv = (const char **)alloca( sizeof(char *) * (pcnt + 2) );
+    argv[0] = exe_a.cstr();
+    for(int i=0;i<pcnt;++i)
+        argv[i+1] = prms.get(i).cstr();
+    argv[pcnt+1] = nullptr;
+
+
+    pid_t pid;
+    int status = posix_spawn(&pid, exe_a.cstr(), nullptr, nullptr, (char * const*)argv, nullptr);
+
+    if (status == 0)
+    {
+        if (process_handle)
+            ((phi_s *)process_handle)->pid = pid;
+
+        return true;
+    }
+
     return false;
 }
 
 /*virtual*/ bool sys_master_nix_c::wait_process( process_handle_s &phandle, int timeoutms )
 {
-    STOPSTUB("");
-#if 0
-    if ( ( (phi_s*)&phandle )->processhandle )
+    if (timeoutms == 0)
     {
-        DWORD r = WaitForSingleObject( ( (phi_s*)&phandle )->processhandle, timeoutms > 0 ? timeoutms : INFINITE );
-        if ( r == WAIT_TIMEOUT ) return false;
+        int status = 0;
+        waitpid(((phi_s*)&phandle)->pid, &status, 0);
+        return true;
     }
-#endif
+
+    int stopwaittime = timeGetTime() + timeoutms;
+    for(;;)
+    {
+        if (getpgid(((phi_s*)&phandle)->pid) >= 0)
+        {
+            if ( (timeGetTime() - stopwaittime) > 0 )
+                return false;
+
+            Sleep(100);
+            continue;
+        }
+
+        break;
+    }
+
     return true;
 }
 
 /*virtual*/ bool sys_master_nix_c::open_process( uint32 processid, process_handle_s &phandle )
 {
-    STOPSTUB("");
-#if 0
-    HANDLE h = OpenProcess( SYNCHRONIZE, FALSE, processid );
-    if ( h )
-    {
-        if ( ( (phi_s*)&phandle )->processhandle )
-            CloseHandle( ( (phi_s*)&phandle )->processhandle );
+    pid_t pid = processid;
 
-        ( (phi_s*)&phandle )->processhandle = h;
+    if (getpgid(pid) >= 0)
+    {
+        ((phi_s*)&phandle)->pid = pid;
         return true;
     }
-#endif
 
     return false;
 }
 
 /*virtual*/ uint32 sys_master_nix_c::process_id()
 {
-    STOPSTUB("");
-    //return GetCurrentProcessId();
-return 0;
+    return getpid();
 }
 
 /*virtual*/ void sys_master_nix_c::sys_beep( sys_beep_e beep )
@@ -274,30 +559,30 @@ return 0;
 }
 /*virtual*/ void sys_master_nix_c::set_cursor( cursor_e ct )
 {
-    STOPSTUB("");
+    UNFINISHED(set_cursor);
 }
 
 /*virtual*/ int sys_master_nix_c::get_system_info( sysinf_e si )
 {
-#if 0
+    UNFINISHED(get_system_info);
+
     switch ( si )
     {
     case SINF_SCREENSAVER_RUNNING:
         {
-            BOOL scrsvrun = FALSE;
-            SystemParametersInfoW( SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0 );
-            if ( scrsvrun ) return 1;
+            //BOOL scrsvrun = FALSE;
+            //SystemParametersInfoW( SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0 );
+            //if ( scrsvrun ) return 1;
             return 0;
         }
     case SINF_LAST_INPUT:
         {
-            LASTINPUTINFO lii = { ( UINT )sizeof( LASTINPUTINFO ) };
-            GetLastInputInfo( &lii );
-            return ( GetTickCount() - lii.dwTime ) / 1000;
+            //LASTINPUTINFO lii = { ( UINT )sizeof( LASTINPUTINFO ) };
+            //GetLastInputInfo( &lii );
+            //return ( GetTickCount() - lii.dwTime ) / 1000;
+            return 0;
         }
     }
-#endif
-	STOPSTUB("");
 
     return 0;
 }
@@ -402,4 +687,289 @@ return 0;
     }
 */
 
+}
+
+
+struct x11button : movable_flag<true>
+{
+    int x, y;
+    int width, height;
+    int textx, texty;
+    str_c text;
+    smbr_e r;
+    int clicked = 0;
+    bool mouseover = false;
+
+    void draw( int fg, int bg, Display* dpy, Window w, GC gc )
+    {
+        if( mouseover )
+        {
+            XFillRectangle( dpy, w, gc, clicked+x, clicked+y, width, height );
+            XSetForeground( dpy, gc, bg );
+            XSetBackground( dpy, gc, fg );
+        }
+        else
+        {
+            XSetForeground( dpy, gc, fg );
+            XSetBackground( dpy, gc, bg );
+            XDrawRectangle( dpy, w, gc, x, y, width, height );
+        }
+
+        XDrawString( dpy, w, gc, clicked+textx, clicked+texty, text.cstr(), text.get_length() );
+        XSetForeground( dpy, gc, fg );
+        XSetBackground( dpy, gc, bg );
+    }
+
+
+    bool is_point_inside( int px, int py )
+    {
+        return px>=x && px<(x+width) && py>=y && py<(y+height);
+    }
+
+};
+
+
+smbr_e TSCALL sys_master_nix_c::sys_mb( const wchar *caption, const wchar *wtext, smb_e options )
+{
+    //master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&internal_stuff;
+
+    const char* wmDeleteWindow = "WM_DELETE_WINDOW";
+    int height = 0, X, Y, W=0, H;
+    size_t i, lines = 0;
+    char *atom;
+    array_inplace_t<x11button,0> buttons;
+    XFontStruct* font;
+    XSizeHints hints;
+    XEvent e;
+
+    auto addb = [&]( const asptr &btext, smbr_e r )
+    {
+        x11button &b = buttons.add();
+        b.r = r;
+
+        /* Compute the shape of the OK button */
+        XCharStruct overall;
+        int direction, ascent, descent;
+        XTextExtents( font, btext.s, btext.l, &direction, &ascent, &descent, &overall );
+
+        b.width = overall.width + 30;
+        b.height = ascent + descent + 5;
+        //b.x = W/2 - b.width/2;
+        b.y = H   - height - 15;
+        //b.textx = b.x + 15;
+        b.texty = b.y + b.height - 3;
+        b.text.set(btext);
+
+        int allbw = 0;
+        for(x11button &t : buttons)
+            allbw += t.width + 10;
+
+        int bx = W-allbw - 10;
+        for(x11button &t : buttons)
+            t.x = bx, bx += t.width + 10, t.textx = t.x + 15;
+
+    };
+
+    /* Open a display */
+    Display* dpy;
+    if( !(dpy = XOpenDisplay( 0 )) )
+        return SMBR_UNKNOWN;
+
+    /* Get us a white and black color */
+    int backcol = 0x00aaaaaa;//BlackPixel( dpy, DefaultScreen(dpy) );
+    int textcol = 0;//WhitePixel( dpy, DefaultScreen(dpy) );
+
+    /* Create a window with the specified title */
+    Window w = XCreateSimpleWindow( dpy, DefaultRootWindow(dpy), 0, 0, 100, 100,
+                             0, backcol, backcol );
+
+    XSelectInput( dpy, w, ExposureMask | StructureNotifyMask |
+                          KeyReleaseMask | PointerMotionMask |
+                          ButtonPressMask | ButtonReleaseMask );
+
+    XMapWindow( dpy, w );
+    XStoreName( dpy, w, to_utf8(caption).cstr() );
+
+    Atom wmDelete = XInternAtom( dpy, wmDeleteWindow, True );
+    XSetWMProtocols( dpy, w, &wmDelete, 1 );
+
+    /* Create a graphics context for the window */
+    GC gc = XCreateGC( dpy, w, 0, 0 );
+
+    XSetForeground( dpy, gc, textcol );
+    XSetBackground( dpy, gc, backcol );
+
+    /* Compute the printed width and height of the text */
+    if( !(font = XQueryFont( dpy, XGContextFromGC(gc) )) )
+    {
+        XFreeGC( dpy, gc );
+        XDestroyWindow( dpy, w );
+        XCloseDisplay( dpy );
+        return SMBR_UNKNOWN;
+    }
+
+    str_c text( to_utf8(wtext) );
+
+    for(token<char> tkn(text,'\n');tkn;++tkn, ++lines)
+    {
+        XCharStruct overall;
+        int direction, ascent, descent;
+
+        XTextExtents( font, tkn->as_sptr().s, tkn->get_length(), &direction, &ascent, &descent, &overall );
+        W = overall.width>W ? overall.width : W;
+        height = (ascent+descent)>height ? (ascent+descent) : height;
+
+    }
+
+    /* Compute the shape of the window and adjust the window accordingly */
+    W += 20;
+    H = lines*height + height + 40;
+    X = DisplayWidth ( dpy, DefaultScreen(dpy) )/2 - W/2;
+    Y = DisplayHeight( dpy, DefaultScreen(dpy) )/2 - H/2;
+
+    XMoveResizeWindow( dpy, w, X, Y, W, H );
+
+    switch ( options )
+    {
+    case SMB_OK_ERROR:
+        //f |= MB_ICONERROR;
+        // no break here
+    case SMB_OK:
+        //f |= MB_OK;
+        addb(CONSTASTR("OK"), SMBR_OK);
+        break;
+    case SMB_OKCANCEL:
+        //f |= MB_OKCANCEL;
+        addb(CONSTASTR("OK"), SMBR_OK);
+        addb(CONSTASTR("Cancel"), SMBR_CANCEL);
+        break;
+    case SMB_YESNOCANCEL:
+        addb(CONSTASTR("Yes"), SMBR_YES);
+        addb(CONSTASTR("No"), SMBR_NO);
+        addb(CONSTASTR("Cancel"), SMBR_CANCEL);
+        break;
+    case SMB_YESNO_ERROR:
+        //f |= MB_ICONERROR;
+        // no break here
+    case SMB_YESNO:
+        //f |= MB_YESNO;
+        addb(CONSTASTR("Yes"), SMBR_YES);
+        addb(CONSTASTR("No"), SMBR_NO);
+
+        break;
+    default:
+        break;
+    }
+
+
+
+    XFreeFontInfo( NULL, font, 1 ); /* We don't need that anymore */
+
+    /* Make the window non resizeable */
+    XUnmapWindow( dpy, w );
+
+    hints.flags      = PSize | PMinSize | PMaxSize;
+    hints.min_width  = hints.max_width  = hints.base_width  = W;
+    hints.min_height = hints.max_height = hints.base_height = H;
+
+    XSetWMNormalHints( dpy, w, &hints );
+    XMapRaised( dpy, w );
+    XFlush( dpy );
+
+    /* Event loop */
+    smbr_e r = SMBR_UNKNOWN;
+    bool do_loop = true;
+    while( do_loop )
+    {
+        XNextEvent( dpy, &e );
+        for(x11button &b : buttons)
+            b.clicked = 0;
+
+        if( e.type == MotionNotify )
+        {
+            for(x11button &b : buttons)
+            {
+                if( b.is_point_inside( e.xmotion.x, e.xmotion.y ) )
+                {
+                    if( !b.mouseover )
+                        e.type = Expose;
+
+                    b.mouseover = true;
+                }
+                else
+                {
+                    if( b.mouseover )
+                        e.type = Expose;
+
+                    b.mouseover = false;
+                    b.clicked = 0;
+                }
+            }
+
+        }
+
+        switch( e.type )
+        {
+        case ButtonPress:
+        case ButtonRelease:
+            if( e.xbutton.button!=Button1 )
+                break;
+
+            for(x11button &b : buttons)
+            {
+                if( b.mouseover )
+                {
+                    b.clicked = e.type==ButtonPress ? 1 : 0;
+
+                    if( !b.clicked )
+                    {
+                        do_loop = false;
+                        r = b.r;
+                        break;
+                    }
+                }
+                else
+                {
+                    b.clicked = 0;
+                }
+            }
+
+
+        case Expose:
+        case MapNotify:
+            XClearWindow( dpy, w );
+
+            /* Draw text lines */
+            i=0;
+            for(token<char> tkn(text,'\n');tkn;++tkn, ++lines, i+=height)
+                XDrawString( dpy, w, gc, 10, 10+height+i, tkn->as_sptr().s, tkn->get_length() );
+
+            for(x11button &b : buttons)
+                b.draw(textcol, backcol, dpy, w, gc );
+
+            XFlush( dpy );
+            break;
+
+        case KeyRelease:
+            if( XLookupKeysym( &e.xkey, 0 ) == XK_Escape )
+                do_loop = false;
+            break;
+
+        case ClientMessage:
+            atom = XGetAtomName( dpy, e.xclient.message_type );
+
+            if( *atom == *wmDeleteWindow )
+                do_loop = false;
+
+            XFree( atom );
+            break;
+        }
+    }
+
+    XFreeGC( dpy, gc );
+    XDestroyWindow( dpy, w );
+    XCloseDisplay( dpy );
+
+
+    return r;
 }

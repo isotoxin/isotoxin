@@ -6,70 +6,42 @@ namespace ts
 {
     class zip_container_c : public container_c
     {
+        friend struct zippp;
 
-        unzFile         m_unz;
-        unz_global_info m_ginf;
+#ifdef MODE64
+        uint8 data[65664];
+#else
+        uint8 data[65624];
+#endif
 
-        class zip_entry_c
+        struct zip_entry_s : movable_flag<true>
         {
-            wstr_c m_name;
-        public:
-            zip_entry_c( const wsptr &name ): m_name( name ) {}
-            virtual ~zip_entry_c() {}
+            ts::shared_ptr< ts::refstring_t<char> > name;
+            unz64_file_pos  ffs;
+            uint            full_unp_size;
 
-            const wstr_c & name() const {return m_name;}
+            int operator()(const zip_entry_s &e) const
+            {
+                return str_c::compare(name->cstr(), e.name->cstr());
+            }
+            int operator()(const str_c &s) const
+            {
+                return str_c::compare(name->cstr(), s);
+            }
 
+            bool  read(unzFile unz, buf_wrapper_s &b);
         };
 
-        class zip_file_entry_c : public zip_entry_c
-        {
-        public:
-            unz64_file_pos  m_ffs;
-            aint            m_full_unp_size;
+        ts::array_inplace_t<zip_entry_s, 1> entries;
+        ts::astrings_c paths;
 
-        public:
-            zip_file_entry_c( const wsptr &name ): zip_entry_c( name ) {} //-V730
-            virtual ~zip_file_entry_c();
-
-            bool  read( unzFile unz, buf_wrapper_s &b );
-            size_t  size() const {return m_full_unp_size; }
-        };
-
-        class zip_folder_entry_c : public zip_entry_c
-        {
-            array_del_t<zip_folder_entry_c, 16> m_folders;
-            array_del_t<zip_file_entry_c, 32> m_files;
-
-        public:
-            zip_folder_entry_c( const wsptr &name ): zip_entry_c( name ) {} //-V730
-            virtual ~zip_folder_entry_c() {}
-
-            zip_folder_entry_c * get_folder( const wsptr &fnn );
-            zip_folder_entry_c * add_folder( const wsptr &fnn );
-            zip_file_entry_c * add_file( const wsptr &fnn );
-            zip_file_entry_c * get_file( const wsptr &fnn );
-
-            bool               file_exists(const wsptr &fnn);
-            bool               iterate_files(const wsptr &path_orig, const wsptr &path0, ITERATE_FILES_CALLBACK ef, container_c *pf);
-            bool               iterate_files(const wsptr &path_orig, ITERATE_FILES_CALLBACK ef, container_c *pf);
-            bool               iterate_folders(const wsptr &path_orig, const wsptr &path0, ITERATE_FILES_CALLBACK ef, container_c *pf);
-
-        };
-
-        zip_folder_entry_c m_root;
-
-        wstr_c              m_find_cache_file_name;
-        zip_file_entry_c   *m_find_cache_file_entry;
-
-    private:
-
-        zip_file_entry_c * add_path( const wsptr &path );
-        zip_folder_entry_c * get_folder( const wsptr &fnn );
+        void build_z();
 
 
     public:
 
-        zip_container_c(const wsptr &name, int prior, uint id);
+        zip_container_c() :container_c(ts::wstr_c(), 0, 0) { build_z(); } //, m_root(wstr_c()), m_find_cache_file_entry(nullptr) {}
+        zip_container_c(const wstr_c &name, int prior, uint id) :container_c(name, prior, id) { build_z(); }
         virtual ~zip_container_c();
 
         /*virtual*/ bool    open() override;
@@ -84,7 +56,7 @@ namespace ts
         /*virtual*/ bool    iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef) override;
         /*virtual*/ bool    iterate_files(ITERATE_FILES_CALLBACK ef) override;
 
-        static bool detect( blob_c & ); 
+        static bool detect( blob_c & );
 
     };
 

@@ -113,6 +113,8 @@ namespace
     };
 }
 
+//struct morozoff { void *p1; void *p2; };
+
 void get_downloaded_ver( dnver_s &dnver )
 {
     dnver.ver.clear();

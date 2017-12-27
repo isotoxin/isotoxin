@@ -14,7 +14,7 @@
 				<Option object_output="$(GARBAGE)/__garbage/$(PROJECT_NAME)/$(TARGET_NAME)" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="ut 2" />
+				<Option parameters="ut 3" />
 				<Compiler>
 					<Add option="-std=c++14" />
 					<Add option="-m64" />
@@ -45,6 +45,7 @@
 					<Add library="gifstatic" />
 					<Add library="jpegstatic" />
 					<Add library="cairostatic" />
+					<Add library="X11" />
 					<Add directory="$(GARBAGE)/__libs/" />
 					<Add directory="$(PROJECTDIR)../../libs/" />
 				</Linker>

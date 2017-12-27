@@ -129,7 +129,7 @@ namespace ts
         sis = sinf(angle);
         cis = cosf( angle );
 #elif defined __GNUC__
-        ::sincosf( angle, &cis, &sis );
+        ::sincosf( angle, &sis, &cis );
 #endif
         vsin = sis;
         vcos = cis;
@@ -151,7 +151,7 @@ namespace ts
         sis = sin( angle );
         cis = cos( angle );
 #elif defined __GNUC__
-        ::sincos( angle, &cis, &sis );
+        ::sincos( angle, &sis, &cis );
 #endif
 
 

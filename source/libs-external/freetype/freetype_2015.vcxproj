@@ -59,6 +59,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\autofit\autofit.c" />
+    <ClCompile Include="src\base\ftfntfmt.c" />
     <ClCompile Include="src\bdf\bdf.c" />
     <ClCompile Include="src\cff\cff.c" />
     <ClCompile Include="src\base\ftbase.c" />

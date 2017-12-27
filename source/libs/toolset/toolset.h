@@ -417,32 +417,36 @@ template<class T> INLINE void SWAP(T& first, T& second)
 #define UNIQIDLINE(x) JOINMACRO1(x,__LINE__)
 
 typedef unsigned int uint;
-typedef unsigned long ulong;
+
+TS_STATIC_CHECK(sizeof(uint) == 4, "!");
 
 #if defined(_MSC_VER)
 typedef signed __int64		int64;
 typedef unsigned __int64	uint64;
 #elif defined(__GNUC__)
-typedef signed long long	int64;
-typedef unsigned long long	uint64;
+typedef int64_t	int64;
+typedef uint64_t uint64;
 #endif
 
 namespace ts // some ts types
 {
     #if defined _MSC_VER
     typedef wchar_t wchar;
-    #elif defined __GNUC__
-    typedef char16_t wchar;
-    #endif
     typedef unsigned long dword;
     typedef unsigned long uint32;
+    typedef signed long int32;
+    #elif defined __GNUC__
+    typedef char16_t wchar;
+    typedef uint32_t dword;
+    typedef uint32_t uint32;
+    typedef int32_t int32;
+    #endif
     typedef unsigned char uint8;
     typedef unsigned short uint16;
     typedef unsigned short word;
 
     typedef signed char int8;
     typedef signed short int16;
-    typedef signed long int32;
 
     typedef uint32 TSCOLOR;
 
@@ -652,12 +656,16 @@ namespace staticnumgen
 INLINE uint8 as_byte(int aa) {return static_cast<uint8>(aa & 0xFF);}
 INLINE uint8 as_byte(long int aa) {return static_cast<uint8>(aa & 0xFF);}
 INLINE uint8 as_byte( uint aa ) { return static_cast<uint8>( aa & 0xFF ); }
+#ifdef _MSC_VER
 INLINE uint8 as_byte( uint32 aa) {return static_cast<uint8>(aa & 0xFF);}
+#endif // _MSC_VER
 INLINE uint8 as_byte( uint64 aa ) { return static_cast<uint8>( aa & 0xFF ); }
 
 INLINE word as_word(int aa) {return static_cast<word>(aa & 0xFFFF);}
 INLINE word as_word(uint aa) {return static_cast<word>(aa & 0xFFFF);}
+#ifdef _MSC_VER
 INLINE word as_word(uint32 aa) {return static_cast<word>(aa & 0xFFFF);}
+#endif
 INLINE word as_word(uint64 aa) {return static_cast<word>(aa & 0xFFFF);}
 //INLINE word as_word(dword aa) {return static_cast<word>(aa & 0xFFFF);}
 
@@ -989,7 +997,9 @@ template<typename T> T &make_dummy(bool quiet = false)
 }
 template<> INLINE int &make_dummy<int>(bool quiet) { static int t = 0; DUMMY_USED_WARNING(quiet); return t; }
 template<> INLINE uint &make_dummy<uint>(bool quiet) { static uint t = 0; DUMMY_USED_WARNING(quiet); return t; }
+#ifdef _MSC_VER
 template<> INLINE TSCOLOR &make_dummy<TSCOLOR>(bool quiet) { static TSCOLOR t = 0; DUMMY_USED_WARNING(quiet); return t; }
+#endif // _MSC_VER
 template<> INLINE str_c &make_dummy<str_c>(bool quiet) { static str_c t; DUMMY_USED_WARNING(quiet); return t; }
 template<> INLINE wstr_c &make_dummy<wstr_c>(bool quiet) { static wstr_c t; DUMMY_USED_WARNING(quiet); return t; }
 
@@ -1111,6 +1121,78 @@ template <typename T> struct dummy
 
 } // namespace ts
 
+#include "tspointers.h"
+
+namespace ts
+{
+    // some strings stuff on shared pointers
+
+    struct dynamic_allocator_s : public shared_object
+    {
+        dynamic_allocator_s() {}
+        virtual ~dynamic_allocator_s() {}
+
+        virtual void *balloc(size_t sz)
+        {
+            return MM_ALLOC(sz);
+        }
+        virtual void bfree(void *p)
+        {
+            return MM_FREE(p);
+        }
+    };
+
+    template<typename TCHARACTER> class refstring_t
+    {
+        shared_ptr<dynamic_allocator_s> a;
+        ZSTRINGS_SIGNED ref = 0;
+        ZSTRINGS_SIGNED len;
+
+        ~refstring_t() {}
+        DECLARE_DYNAMIC_BEGIN(refstring_t)
+        refstring_t(ZSTRINGS_SIGNED len, dynamic_allocator_s *a) :len(len), a(a) {}
+        DECLARE_DYNAMIC_END(public)
+
+        void add_ref() { ++ref; }
+        static void dec_ref(refstring_t<TCHARACTER> *object)
+        {
+            ASSERT(object->ref > 0);
+            if (--object->ref == 0)
+            {
+                shared_ptr<dynamic_allocator_s> a(object->a);
+                object->~refstring_t();
+                a->bfree(object);
+            }
+        }
+
+
+        static refstring_t *build(const sptr<TCHARACTER>&s, dynamic_allocator_s *a)
+        {
+            refstring_t<TCHARACTER> *ns = (refstring_t<TCHARACTER> *)a->balloc(s.l + sizeof(TCHARACTER) + sizeof(refstring_t<TCHARACTER>));
+            TSPLACENEW(ns, s.l, a);
+            TCHARACTER *tgts = (TCHARACTER *)(ns + 1);
+            memcpy(tgts, s.s, s.l * sizeof(TCHARACTER));
+            tgts[s.l] = 0;
+            return ns;
+        }
+
+        sptr<TCHARACTER> cstr() const
+        {
+            return sptr<TCHARACTER>((const TCHARACTER *)(this + 1), len);
+        }
+        bool is_empty() const
+        {
+            return len == 0;
+        }
+
+        void setchar(ZSTRINGS_SIGNED index, TCHARACTER c)
+        {
+            ASSERT(index < len);
+            ((TCHARACTER *)(this + 1))[index] = c;
+        }
+        ZSTRINGS_SIGNED getlen() const { return len; }
+    };
+}
 
 #define FORWARD_DECLARE_STRING(c, s) template <typename TCHARACTER, typename ALC> class str_core_copy_on_demand_c; template <typename TCHARACTER, class CORE > class str_t; typedef str_t<c, str_core_copy_on_demand_c<c, ZSTRINGS_ALLOCATOR>> s;
 
@@ -1118,7 +1200,6 @@ template <typename T> struct dummy
 #include "tsmath.h"
 #include "tsbuf.h"
 #include "tshash_md5.h"
-#include "tspointers.h"
 #include "tsarray.h"
 #include "tsrnd.h"
 #include "tsstrar.h"
@@ -1246,76 +1327,6 @@ struct lnk_s
         }
         return dl << "]";
     }
-
-
-    // some strings stuff on shared pointers
-
-    struct dynamic_allocator_s : public shared_object
-    {
-        dynamic_allocator_s() {}
-        virtual ~dynamic_allocator_s() {}
-
-        virtual void *balloc( size_t sz )
-        {
-            return MM_ALLOC( sz );
-        }
-        virtual void bfree( void *p )
-        {
-            return MM_FREE( p );
-        }
-    };
-
-    template<typename TCHARACTER> class refstring_t
-    {
-        shared_ptr<dynamic_allocator_s> a;
-        ZSTRINGS_SIGNED ref = 0;
-        ZSTRINGS_SIGNED len;
-
-        ~refstring_t() {}
-        DECLARE_DYNAMIC_BEGIN( refstring_t )
-        refstring_t( ZSTRINGS_SIGNED len, dynamic_allocator_s *a ) :len( len ), a( a ) {}
-        DECLARE_DYNAMIC_END( public )
-
-        void add_ref() { ++ref; }
-        static void dec_ref( refstring_t<TCHARACTER> *object )
-        {
-            ASSERT( object->ref > 0 );
-            if ( --object->ref == 0 )
-            {
-                shared_ptr<dynamic_allocator_s> a( object->a );
-                object->~refstring_t();
-                a->bfree( object );
-            }
-        }
-
-
-        static refstring_t *build( const sptr<TCHARACTER>&s, dynamic_allocator_s *a )
-        {
-            refstring_t<TCHARACTER> *ns = ( refstring_t<TCHARACTER> * )a->balloc( s.l + sizeof( TCHARACTER ) + sizeof( refstring_t<TCHARACTER> ) );
-            TSPLACENEW( ns, s.l, a );
-            TCHARACTER *tgts = (TCHARACTER *)( ns + 1 );
-            memcpy( tgts, s.s, s.l * sizeof( TCHARACTER ) );
-            tgts[ s.l ] = 0;
-            return ns;
-        }
-
-        sptr<TCHARACTER> cstr() const
-        {
-            return sptr<TCHARACTER>( (const TCHARACTER *)( this + 1 ), len );
-        }
-        bool is_empty() const
-        {
-            return len == 0;
-        }
-
-        void setchar( ZSTRINGS_SIGNED index, TCHARACTER c )
-        {
-            ASSERT( index < len );
-            ( (TCHARACTER *)( this + 1 ) )[ index ] = c;
-        }
-        ZSTRINGS_SIGNED getlen() const { return len; }
-    };
-
 }
 
 #if defined _DEBUG || defined _CRASH_HANDLER

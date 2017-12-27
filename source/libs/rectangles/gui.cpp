@@ -32,7 +32,7 @@ void    gui_c::add_event(delay_event_c *de, double t)
 {
     MEMT( MEMT_EVTSYSTEM );
 
-    ASSERT( basetid == spinlock::pthread_self() );
+    ASSERT( basetid == spinlock::tid_self() );
 
     m_events.lock_write()().add(de);
     m_timer_processor.add(de, t, nullptr);
@@ -45,7 +45,10 @@ void    gui_c::delete_event(delay_event_c *de)
 
 void gui_c::delete_event(GUIPARAMHANDLER h)
 {
-    ASSERT( basetid == spinlock::pthread_self() );
+#ifdef _DEBUG
+    ts::uint32 curtid = spinlock::tid_self();
+    ASSERT( basetid == curtid );
+#endif
 
     bool cleanup = false;
     auto w = m_events.lock_write();
@@ -67,7 +70,7 @@ void gui_c::delete_event(GUIPARAMHANDLER h)
 
 void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
 {
-    ASSERT( basetid == spinlock::pthread_self() );
+    ASSERT( basetid == spinlock::tid_self() );
 
     bool cleanup = false;
     auto w = m_events.lock_write();
@@ -122,7 +125,7 @@ bool gui_c::b_normalize(RID r, GUIPARAM param)
 gui_c::gui_c()
 {
 #ifdef _DEBUG
-    basetid = spinlock::pthread_self();
+    basetid = spinlock::tid_self();
 #endif // _DEBUG
 
     ts::Time::update_thread_time();

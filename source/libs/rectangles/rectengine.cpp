@@ -614,7 +614,7 @@ system_query_e me2sq( ts::mouse_event_e me )
 
         } else if ( r->getprops().screenrect() != scr )
         {
-            MODIFY( *r ).pos( scr.lt ).size( scr.size() );
+            MODIFY( *r, true ).pos( scr.lt ).size( scr.size() );
         }
 
         r->need_recalc_screenpos();
@@ -736,7 +736,7 @@ rectengine_root_c::~rectengine_root_c()
         gui->restore_focus( getrid() );
 }
 
-/*virtual*/ bool rectengine_root_c::apply(rectprops_c &rpss, const rectprops_c &pss)
+/*virtual*/ bool rectengine_root_c::change(rectprops_c &rpss, const rectprops_c &pss, bool by_system)
 {
 	if (!syswnd.wnd && (pss.is_visible_and_nonzero_size() || pss.is_micromized()))
 	{
@@ -752,6 +752,8 @@ rectengine_root_c::~rectengine_root_c()
             }
 
         } shp;
+
+        shp.onchangebysystem = by_system;
 
         if ( !pss.is_micromized() )
             shp.visible = true;
@@ -881,6 +883,7 @@ rectengine_root_c::~rectengine_root_c()
 
         } shp( rpss, pss, this );
 
+        shp.onchangebysystem = by_system;
         shp.d = ts::D_NORMAL;
 
         if (pss.is_maximized())

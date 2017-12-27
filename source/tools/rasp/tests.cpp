@@ -2,7 +2,8 @@
 #include "ipc/ipc.h"
 
 
-static ipc::ipc_junction_s *ipcj = nullptr;
+static ipc::ipc_junction_s *ipcj_0 = nullptr;
+static ipc::ipc_junction_s *ipcj_1 = nullptr;
 
 static ipc::ipc_result_e processor_func(void *par, void *data, int datasize)
 {
@@ -11,7 +12,7 @@ static ipc::ipc_result_e processor_func(void *par, void *data, int datasize)
         ts::uint8 hash[32];
         crypto_generichash(hash, 32, (const unsigned char *)data, -datasize, nullptr, 0);
         Print("%u, recv block %s (%i)\n", GetCurrentProcessId(), ts::str_c().append_as_hex(hash, 32).cstr(), -datasize);
-        ipcj->unlock_buffer(data);
+        ipcj_0->unlock_buffer(data);
     }
     else
     {
@@ -28,7 +29,7 @@ static ipc::ipc_result_e wait_func(void *par)
 #define bsz (1024 * 1024 * 5)
 
 
-static void send_random_block()
+static void send_random_block(ipc::ipc_junction_s *ipcj)
 {
     void *b = ipcj->lock_buffer(bsz);
     randombytes_buf(b, bsz);
@@ -50,19 +51,27 @@ static void sender()
         ts::str_c s;
         s.set(CONSTASTR("test string ")).append_as_int(n++);
 
-        ipcj->send( s.cstr(), s.get_length() );
+        Print("%u, send test string: %s\n", GetCurrentProcessId(), s.cstr());
+
+        ipcj_0->send( s.cstr(), s.get_length() );
 
         ts::sys_sleep(1000 + ts::rnd(0, 1000));
 
-        send_random_block();
+        send_random_block(ipcj_0);
     }
+}
+
+void test_ipc_1( const char *n );
+void pipe2()
+{
+    test_ipc_1("test_0");
 }
 
 
 void test_ipc_0( ts::wstr_c exe )
 {
     ipc::ipc_junction_s junct;
-    ipcj = &junct;
+    ipcj_0 = &junct;
 
     int memba = junct.start("test_0");
     if (memba != 0)
@@ -71,6 +80,9 @@ void test_ipc_0( ts::wstr_c exe )
         return;
     }
 
+    //ts::master().sys_start_thread(pipe2);
+
+
     ts::process_handle_s ph;
     if (!ts::master().start_app( exe, ts::wstrings_c(CONSTWSTR("utp"), CONSTWSTR("test_0")), &ph, false))
     {
@@ -78,6 +90,8 @@ void test_ipc_0( ts::wstr_c exe )
         junct.stop();
         return;
     }
+
+
 
     junct.set_data_callback(processor_func, nullptr);
     if (!junct.wait_partner(10000))
@@ -101,15 +115,15 @@ ipc::ipc_result_e event_processor(void *dptr, void *data, int datasize)
         ts::uint8 hash[32];
         crypto_generichash(hash, 32, (const unsigned char *)data, -datasize, nullptr, 0);
         Print("%u, recv block %s (%i)\n", GetCurrentProcessId(), ts::str_c().append_as_hex(hash, 32).cstr(), -datasize);
-        ipcj->unlock_buffer(data);
+        ipcj_1->unlock_buffer(data);
 
-        send_random_block();
+        send_random_block(ipcj_1);
 
 
     } else
     {
         Print("%u: received: %s\n", GetCurrentProcessId(), ts::str_c((const char *)data, datasize).cstr());
-        ipcj->send(data, datasize);
+        ipcj_1->send(data, datasize);
     }
 
 
@@ -118,9 +132,13 @@ ipc::ipc_result_e event_processor(void *dptr, void *data, int datasize)
 
 void test_ipc_1( const char *n )
 {
+    Print("test test_ipc_1 %s\n",n);
+
     ipc::ipc_junction_s ipcblob;
-    ipcj = &ipcblob;
+    ipcj_1 = &ipcblob;
     int member = ipcblob.start(n);
+
+    Print("test test_ipc_1 member %i\n",member);
 
     if (member == 1)
     {
@@ -220,6 +238,55 @@ struct threaddata_s
 
         return 0;
     }
+
+    static DWORD __stdcall thto1(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        int zero = 0;
+        for (; !d->stop;)
+        {
+            DWORD ticks = timeGetTime();
+            DWORD x = WaitForSingleObject(d->evt2, 1300);
+            if (x == WAIT_TIMEOUT)
+            {
+                if (zero)
+                    Print("\n");
+                zero = 0;
+                Print("test timeout ok: %i\n", (timeGetTime() - ticks));
+            }
+            else if (x - WAIT_OBJECT_0 == 0)
+            {
+                DWORD ti = (timeGetTime() - ticks);
+                if (ti == 0)
+                {
+                    ++zero;
+                    if (zero)
+                    {
+                        Print("\rtest event ok: %i(%i)", ti,zero);
+                    }
+                } else
+                    Print("test event ok: %i\n", ti);
+            }
+        }
+        return 0;
+    }
+
+    static DWORD __stdcall thto2(void *p)
+    {
+        threaddata_s *d = (threaddata_s *)p;
+
+        for (; !d->stop;)
+        {
+            Print("pulse!\n");
+            SetEvent(d->evt2);
+            Sleep(10);
+            ResetEvent(d->evt2);
+            Sleep(2100);
+        }
+        return 0;
+    }
+
 };
 
 void logresult(const char *step, bool ok)
@@ -300,6 +367,25 @@ void threadtest()
     Sleep(100000);
 }
 
+void evttest()
+{
+    Print("evttest begin\n");
+
+    threaddata_s thd;
+    thd.evt2 = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::thto1, &thd, 0, nullptr));
+    CloseHandle(CreateThread(nullptr, 0, threaddata_s::thto2, &thd, 0, nullptr));
+
+    Sleep(20000);
+
+    thd.stop = true;
+
+    Print("evttest end\n");
+    Sleep(100000);
+
+}
+
 int proc_ut(const ts::wstrings_c & pars)
 {
     if (pars.size() < 2)
@@ -318,6 +404,9 @@ int proc_ut(const ts::wstrings_c & pars)
     case 2:
         threadtest();
         return 0;
+    case 3:
+        evttest();
+        return 0;
     }
 
 
@@ -328,6 +417,8 @@ int proc_utp(const ts::wstrings_c & pars)
 {
     if (pars.size() < 2)
         return 0;
+
+    Print("test utp\n");
 
     test_ipc_1(to_str( pars.get(1) ));
 

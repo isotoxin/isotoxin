@@ -6,12 +6,16 @@
 
 #define _ALLOW_RTCc_IN_STL
 
+#ifdef _MSC_VER
 #pragma warning (push)
 #pragma warning (disable:4820)
 #pragma warning (disable:4100)
+#endif
 #include <memory>
 #include "fastdelegate/FastDelegate.h"
+#ifdef _MSC_VER
 #pragma warning (pop)
+#endif
 
 #include <src/cairo.h>
 #include "toolset/toolset.h"

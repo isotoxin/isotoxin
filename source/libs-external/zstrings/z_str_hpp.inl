@@ -1582,18 +1582,6 @@ public:
         return *this;
     }
 
-    str_t & remove_chars_of( const sptr<TCHARACTER> &s )
-    {
-        // TODO : not so fast algorithm
-        for (;;)
-        {
-            ZSTRINGS_SIGNED i = find_pos_of(0, s);
-            if (i < 0) break;
-            cut( i, 1 );
-        }
-        return *this;
-    }
-
     template<class CORE2> str_t<TCHARACTER, CORE> &  insert(const ZSTRINGS_SIGNED idx, const str_t<TCHARACTER, CORE2> &s) { return insert(idx,s.as_sptr()); };
     str_t &  insert(const ZSTRINGS_SIGNED idx, const sptr<TCHARACTER> &s)
     {
@@ -1785,7 +1773,43 @@ public:
             return cut(idx, i);
         return *this;
     }
+
+    str_t<TCHARACTER, CORE> &  cut_all(const sptr<TCHARACTER> &substr)
+    {
+        ZSTRINGS_SIGNED tlen = get_length();
+        if (tlen < 1 || tlen < substr.l) return *this;
+
+        for (ZSTRINGS_SIGNED sme = 0;;)
+        {
+            if ((sme = find_pos(sme, substr)) < 0) break;
+            cut(sme, substr.l);
+        }
+        return *this;
+    }
     
+    str_t &  cut_all(TCHARACTER c1)
+    {
+        for (ZSTRINGS_SIGNED i = 0;;)
+        {
+            i = find_pos(i, c1);
+            if (i < 0) break;
+            cut(i, 1);
+        }
+        return *this;
+    };
+
+    str_t & cut_all_of(const sptr<TCHARACTER> &s)
+    {
+        // TODO : not so fast algorithm
+        for (;;)
+        {
+            ZSTRINGS_SIGNED i = find_pos_of(0, s);
+            if (i < 0) break;
+            cut(i, 1);
+        }
+        return *this;
+    }
+
 
     template<class CORE2> str_t<TCHARACTER, CORE> &  prefixate(const str_t<TCHARACTER, CORE2> &s)
     {

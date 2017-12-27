@@ -1,5 +1,11 @@
 #include "isotoxin.h"
 
+//#define TAB(tab) template<> tableview_t<tab##_s, pt_##tab>::row_s &tableview_t<tab##_s, pt_##tab>::getcreate(int id);
+
+#define TAB(tab) template struct tableview_t<tab##_s, pt_##tab>;
+PROFILE_TABLES
+#undef TAB
+
 #define minimum_encrypt_pb_duration 1.0f
 
 ts::static_setup<profile_c> prf;

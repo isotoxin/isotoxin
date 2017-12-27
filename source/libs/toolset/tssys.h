@@ -78,7 +78,7 @@ public:
     typedef fastdelegate::FastDelegate< bool ( wchar ) > _HANDLER_C;
     typedef fastdelegate::FastDelegate< bool ( int, bool, int ) > _HANDLER_K;
     typedef fastdelegate::FastDelegate< void () > _HANDLER_T;
-    
+
 
 
     _HANDLER on_init;
@@ -143,7 +143,7 @@ class sys_master_win32_c : public sys_master_c
 #endif
 
 #ifdef _NIX
-#define MASTERCLASS_INTERNAL_STUFF_SIZE 64
+#define MASTERCLASS_INTERNAL_STUFF_SIZE 128
 class sys_master_nix_c : public sys_master_c
 #define MASTER_CLASS sys_master_nix_c
 #endif
@@ -160,6 +160,7 @@ public:
     ~MASTER_CLASS();
 
     void do_app_loop() { app_loop(); }
+    smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options );
 
     /*virtual*/ void sys_idle() override;
     /*virtual*/ void sys_exit( int iErrCode ) override;
@@ -221,7 +222,7 @@ enum key_scan_e : unsigned char
     SSK_ALT         = 234, // fake scan code
 
 	SSK_ESC         = 1,
-	
+
     SSK_F1          = 59,
 	SSK_F2          = 60,
 	SSK_F3          = 61,

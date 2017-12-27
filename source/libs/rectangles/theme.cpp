@@ -57,7 +57,7 @@ void theme_rect_s::init_subimage(subimage_e si, const str_c &sidef, const colors
         token<char> tt(tail,',');
         siso[si].fillcolor = colsmap.parse(*tt, ARGB(0,0,0,255));
         ++tt;
-        if (tt) 
+        if (tt)
             siso[si].filloutcolor = colsmap.parse(*tt, ARGB(0,0,0,255));
     }
     siso[si].loaded = !sidef.is_empty();
@@ -425,7 +425,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
             bp.merge(pbp,abp_c::SKIP_EXIST);
             if (pbp.get_remove(CONSTASTR("parent"), bp_temp))
                 parent = &bp_temp;
-            else 
+            else
                 parent = nullptr;
         }
     }
@@ -487,7 +487,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
                     } else if (t->equals(CONSTASTR("invert")))
                     {
                         dbmp.process_pixels(r.lt, r.size(), [](ts::TSCOLOR &c) { c = (c & 0xff000000) | (0x00ffffff - (c & 0x00ffffff)); });
-                    } 
+                    }
                 }
             }
         }
@@ -503,7 +503,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
         thc.rootalphablend = conf->get_int(CONSTASTR("rootalphablend"), 1) != 0;
         thc.specialborder = conf->get_int(CONSTASTR("specialborder"), 0) != 0;
         m_conf = std::move(*conf);
-        
+
         sstr_t<-32> rs;
         for (auto it = m_conf.begin(); it; ++it)
         {

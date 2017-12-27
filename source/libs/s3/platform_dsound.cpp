@@ -239,16 +239,6 @@ namespace s3
         sd.buffer->Stop();
     }
     
-    struct pos_s
-    {
-        DWORD playpos;
-        DWORD writepos;
-        DWORD prevpos;
-    };
-
-    static pos_s pp[32] = {};
-    static int ppn = 0;
-
     void slot_coredata_update(Slot *slot, Player *player)
     {
 
@@ -268,23 +258,9 @@ namespace s3
             if (initial)
             {
                 readSize = sd.bufferSize;
-
-                ppn = 0;
-                pp[0].playpos = playPos;
-                pp[0].writepos = writePos;
-                pp[0].prevpos = sd.prevPos;
             }
             else
             {
-
-                if (ppn < 32)
-                {
-                    pp[ppn].playpos = playPos;
-                    pp[ppn].writepos = writePos;
-                    pp[ppn].prevpos = sd.prevPos;
-                    ++ppn;
-                }
-
 
                 if (sd.prevposEqPlaypos && sd.prevPos == playPos)
                 {

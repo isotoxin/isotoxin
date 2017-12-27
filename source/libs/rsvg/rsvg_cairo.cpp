@@ -115,16 +115,17 @@ void cairo_paths_c::arc(double x1, double y1, double rx, double ry, double x_axi
         return;
     }
 
-    k1 = (x1 - x2) / 2;
-    k2 = (y1 - y2) / 2;
+    k1 = (x1 - x2) * 0.5;
+    k2 = (y1 - y2) * 0.5;
 
     x1_ = cosf * k1 + sinf * k2;
     y1_ = -sinf * k1 + cosf * k2;
 
     gamma = (x1_ * x1_) / (rx * rx) + (y1_ * y1_) / (ry * ry);
     if (gamma > 1) {
-        rx *= sqrt (gamma);
-        ry *= sqrt (gamma);
+        double sgamma = sqrt(gamma);
+        rx *= sgamma;
+        ry *= sgamma;
     }
 
     /* Compute the center */

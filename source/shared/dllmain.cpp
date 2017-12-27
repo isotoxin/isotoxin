@@ -4,6 +4,7 @@
 #define SLASSERT(c,...) (1,true)
 #define SLERROR(c,...) __debugbreak()
 
+#include <stdint.h>
 #include "spinlock/queue.h"
 
 

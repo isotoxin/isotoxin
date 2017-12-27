@@ -2,7 +2,9 @@
 
 #define GRAB_DESKTOP_FPS 15
 
+#ifdef _WIN32
 using namespace DShow;
+#endif // _WIN32
 
 #ifdef DSHOW_LOGGING
 static void lcb(DShow::LogType type, const wchar_t *msg, void *param)
@@ -26,6 +28,23 @@ static void lcb(DShow::LogType type, const wchar_t *msg, void *param)
 }
 #endif
 
+#ifdef _NIX
+struct VideoInfo {
+    int         minCX, minCY;
+    int         maxCX, maxCY;
+    int         granularityCX, granularityCY;
+    long long   minInterval, maxInterval;
+    //VideoFormat format;
+};
+struct VideoDevice
+{
+    std::wstring name;
+    std::wstring path;
+    std::vector<VideoInfo> caps;
+};
+#endif
+
+
 void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
 {
 #ifdef DSHOW_LOGGING
@@ -33,7 +52,12 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
 #endif
 
     std::vector<VideoDevice> devices;
+#ifdef _WIN32
     Device::EnumVideoDevices(devices);
+#endif
+#ifdef _NIX
+    int todo_video_device_enum;
+#endif
 
     for (const VideoDevice &vd : devices)
     {
@@ -108,6 +132,7 @@ vsb_c *vsb_c::build()
 
 vsb_c *vsb_c::build( const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar)
 {
+#ifdef REAL_CAMERA_CLASS
     if (!desc.id.begins(CONSTWSTR("desktop")))
     {
         vsb_dshow_camera_c *cam = TSNEW(vsb_dshow_camera_c);
@@ -115,6 +140,7 @@ vsb_c *vsb_c::build( const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar)
             return cam;
         TSDEL(cam);
     }
+#endif
 
     vsb_desktop_c *cam = TSNEW( vsb_desktop_c );
     if (cam->init(desc, dpar))
@@ -359,7 +385,7 @@ bool vsb_desktop_c::init(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar
 
 
 //////////////// dshow camera
-
+#ifdef DSHOW_CAM_DEFINED
 vsb_dshow_camera_c::core_c *vsb_dshow_camera_c::core_c::first = nullptr;
 vsb_dshow_camera_c::core_c *vsb_dshow_camera_c::core_c::last = nullptr;
 
@@ -621,6 +647,8 @@ bool vsb_dshow_camera_c::init(const vsb_descriptor_s &desc_, const ts::wstrmap_c
     initializing = core_c::get(this, desc_, dpar);
     return true;
 }
+
+#endif //DSHOW_CAM_DEFINED
 
 video_frame_decoder_c::video_frame_decoder_c(active_protocol_c *ap, incoming_video_frame_s *f_) :f(f_), ap(ap)
 {

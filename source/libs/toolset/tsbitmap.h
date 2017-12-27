@@ -562,7 +562,7 @@ public:
 
 	void clear()                    { core.clear(); }
     const imgdesc_s &info() const   { return core.info(); }
-    imgdesc_s info(const ts::ivec2 &offset) const 
+    imgdesc_s info(const ts::ivec2 &offset) const
     {
         if (offset == ts::ivec2(0))
             return core.info();
@@ -846,7 +846,7 @@ public:
     {
         return 0 != (get_area_type() & (ts::IMAGE_AREA_TRANSPARENT | ts::IMAGE_AREA_SEMITRANSPARENT));
     }
-    
+
     uint32 hash() const
     {
         uint32 crc = adler32(0,nullptr,0); //-V112
@@ -913,7 +913,7 @@ class drawable_bitmap_c : public image_extbody_c
 #ifdef _WIN32
     static const int datasize = 16;
 #elif defined __linux__
-    static const int datasize = 16;
+    static const int datasize = 256;
 #else
     unknown
 #endif

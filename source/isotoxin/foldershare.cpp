@@ -267,7 +267,7 @@ namespace
 
         void file_event(int xtag, fshevent_e e)
         {
-            ASSERT(spinlock::pthread_self() == g_app->base_tid());
+            ASSERT(spinlock::tid_self() == g_app->base_tid());
 
             SIMPLELOCK(sync);
             bool processed = false;

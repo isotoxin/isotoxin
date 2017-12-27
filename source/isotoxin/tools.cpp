@@ -1656,7 +1656,7 @@ void add_status_items(menu_c &m)
 SLANGID detect_language()
 {
     ts::wstrings_c fns;
-    ts::g_fileop->find(fns, CONSTWSTR("loc/*.lng*.lng"), false);
+    ts::g_fileop->find(fns, CONSTWSTR("loc/*.lng.lng"), false);
 
 
     ts::wstr_c lng = ts::master().sys_language();
@@ -2028,7 +2028,7 @@ namespace
 
         /*virtual*/ int iterate(ts::task_executor_c *) override
         {
-            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(spinlock::pthread_self()), DELEGATE(this, ipchandler));
+            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(spinlock::tid_self()), DELEGATE(this, ipchandler));
             ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
             ipcj.wait_loop(nullptr);
             ASSERT(result_x != 1);

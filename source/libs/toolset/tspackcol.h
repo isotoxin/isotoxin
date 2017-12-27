@@ -31,7 +31,7 @@ public:
     ~ccollection_c() { clear(); };
 
     void			clear();
-    uint			add_container(const wsptr &filename, int prior = 0); // only add, not open // returns container id or zero, if fail
+    uint			add_container(const wstr_c &filename, int prior = 0); // only add, not open // returns container id or zero, if fail
     void			remove_container(uint container_id);
 
     bool            open_containers();

@@ -23,7 +23,7 @@ w32e_consts GetLastError()
 HANDLE CreateNamedPipeA( const char *name, int dwOpenMode, int dwPipeMode, int nMaxInstances, int nOutBufferSize, int nInBufferSize, int nDefaultTimeOut, void *secur )
 {
     w32state.lasterror = ERROR_SUCCESS;
-    int fifo = mkfifo( name, (dwOpenMode & PIPE_ACCESS_INBOUND) ? O_RDONLY : O_WRONLY );
+    int fifo = mkfifo( name, 0777 ); // (dwOpenMode & PIPE_ACCESS_INBOUND) ? O_RDONLY : O_WRONLY
     if (fifo < 0)
     {
         if (errno == EEXIST)
@@ -31,31 +31,29 @@ HANDLE CreateNamedPipeA( const char *name, int dwOpenMode, int dwPipeMode, int n
         return INVALID_HANDLE_VALUE;
     }
 
-    w32e_handle_pipe_s *pip = new w32e_handle_pipe_s(fifo);
-    return pip;
+    return new w32e_handle_pipe_s(name);
 }
 
-HANDLE CreateFileA(const char *name, w32e_consts readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *)
+HANDLE CreateFileA(const char *name, uint32_t readwrite, int, void *, w32e_consts openmode, w32e_consts attr, void *)
 {
+    struct stat st;
+    int e = stat(name,&st);
+    if (e < 0)
+        return INVALID_HANDLE_VALUE;
+
+    if (S_ISFIFO(st.st_mode))
+        return new w32e_handle_pipe_s(name);
+
     int mode = 0;
     if (readwrite & GENERIC_WRITE)
         mode |= O_WRONLY;
-    if (readwrite & GENERIC_READ)
+    if (0 != (readwrite & GENERIC_READ))
         mode |= O_RDONLY;
     int h = open(name, mode);
     if (h < 0)
         return INVALID_HANDLE_VALUE;
 
-    struct stat st;
-    fstat(h,&st);
-
-    if (S_ISFIFO(st.st_mode))
-    {
-        unlink(name);
-        w32e_handle_pipe_s *pip = new w32e_handle_pipe_s(h);
-        return pip;
-
-    }
+    //fcntl(h,F_SETFL,mode);
 
     close(h);
     __debugbreak();

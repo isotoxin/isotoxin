@@ -1,305 +1,227 @@
 #include "toolset.h"
 
-namespace ts 
+namespace ts
 {
-
-    zip_container_c::zip_folder_entry_c * zip_container_c::zip_folder_entry_c::get_folder( const wsptr &fnn )
+    struct zippp : zlib_filefunc_def
     {
-        for (zip_folder_entry_c *fe : m_folders)
-            if (fe->name().equals(fnn)) return fe;
-        return nullptr;
-    }
+        unzFile         unz = nullptr;
+        unz_global_info ginf;
 
-    zip_container_c::zip_file_entry_c * zip_container_c::zip_folder_entry_c::get_file( const wsptr &fnn )
-    {
-        for (zip_file_entry_c *f : m_files)
-            if (f->name().equals(fnn)) return f;
-        return nullptr;
-    }
+        uint8 rbuf[65536];
+        uint64    rbufshift = (uint64)-1;;
+        uint64    rcurpos = 0; // current virtual pos
+        uint64    rfcurpos = 0; // current pos in real file
+        uint64    fsz = 0;
+        aint rbufsize = 0;
 
-    bool   zip_container_c::zip_folder_entry_c::file_exists(const wsptr &fnn)
-    {
-        for (zip_file_entry_c *f : m_files)
-            if (f->name().equals(fnn)) return true;
-        return false;
-    }
-
-    bool    zip_container_c::zip_folder_entry_c::iterate_files(const wsptr &path_orig, ITERATE_FILES_CALLBACK ef, container_c *pf)
-    {
-        tmp_wstr_c path(path_orig);
-        if (!path.is_empty() && !__is_slash(path.get_last_char())) path.append_char(NATIVE_SLASH);
-
-        for (zip_file_entry_c *f : m_files)
-            if (!ef(path, f->name(), pf)) return false;
-
-        for (zip_folder_entry_c *fe : m_folders)
-            if (!fe->iterate_files(path + fe->name(), ef, pf)) return false;
-        return true;
-    }
-
-
-    bool    zip_container_c::zip_folder_entry_c::iterate_files(const wsptr &path_orig, const wsptr &path, ITERATE_FILES_CALLBACK ef, container_c *pf)
-    {
-        tmp_wstr_c pa( path ), cf;
-        ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
-        if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        int pad = pa.find_pos(NATIVE_SLASH);
-        if ( pad >= 0 )
+        static voidpf ZCALLBACK fopen_file_func(voidpf opaque, const char * filename, int mode)
         {
-            cf = pa.substr(0,pad);
-            pa.cut(0,pad+1);
-        } else
-        {
-            cf = pa;
-            pa.clear();
+            zippp *z = (zippp *)opaque;
+
+            zip_container_c *zc = (zip_container_c *)(((uint8 *)z) - offsetof(zip_container_c, data));
+
+            voidpf stream = f_open(zc->fn());
+            if (stream)
+            {
+                // load last 64k of file
+                z->fsz = f_size(stream);
+                z->rbufsize = (aint)tmin(z->fsz, 65536);
+                z->rbufshift = z->fsz - z->rbufsize;
+                f_set_pos(stream, z->rbufshift);
+                f_read(stream, z->rbuf, z->rbufsize);
+                z->rfcurpos = z->fsz;
+                ASSERT(z->rfcurpos == f_get_pos(stream));
+            }
+            z->rcurpos = 0;
+            return stream;
         }
 
-        if (!cf.is_empty())
+        static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
         {
-            // find folder
-            for (zip_folder_entry_c *fe : m_folders)
-                if (fe->name().equals( cf ))
-                    if (!fe->iterate_files( path_orig, pa, ef, pf ))
-						return false;
-        } else
-        {
-            for (zip_file_entry_c *f : m_files)
-                if (!ef( path_orig, f->name(), pf ))
-					return false;
+            zippp *z = (zippp *)opaque;
 
+            size_t inb = 0;
+            if (z->rbufsize && z->rcurpos >= z->rbufshift)
+            {
+                size_t s = (size_t)(z->rcurpos - z->rbufshift);
+                size_t e = s + size;
+
+                if (s < (uint64)z->rbufsize)
+                {
+                    if (e <= (uint64)z->rbufsize)
+                    {
+                        z->rcurpos += size;
+                        memcpy(buf, z->rbuf + s, size);
+                        return size;
+                    }
+
+                    inb = (size_t)z->rbufsize - s;
+                    size_t ost = e - (size_t)z->rbufsize;
+                    ASSERT(inb + ost == size);
+
+                    memcpy(buf, z->rbuf + s, inb);
+                    z->rcurpos += inb;
+                    size = (uLong)ost;
+                    buf = (char *)buf + inb;
+                }
+            }
+
+            if (z->rcurpos != z->rfcurpos)
+            {
+                f_set_pos(stream, z->rcurpos);
+                z->rfcurpos = z->rcurpos;
+            }
+
+            if (size >= 32768)
+            {
+                uLong r = (uLong)f_read(stream, buf, size);
+                z->rfcurpos += size;
+                z->rcurpos = z->rfcurpos;
+                ASSERT(z->rfcurpos == f_get_pos(stream));
+                return r;
+            }
+
+            z->rbufsize = 65536;
+            uLong rsz = (uLong)f_read(stream, z->rbuf, 65536);
+            uLong nsz = tmin(rsz, size);
+            if (rsz < 65536)
+                z->rbufsize = rsz;
+            z->rbufshift = z->rfcurpos;
+            z->rfcurpos += rsz;
+            z->rcurpos += nsz;
+            memcpy(buf, z->rbuf, nsz);
+            ASSERT(z->rfcurpos == f_get_pos(stream));
+            return (uLong)(nsz + inb);
+        }
+        static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
+        {
+            zippp *z = (zippp *)opaque;
+            return (long)z->rcurpos;
+        }
+        static long ZCALLBACK fseek_file_func(voidpf opaque, voidpf stream, uLong offset, int origin)
+        {
+            zippp *z = (zippp *)opaque;
+
+            uint64 o = offset;
+            switch (origin)
+            {
+            case ZLIB_FILEFUNC_SEEK_END:
+                o += z->fsz;
+                break;
+            case ZLIB_FILEFUNC_SEEK_CUR:
+                o += z->rcurpos;
+                break;
+            }
+
+            z->rcurpos = o;
+            return 0;
+        }
+        static int ZCALLBACK fclose_file_func(voidpf opaque, voidpf stream)
+        {
+            f_close(stream);
+            return 0;
+        }
+        static int ZCALLBACK ferror_file_func(voidpf opaque, voidpf stream)
+        {
+            return 0;
         }
 
-		return true;
-    }
-
-    bool zip_container_c::zip_folder_entry_c::iterate_folders(const wsptr &path_orig, const wsptr &path, ITERATE_FILES_CALLBACK ef, container_c *pf)
-    {
-        tmp_wstr_c pa(path), cf;
-        ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
-        if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        int pad = pa.find_pos(NATIVE_SLASH);
-        if (pad >= 0)
+        zippp()
         {
-            cf = pa.substr(0, pad);
-            pa.cut(0, pad + 1);
-        }
-        else
-        {
-            cf = pa;
-            pa.clear();
+            zopen_file = fopen_file_func;
+            zread_file = fread_file_func;
+            zwrite_file = nullptr; /*fwrite_file_func*/;
+            ztell_file = ftell_file_func;
+            zseek_file = fseek_file_func;
+            zclose_file = fclose_file_func;
+            zerror_file = ferror_file_func;
+            opaque = this;
         }
 
-        if (!cf.is_empty())
-        {
-            // find folder
-            for (zip_folder_entry_c *fe : m_folders)
-                if (fe->name().equals(cf))
-                    if (!fe->iterate_folders(path_orig, pa, ef, pf))
-                        return false;
-        }
-        else
-        {
-            for (zip_folder_entry_c *f : m_folders)
-                if (!ef(path_orig, f->name(), pf))
-                    return false;
+    };
 
-        }
-
-        return true;
-    }
-
-    zip_container_c::zip_folder_entry_c * zip_container_c::zip_folder_entry_c::add_folder( const wsptr &fnn )
-    {
-        ASSERT( get_folder(fnn) == nullptr );
-        zip_folder_entry_c *nf = TSNEW( zip_folder_entry_c, fnn );
-        m_folders.add( nf );
-        return nf;
-    }
-
-    zip_container_c::zip_file_entry_c * zip_container_c::zip_folder_entry_c::add_file( const wsptr &fnn )
-    {
-        ASSERT( get_file(fnn) == nullptr );
-        zip_file_entry_c *nf = TSNEW( zip_file_entry_c, fnn );
-        m_files.add( nf );
-        return nf;
-    }
-
-    zip_container_c::zip_container_c(const wsptr &name, int prior, uint id):container_c(name, prior, id), 
-        m_unz(nullptr),
-        m_root( wstr_c() ), 
-        m_find_cache_file_entry(nullptr)
-    {
-    }
-
-    zip_container_c::zip_file_entry_c::~zip_file_entry_c()
-    {
-    }
-
-    bool    zip_container_c::zip_file_entry_c::read( unzFile unz, buf_wrapper_s &b )
-    {
-        unzGoToFilePos64(unz, &m_ffs);
-
-        if (unzOpenCurrentFile(unz) == UNZ_OK)
-        {
-            aint n = unzReadCurrentFile(unz, b.alloc(m_full_unp_size), (int)m_full_unp_size);
-            if (unzCloseCurrentFile(unz) == UNZ_OK && n == m_full_unp_size)
-                return true;
-        }
-		return false;
-    }
 
     zip_container_c::~zip_container_c()
     {
         close();
+        ((zippp *)data)->~zippp();
     }
 
-    zip_container_c::zip_file_entry_c * zip_container_c::add_path( const wsptr &path0 )
+#ifdef MODE64
+    //static_assert(sizeof(zippp) < 65657, "1");
+    //static_assert(sizeof(zippp) > 65655, "2");
+#else
+    static_assert(sizeof(zippp) < 65625, "1");
+    static_assert(sizeof(zippp) > 65623, "2");
+#endif
+
+    void zip_container_c::build_z()
     {
-        wstr_c path1( path0 );
-        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
-        const wchar *path = path1.cstr();
+        TS_STATIC_CHECK(sizeof(data) >= sizeof(zippp), "size!");
 
-        zip_folder_entry_c *cur = &m_root;
+        zippp *z = (zippp *)data;
+        TSPLACENEW(z);
+    }
 
-        for (;;)
+
+    bool    zip_container_c::zip_entry_s::read(unzFile unz, buf_wrapper_s &b)
+    {
+        unzGoToFilePos64(unz, &ffs);
+
+        if (unzOpenCurrentFile(unz) == UNZ_OK)
         {
-            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
-            if ( ind >= 0 )
-            {
-                zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
-                if (f)
-                {
-                    cur = f;
-                } else
-                {
-                    cur = cur->add_folder( wsptr(path, ind) );
-                }
-                path += ind + 1;
-                continue;
-            }
-
-            // file!
-            zip_file_entry_c *fe = cur->add_file( path );
-            return fe;
+            auint n = unzReadCurrentFile(unz, b.alloc(full_unp_size), (int)full_unp_size);
+            if (unzCloseCurrentFile(unz) == UNZ_OK && n == full_unp_size)
+                return true;
         }
-        UNREACHABLE();
+        return false;
     }
 
-
-    zip_container_c::zip_folder_entry_c * zip_container_c::get_folder( const wsptr &fnn )
+    struct crallocator : public dynamic_allocator_s
     {
-        return m_root.get_folder( fnn );
-    }
+        block_buf_c< 512 * 1024 > texts;
+        virtual void *balloc(size_t sz)
+        {
+            return texts.alloc((uint)sz);
+        }
+        virtual void bfree(void *p)
+        {
+        }
+    };
 
 
     bool    zip_container_c::open()
     {
-        if (m_unz) return true;
+        zippp &z = *(zippp *)data;
+        if (z.unz) return true;
 
-        struct zippp : zlib_filefunc_def
-        {
-            ts::wstr_c name;
+        z.unz = unzOpen2( nullptr, &z );
+        if (z.unz == nullptr) return false;
 
-            static voidpf ZCALLBACK fopen_file_func(voidpf opaque, const char * filename, int mode)
-            {
-                return f_open( ( (zippp *)opaque )->name );
-
-                /*
-                HANDLE file, h;
-                DWORD desiredacces = GENERIC_READ;
-                DWORD createdispos = OPEN_EXISTING;
-
-                if ((mode & ZLIB_FILEFUNC_MODE_READWRITEFILTER) == ZLIB_FILEFUNC_MODE_READ)
-                {
-                    desiredacces = GENERIC_READ;
-                    createdispos = OPEN_EXISTING;
-
-                } else if (mode & ZLIB_FILEFUNC_MODE_EXISTING)
-                {
-                    desiredacces = GENERIC_READ | GENERIC_WRITE;
-                    createdispos = OPEN_EXISTING;
-
-                } else if (mode & ZLIB_FILEFUNC_MODE_CREATE)
-                {
-                    desiredacces = GENERIC_READ | GENERIC_WRITE;
-                    createdispos = CREATE_ALWAYS;
-                }
-
-                h = CreateFileW(((zippp *)opaque)->name, desiredacces, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, createdispos, FILE_ATTRIBUTE_NORMAL, nullptr);
-                file = (HANDLE)((aint)h + 1);
-                return file;
-                */
-            }
-
-            static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
-            {
-                return (uLong)f_read(stream, buf, size);
-            }
-            static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
-            {
-                return (long)f_get_pos(stream);
-            }
-            static long ZCALLBACK fseek_file_func(voidpf opaque, voidpf stream, uLong offset, int origin)
-            {
-                uint64 o = offset;
-                switch (origin)
-                {
-                    case ZLIB_FILEFUNC_SEEK_END:
-                        o += f_size(stream);
-                        break;
-                    case ZLIB_FILEFUNC_SEEK_CUR:
-                        o += f_get_pos( stream );
-                        break;
-                }
-
-                return f_set_pos( stream, o ) ? 0 : 1;
-            }
-            static int ZCALLBACK fclose_file_func(voidpf opaque, voidpf stream)
-            {
-                f_close(stream);
-                return 0;
-            }
-            static int ZCALLBACK ferror_file_func(voidpf opaque, voidpf stream)
-            {
-                return 0;
-            }
-
-            zippp(const ts::wstr_c &name):name(name)
-            {
-                zopen_file = fopen_file_func;
-                zread_file = fread_file_func;
-                zwrite_file = nullptr; /*fwrite_file_func*/;
-                ztell_file = ftell_file_func;
-                zseek_file = fseek_file_func;
-                zclose_file = fclose_file_func;
-                zerror_file = ferror_file_func;
-                opaque = this;
-            }
-
-        } z( fn() );
-
-
-        m_unz = unzOpen2( nullptr, &z );
-        if (m_unz == nullptr) return false;
-        
-        int err = unzGetGlobalInfo (m_unz,&m_ginf);
+        int err = unzGetGlobalInfo (z.unz,&z.ginf);
         if (err!=UNZ_OK)
         {
-            unzClose(m_unz);
-            m_unz = nullptr;
+            unzClose(z.unz);
+            z.unz = nullptr;
             return false;
         }
 
+        ts::shared_ptr<crallocator> a = TSNEW(crallocator);
+
+        entries.clear();
+        entries.reserve(z.ginf.number_entry);
+
         sstr_t<-1032> filename_inzip( 1024, false );
-        for (int i=0;i<(int)m_ginf.number_entry;++i)
+        for (int i=0;i<(int)z.ginf.number_entry;++i)
         {
             filename_inzip.set_length( 1024 );
             unz_file_info file_info;
-            err = unzGetCurrentFileInfo(m_unz,&file_info,filename_inzip.str(),(uLong)filename_inzip.get_capacity(),nullptr,0,nullptr,0);
+            err = unzGetCurrentFileInfo(z.unz,&file_info,filename_inzip.str(),(uLong)filename_inzip.get_capacity(),nullptr,0,nullptr,0);
             if (err!=UNZ_OK)
             {
-                unzClose(m_unz);
-                m_unz = nullptr;
+                entries.clear();
+                unzClose(z.unz);
+                z.unz = nullptr;
                 return false;
             }
             filename_inzip.set_length();
@@ -307,66 +229,94 @@ namespace ts
             if (file_info.size_filename == 0 || __is_slash(filename_inzip.get_last_char())) goto next;
 
             {
-                zip_file_entry_c *fe = add_path( to_wstr(filename_inzip.as_sptr()) );
-                fe->m_full_unp_size = file_info.uncompressed_size;
-                unzGetFilePos64( m_unz, &fe->m_ffs );
+#ifdef _WIN32
+                filename_inzip.case_down();
+#endif // _WIN32
+                filename_inzip.replace_all(ENEMY_SLASH, NATIVE_SLASH);
+
+                zip_entry_s &e = entries.add();
+                e.name = ts::refstring_t<char>::build(filename_inzip, a);
+                e.full_unp_size = file_info.uncompressed_size;
+                unzGetFilePos64(z.unz, &e.ffs );
+
+                int lsl = filename_inzip.find_last_pos(NATIVE_SLASH);
+                if (lsl > 0)
+                {
+                    filename_inzip.set_length(lsl + 1);
+                    for (int j = 0, c = paths.size(); j < c; ++j)
+                    {
+                        ts::str_c &p = paths.get(j);
+                        if (filename_inzip.begins(p) || p.begins(filename_inzip))
+                        {
+                            if (filename_inzip.get_length() > p.get_length())
+                                p = filename_inzip;
+                            filename_inzip.clear();
+                            break;
+                        }
+                    }
+                    if (!filename_inzip.is_empty())
+                        paths.add(filename_inzip);
+                }
+
             }
 next:
-            if ((i+1)<(int)m_ginf.number_entry)
+            if ((i+1)<(int)z.ginf.number_entry)
             {
-                err = unzGoToNextFile(m_unz);
+                err = unzGoToNextFile(z.unz);
                 if (err!=UNZ_OK)
                 {
-                    unzClose(m_unz);
-                    m_unz = nullptr;
+                    entries.clear();
+                    unzClose(z.unz);
+                    z.unz = nullptr;
                     return false;
                 }
             }
         }
+
+        entries.asort();
+        paths.asort();
+
         return true;
     }
     bool    zip_container_c::close()
     {
-        if (!m_unz) return false;
-        unzClose(m_unz);
-        m_unz = nullptr;
+        zippp &z = *(zippp *)data;
+        if (!z.unz) return false;
+        unzClose(z.unz);
+        z.unz = nullptr;
         return true;
     }
 
     bool   zip_container_c::read(const wsptr &filename, buf_wrapper_s &b)
     {
-        ts::wstr_c fn(filename);
-        fix_path(fn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
+        ts::str_c fn(to_utf8(filename));
+#ifdef _WIN32
+        fn.case_down();
+#endif // _WIN32
+        fn.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
-        if (m_find_cache_file_name.equals(fn))
+        aint index = -1;
+        if (entries.find_sorted(index, fn))
         {
-            return m_find_cache_file_entry->read( m_unz, b );
-        } else
-        {
-            if (file_exists( fn ))
-            {
-                return m_find_cache_file_entry->read( m_unz, b );
-            }
+            zippp &z = *(zippp *)data;
+            return entries.get(index).read(z.unz, b);
         }
+
         return false;
     }
 
     size_t    zip_container_c::size(const wsptr &filename)
     {
-        ts::wstr_c fn(filename);
-        fix_path(fn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
+        ts::str_c fn(to_utf8(filename));
+#ifdef _WIN32
+        fn.case_down();
+#endif // _WIN32
+        fn.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
-        if (m_find_cache_file_name.equals(fn))
-        {
-            return m_find_cache_file_entry->size();
-        }
-        else
-        {
-            if (file_exists(fn))
-            {
-                return m_find_cache_file_entry->size();
-            }
-        }
+        aint index = -1;
+        if (entries.find_sorted(index, fn))
+            return entries.get(index).full_unp_size;
+
         return 0;
     }
 
@@ -375,72 +325,121 @@ next:
         return false;
     }
 
-    bool    zip_container_c::file_exists(const wsptr &path0)
+    bool    zip_container_c::file_exists(const wsptr &filename)
     {
-        wstr_c path1( path0 );
-        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
-        const wchar *path = path1.cstr();
+        ts::str_c fn(to_utf8(filename));
+#ifdef _WIN32
+        fn.case_down();
+#endif // _WIN32
+        fn.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
-        zip_folder_entry_c *cur = &m_root;
-
-        for (;;)
-        {
-            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
-            if ( ind >= 0 )
-            {
-                zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
-                if (f)
-                {
-                    cur = f;
-                } else
-                {
-                    return false;
-                }
-                path += ind + 1;
-                continue;
-            }
-
-            // file!
-
-            zip_file_entry_c *fe = cur->get_file( path );
-            if (fe)
-            {
-                m_find_cache_file_entry = fe;
-                m_find_cache_file_name = path0;
-                return true;
-            }
-
-            return false;
-        }
-
-        UNREACHABLE();
+        aint index = -1;
+        return entries.find_sorted(index, fn);
     }
 
     bool    zip_container_c::iterate_files(ITERATE_FILES_CALLBACK ef)
     {
-        return m_root.iterate_files(CONSTWSTR(""), ef, this);
+        wstr_c fn;
+        for (zip_entry_s & e : entries)
+        {
+            fn = from_utf8(e.name->cstr());
+            int fni = fn.find_last_pos_of(CONSTWSTR("/\\"));
+            if (!ef(fni >=0 ? wsptr(fn.cstr(),fni) : wsptr(), fn.substr(fni+1).as_sptr(),this))
+                return false;
+        }
+
+        return true;
     }
 
     bool    zip_container_c::iterate_files(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
-        wstr_c path1( path0 );
-        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
+        str_c path1( to_utf8(path0) );
+#ifdef _WIN32
+        path1.case_down();
+#endif // _WIN32
+        path1.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
-        tmp_wstr_c pp( path0 );
-        if ( !__is_slash(pp.get_last_char()) ) pp.append_char(NATIVE_SLASH);
+        if ( !__is_slash(path1.get_last_char()) ) path1.append_char(NATIVE_SLASH);
 
-        return m_root.iterate_files(pp, path1,ef,this);
+        aint index = -1;
+        if (!entries.find_sorted(index, path1))
+            if (index < 0)
+                return true;
+
+
+        wstr_c fn;
+        for (aint c = entries.size();index < c; ++index)
+        {
+            zip_entry_s & e = entries.get(index);
+            if (!pstr_c(e.name->cstr()).begins(path1))
+                break;
+
+            fn = from_utf8(e.name->cstr());
+            int fni = fn.find_last_pos(NATIVE_SLASH);
+            if (!ef(fni >= 0 ? wsptr(fn.cstr(), fni) : wsptr(), fn.substr(fni + 1).as_sptr(), this))
+                return false;
+        }
+        return true;
     }
 
     bool    zip_container_c::iterate_folders(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
-        wstr_c path1(path0);
-        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
+        str_c path1(to_utf8(path0));
+#ifdef _WIN32
+        path1.case_down();
+#endif // _WIN32
+        path1.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
-        tmp_wstr_c pp(path0);
-        if (!__is_slash(pp.get_last_char())) pp.append_char(NATIVE_SLASH);
+        if (!__is_slash(path1.get_last_char())) path1.append_char(NATIVE_SLASH);
 
-        return m_root.iterate_folders(pp, path1, ef, this);
+        wstr_c fn;
+        str_c prev;
+
+        if (path1.get_length() == 1 && path1.get_char(0) == NATIVE_SLASH)
+        {
+            for (aint index = 0, c = paths.size(); index < c; ++index)
+            {
+                const str_c &pe = paths.get(index);
+
+                int ss = pe.find_pos(NATIVE_SLASH);
+                if (ss >= prev.get_length() && pe.substr(0, ss).equals(prev.substr(0, ss)))
+                    continue;
+
+                fn = from_utf8(pe.substr(0, ss));
+                prev = pe;
+                if (!ef(wsptr(), fn.as_sptr(), this))
+                    return false;
+            }
+            return true;
+        }
+
+        aint index = -1;
+        if (!paths.find_sorted(index, path1))
+            if (index < 0)
+                return true;
+
+        for (aint c = paths.size(); index < c; ++index)
+        {
+            const str_c &pe = paths.get(index);
+            if (pe.get_length() == path1.get_length())
+                continue;
+
+            if (!pe.begins(path1))
+                break;
+
+            int z = path1.get_length();
+            int ss = pe.find_pos(z, NATIVE_SLASH);
+
+            if (ss >= prev.get_length() && pe.substr(0, ss).equals(prev.substr(0, ss)))
+                continue;
+
+            fn = from_utf8(pe.substr(0,ss));
+            prev = pe;
+            ASSERT(z-1 == fn.find_last_pos(NATIVE_SLASH));
+            if (!ef(wsptr(fn.cstr(), z-1), fn.substr(z).as_sptr(), this))
+                return false;
+        }
+        return true;
     }
 
     bool zip_container_c::detect( blob_c &b )
@@ -448,79 +447,6 @@ next:
         return *b.data16() == 0x4B50;
     }
 
-
-
-#if 0
-// ====================================== Zip Container ======================================
-
-    zip_container_c::zip_container_c()
-    {
-        m_zf = nullptr;
-    }
-    
-    zip_container_c::~zip_container_c()
-    {
-        ASSERT(m_zf == nullptr);
-    }
-    
-    bool zip_container_c::CreateContainer(const wsptr &ZipFileName, bool bOverWrite)
-    {
-        m_zf = zipOpen(tmp_wstr_c(ZipFileName), bOverWrite ? 0 : 2);
-        return (m_zf != nullptr);
-    }
-    
-    bool zip_container_c::AddFileData(const wsptr &fn, const void *data, DWORD dwSize, int CompressionLevel)
-    {
-        SYSTEMTIME st;
-        FILETIME ft;
-
-        ASSERT(fn.s != nullptr);
-        ASSERT(m_zf != nullptr);
-        ASSERT(data != nullptr);
-
-        GetSystemTime(&st);
-        SystemTimeToFileTime(&st, &ft);
-
-        zip_fileinfo zi;
-        zi.tmz_date.tm_sec  = st.wSecond;
-        zi.tmz_date.tm_min  = st.wMinute;
-        zi.tmz_date.tm_hour = st.wHour;
-        zi.tmz_date.tm_mday = st.wDay;
-        zi.tmz_date.tm_mon  = st.wMonth;
-        zi.tmz_date.tm_year = st.wYear;
-
-        FileTimeToDosDateTime(&ft, ((LPWORD)&zi.dosDate) + 1, ((LPWORD)&zi.dosDate) + 0);
-
-        zi.internal_fa  = 0;
-        zi.external_fa  = 0;
-
-        int opt_compress_level = CLAMP(CompressionLevel, 0, 9);
-
-        if (ZIP_OK == zipOpenNewFileInZip(m_zf, tmp_wstr_c(fn), &zi, nullptr, 0, nullptr, 0, nullptr /* comment */,
-                                          (opt_compress_level != 0) ? Z_DEFLATED : 0, opt_compress_level))
-        {
-            if (ZIP_OK == zipWriteInFileInZip(m_zf, data, dwSize))
-            {
-                if (ZIP_OK == zipCloseFileInZip(m_zf))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-    
-    bool zip_container_c::CloseContainer()
-    {
-        if (m_zf != nullptr)
-        {
-            int err = zipClose(m_zf, nullptr);
-            m_zf = nullptr;
-            return (ZIP_OK == err);
-        }
-        return true;
-    }
-#endif
 
 } // namespace
 

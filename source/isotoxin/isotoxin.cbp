@@ -21,6 +21,12 @@
 					<Add option="-std=c++14" />
 					<Add option="-m64" />
 					<Add option="-g" />
+					<Add option="-Wno-unused-variable" />
+					<Add option="-Wno-unknown-pragmas" />
+					<Add option="-Wno-sign-compare" />
+					<Add option="-Wno-unused-value" />
+					<Add option="-Wno-return-type" />
+					<Add option="-Wno-undef" />
 					<Add option="-D_DEBUG" />
 					<Add option="-D_NIX" />
 					<Add directory="$(PROJECTDIR)../libs" />
@@ -30,10 +36,13 @@
 				</Compiler>
 				<Linker>
 					<Add option="-m64" />
-					<Add library="memspyd" />
-					<Add library="srsvgd" />
 					<Add library="rectanglesd" />
 					<Add library="toolsetd" />
+					<Add library="srsvgd" />
+					<Add library="ipcd" />
+					<Add library="s3d" />
+					<Add library="memspyd" />
+					<Add library="hunspell" />
 					<Add library="curl" />
 					<Add library="sodium" />
 					<Add library="pngstatic" />
@@ -47,6 +56,13 @@
 					<Add library="cairostatic" />
 					<Add library="sqlitestatic" />
 					<Add library="dl" />
+					<Add library="pngquant" />
+					<Add library="flac" />
+					<Add library="vorbis" />
+					<Add library="ogg" />
+					<Add library="filteraudio" />
+					<Add library="rt" />
+					<Add library="X11" />
 					<Add directory="$(GARBAGE)/__libs/" />
 					<Add directory="$(PROJECTDIR)../libs/" />
 				</Linker>
@@ -77,6 +93,7 @@
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
 		</Compiler>
+		<Unit filename="../shared/shared.cpp" />
 		<Unit filename="activeprotocol.cpp" />
 		<Unit filename="activeprotocol.h" />
 		<Unit filename="addcontact.cpp" />
@@ -100,10 +117,14 @@
 		<Unit filename="conversation.h" />
 		<Unit filename="emoticons.cpp" />
 		<Unit filename="emoticons.h" />
+		<Unit filename="filetransfer.cpp" />
+		<Unit filename="filetransfer.h" />
 		<Unit filename="filterbar.cpp" />
 		<Unit filename="filterbar.h" />
 		<Unit filename="firstrun.cpp" />
 		<Unit filename="firstrun.h" />
+		<Unit filename="foldershare.cpp" />
+		<Unit filename="foldershare.h" />
 		<Unit filename="fullscreenvideo.cpp" />
 		<Unit filename="fullscreenvideo.h" />
 		<Unit filename="images.cpp" />
@@ -142,6 +163,15 @@
 			<code_completion />
 			<lib_finder disable_auto="1" />
 			<debugger />
+			<DoxyBlocks>
+				<comment_style block="0" line="2" />
+				<doxyfile_project />
+				<doxyfile_build />
+				<doxyfile_warnings />
+				<doxyfile_output />
+				<doxyfile_dot />
+				<general />
+			</DoxyBlocks>
 		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

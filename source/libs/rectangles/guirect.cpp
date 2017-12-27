@@ -163,7 +163,7 @@ MODIFY::MODIFY(RID id)
     }
 }
 
-MODIFY::MODIFY(guirect_c &r):client(&r)
+MODIFY::MODIFY(guirect_c &r, bool by_system):client(&r), by_system(by_system)
 {
 	set( client->getprops().update_screenpos() );
     client->__spec_inmod(1);
@@ -174,7 +174,7 @@ MODIFY::~MODIFY()
 	if (client)
     {
         if (CHECK(client->__spec_inmod(0) == 1))
-            client->apply(*this);
+            client->change(*this, by_system);
         client->__spec_inmod(-1);
     }
 }
@@ -375,10 +375,10 @@ void guirect_c::unleech(sqhandler_i * h)
     }
 }
 
-void guirect_c::apply(const rectprops_c &pss)
+void guirect_c::change(const rectprops_c &pss, bool by_system)
 {
 	if (ASSERT(m_engine))
-		if (m_engine->apply( m_props, pss ))
+		if (m_engine->change( m_props, pss, by_system))
             m_engine->redraw();
 }
 

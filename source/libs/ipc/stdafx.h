@@ -21,6 +21,7 @@ typedef DWORD uint32_t;
 
 #include <stddef.h>
 #include <string.h> // memcpy
+#include <stdint.h>
 
 #define SLASSERT(c,...) (true)
 #define SLERROR(c,...) __builtin_trap()

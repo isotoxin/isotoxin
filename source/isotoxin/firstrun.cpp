@@ -98,9 +98,9 @@ ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice) const
 {
     switch (choice)
     {
-    case PCH_PROGRAMFILES: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%PROGRAMS%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
-    case PCH_HERE: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("")), FNO_FULLPATH);
-    case PCH_APPDATA: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
+    case PCH_PROGRAMFILES: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%PROGRAMS%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV | FNO_NORMALIZE);
+    case PCH_HERE: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("")), FNO_FULLPATH|FNO_NORMALIZE);
+    case PCH_APPDATA: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV | FNO_NORMALIZE);
     case PCH_CUSTOM:
         {
             if (ASSERT(selpath))
@@ -231,7 +231,7 @@ void dialog_firstrun_c::go2page(int page_)
     switch (page_)
     {
     case 0:
-        
+
         // CHOOSE YOUR STYLE
 
         label(ts::wstr_c(header_prepend, TTT("This is first run of [appname]. You have to select language. Also You can choose default initialization or you can manually set up some settings. Please select.",24))
@@ -515,7 +515,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         cfg().temp_folder_handlemsg(ts::wstr_c(CONSTWSTR(PATH_MACRO_CONFIG NATIVE_SLASH_S "temp" NATIVE_SLASH_S "handlemsg")));
     }
 
-    if (exit) 
+    if (exit)
     {
         cfg().close();
 
@@ -528,7 +528,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         }
 
         on_close();
-    } else 
+    } else
     {
         on_confirm();
         g_app->load_profile_and_summon_main_rect(false);

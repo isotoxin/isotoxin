@@ -6,7 +6,7 @@
 #ifndef _FINAL
 namespace spinlock
 {
-    unsigned long pthread_self()
+    unsigned long tid_self()
     {
         return GetCurrentThreadId();
     }
@@ -22,7 +22,7 @@ namespace ts
 {
     tmpalloc_c::tmpalloc_c()
     {
-        threadid = spinlock::pthread_self();
+        threadid = spinlock::tid_self();
         ASSERT( core == nullptr );
         core = this;
     }
@@ -34,7 +34,7 @@ namespace ts
     tmpbuf_s *tmpalloc_c::get()
     {
         ASSERT( core, "create tmpalloc_c object at begin of your thread proc" );
-        ASSERT( spinlock::pthread_self() == core->threadid );
+        ASSERT( spinlock::tid_self() == core->threadid );
         for ( tmpbuf_s&b : core->bufs )
         {
             if ( !b.used )
@@ -47,7 +47,7 @@ namespace ts
     }
     void tmpalloc_c::unget( tmpbuf_s * b )
     {
-        ASSERT( spinlock::pthread_self() == core->threadid );
+        ASSERT( spinlock::tid_self() == core->threadid );
         if ( b->extra )
             TSDEL( b );
         else

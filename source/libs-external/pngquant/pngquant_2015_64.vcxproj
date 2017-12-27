@@ -12,12 +12,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lib\blur.c" />
+    <ClCompile Include="lib\kmeans.c" />
     <ClCompile Include="lib\libimagequant.c" />
     <ClCompile Include="lib\mediancut.c" />
     <ClCompile Include="lib\mempool.c" />
     <ClCompile Include="lib\nearest.c" />
     <ClCompile Include="lib\pam.c" />
-    <ClCompile Include="lib\viter.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\blur.h" />
@@ -26,7 +26,6 @@
     <ClInclude Include="lib\mempool.h" />
     <ClInclude Include="lib\nearest.h" />
     <ClInclude Include="lib\pam.h" />
-    <ClInclude Include="lib\viter.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{AC61809B-2682-4C87-B705-70D321EE4AB0}</ProjectGuid>

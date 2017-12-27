@@ -49,20 +49,20 @@ extern "C" void _cdecl asm_sharpen_run_MMX(
 #define C_LEFTOK	(4)
 #define C_RIGHTOK	(8)
 
-void inline conv_add(long& rt, long& gt, long& bt, unsigned long dv, long m) {
+void inline conv_add(int& rt, int& gt, int& bt, uint dv, int m) {
 	bt += m*(0xFF & (dv));
 	gt += m*(0xFF & (dv>>8));
 	rt += m*(0xFF & (dv>>16));
 }
 
-void inline conv_add2(long& rt, long& gt, long& bt, unsigned long dv) {
+void inline conv_add2(int& rt, int& gt, int& bt, uint dv) {
 	bt += 0xFF & (dv);
 	gt += 0xFF & (dv>>8);
 	rt += 0xFF & (dv>>16);
 }
 
-static unsigned long do_conv(const unsigned long *data, long *m, long sflags, long pit) {
-	long rt=0, gt=0, bt=0;
+static uint do_conv(const uint32 *data, int *m, int sflags, int pit) {
+	int rt=0, gt=0, bt=0;
 
 	if (sflags & C_TOPOK) {
 		if (sflags & (C_LEFTOK))		conv_add2(rt, gt, bt, data[        -1]);
@@ -105,13 +105,13 @@ static unsigned long do_conv(const unsigned long *data, long *m, long sflags, lo
 	gt>>=8;	if (gt<0) gt=0; else if (gt>255) gt=255;
 	bt>>=8;	if (bt<0) bt=0; else if (bt>255) bt=255;
 
-	return (unsigned long)((rt<<16) | (gt<<8) | (bt));
+	return (uint)((rt<<16) | (gt<<8) | (bt));
 }
 
 #ifndef USE_ASM
-static inline unsigned long do_conv2(const unsigned long *data, long *m, long pit)
+static inline uint do_conv2(const uint32 *data, int *m, int pit)
 {
-	long rt=0, gt=0, bt=0;
+	int rt=0, gt=0, bt=0;
 
 	conv_add2(rt, gt, bt, data[        -1]);
 	conv_add2(rt, gt, bt, data[         0]);
@@ -131,7 +131,7 @@ static inline unsigned long do_conv2(const unsigned long *data, long *m, long pi
 	gt>>=8;	if (gt<0) gt=0; else if (gt>255) gt=255;
 	bt>>=8;	if (bt<0) bt=0; else if (bt>255) bt=255;
 
-	return (unsigned long)((rt<<16) | (gt<<8) | (bt));
+	return (uint)((rt<<16) | (gt<<8) | (bt));
 }
 #endif
 
@@ -140,14 +140,14 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
 {
     ASSERT(obm.info().sz == souinfo.sz && obm.info().bytepp() == 4);
 
-    unsigned long w,h;
+    uint w,h;
 	const uint32 *src = (const uint32 *)sou;
     uint32 *dst = (uint32 *)obm.body();
-	long pitch = souinfo.pitch;
+	int pitch = souinfo.pitch;
 
 //    ConvoluteFilterData fd;
 
-	long m[9];
+	int m[9];
 
     for(int i=0; i<9; i++)
         if (i==4) m[4] = 256+8*lv; else m[i]=-lv;

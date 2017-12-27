@@ -108,7 +108,7 @@ namespace
                 if (notifs)
                     notifs->Shutdown();
             }
-       
+
             ts::task_c::done( canceled );
         }
 
@@ -136,7 +136,7 @@ void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldev
         return;
 
     shutdown();
-    
+
     sound_init_task_s *task = TSNEW( sound_init_task_s, this, talkdevice, signaldevice, std::move(ev) );
     g_app->add_task( task );
     initializing = task;
@@ -248,7 +248,7 @@ static ts::blob_c load_snd( sound_e snd, float &vol )
 
 bool mediasystem_c::stop_looped(sound_e snd)
 {
-    if (loops[snd]) 
+    if (loops[snd])
     {
         bool ispl = loops[snd]->isPlaying();
         loops[snd]->stop(0.5f);
@@ -298,7 +298,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         void *dd = _alloca(dsz * 2);
         d = dd;
         int ss = fmt.sampleSize();
-        
+
         for (int i = 0; i < dsz; i += ss)
         {
             memcpy(dd, (char*)d_in + i, ss);
@@ -349,7 +349,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         filter = true;
 
 #pragma warning(push)
-#pragma warning(disable:4822) 
+#pragma warning(disable:4822)
         struct s //-V690
         {
             protected_data_s &pd;
@@ -368,7 +368,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         w().cvt->cvt(fmt, d, dsz);
 
 
-    } else 
+    } else
     {
         volume = vol;
         w().cvt.reset();
@@ -552,7 +552,7 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
         namana:
             vp(i).add_data(fmt, vol, dsp, data, size, clampms );
             return true;
-        } else 
+        } else
         {
             if ( j < 0 && vp(i).current == 0 )
             j = i;
@@ -610,7 +610,7 @@ void play_sound( sound_e sss, bool looped, bool forced )
     }
 
     float vol;
-    if (ts::blob_c buf = load_snd(sss, vol)) 
+    if (ts::blob_c buf = load_snd(sss, vol))
         g_app->mediasystem().play(buf, vol);
 }
 
@@ -834,7 +834,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
 
             float *indata = (float *)idata + (samples_per_chnl * ch);
             float *odata = ((float *)GETB()) + outsamples_per_chnl * ch;
-            
+
             uint isamples = (uint)samples_per_chnl;
             speex_resampler_process_float(resampler[ch], 0, indata, &isamples, odata, &osamples);
 
@@ -889,7 +889,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
     {
         ts::aint samples = isize / 2;
         ts::int16 *odata = (ts::int16 *)idata;
-        
+
         if (idata_orig == idata)
         {
             // idata is const, we cannot modify data
@@ -1005,7 +1005,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
             // or we should split interleaved stereo stream to separate streams
 
             SETSZ(isize);
-            
+
             const ts::int16 *source = (const ts::int16 *)idata;
             for (int ch = 0; ch < ichnls; ++ch)
             {

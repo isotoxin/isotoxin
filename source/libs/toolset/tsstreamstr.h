@@ -180,13 +180,17 @@ public:
     streamstr& operator<<(bool n) { begin(); boof.append(n ? CONSTASTR("TRUE") : CONSTASTR("FALSE")); return *this; }
     streamstr& operator<<(short n) { begin(); append_num<int>(n); return *this; }
     streamstr& operator<<(int n) { begin(); append_num<int>(n); return *this; }
+    #ifdef _MSC_VER
     streamstr& operator<<(long n) { begin(); append_num<long,true>(n); return *this; }
+    #endif
     streamstr& operator<<(int64 n) { begin(); append_num<int64,true>(n); return *this; }
 
     streamstr& operator<<(uint8 n) { begin(); append_num<uint>(n); return *this; }
     streamstr& operator<<(unsigned short n) { begin(); append_num<uint32>(n); return *this; }
     streamstr& operator<<(uint n) { begin(); append_num<uint32>(n); return *this; }
+    #ifdef _MSC_VER
     streamstr& operator<<(unsigned long n) { begin(); append_num<unsigned long>(n); return *this; }
+    #endif
     streamstr& operator<<(uint64 n) { begin(); append_num<uint64>(n); return *this; }
 
     streamstr& operator<<(float f) { if (char_t *cur = prepare_fill()) { _gcvt_s( cur, boof_current_size(), f, 16 ); boof_update_len(cur); } return *this; }

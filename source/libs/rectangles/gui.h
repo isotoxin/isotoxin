@@ -181,6 +181,26 @@ public:
 
 //-V:theme():807
 
+namespace gui_private
+{
+    template <typename T> struct store_data_info
+    {
+        static int size(const T&t) { return sizeof(T); }
+        static void copy(void *buf, const T&t) { memcpy(buf, &t, sizeof(T)); }
+    };
+    template<> struct store_data_info<ts::str_c>
+    {
+        static int size(const ts::str_c&t) { return t.get_length() + 1; }
+        static void copy(void *buf, const ts::str_c&t) { memcpy(buf, t.cstr(), t.get_length() + 1); }
+    };
+    template<> struct store_data_info<ts::wstr_c>
+    {
+        static int size(const ts::wstr_c&t) { return t.get_length() * 2 + 2; }
+        static void copy(void *buf, const ts::wstr_c&t) { memcpy(buf, t.cstr(), t.get_length() * 2 + 2); }
+    };
+
+}
+
 class gui_c
 {
 	friend class HOLD;
@@ -418,30 +438,12 @@ public:
     void process_children_repos();
     virtual void do_post_effect();
 
-    private:
-        template <typename T> struct store_data_info
-        {
-            static int size(const T&t) { return sizeof(T); }
-            static void copy(void *buf,const T&t) { memcpy(buf, &t, sizeof(T)); }
-        };
-        template<> struct store_data_info<ts::str_c>
-        {
-            static int size(const ts::str_c&t) { return t.get_length()+1; }
-            static void copy(void *buf, const ts::str_c&t) { memcpy(buf, t.cstr(), t.get_length()+1); }
-        };
-        template<> struct store_data_info<ts::wstr_c>
-        {
-            static int size(const ts::wstr_c&t) { return t.get_length()*2 + 2; }
-            static void copy(void *buf, const ts::wstr_c&t) { memcpy(buf, t.cstr(), t.get_length()*2 + 2); }
-        };
-    public:
-
     template<typename T> int temp_store( const T&t, double ttl = 1.0 )
     {
         TS_STATIC_CHECK( ts::is_movable<T>::value, "not movable!" );
-        int b = get_temp_buf(ttl, store_data_info<T>::size(t));
+        int b = get_temp_buf(ttl, gui_private::store_data_info<T>::size(t));
         void *buf = lock_temp_buf(b);
-        store_data_info<T>::copy(buf, t);
+        gui_private::store_data_info<T>::copy(buf, t);
         return b;
     }
     template<typename T> T *temp_restore( int b )
