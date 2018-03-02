@@ -2945,10 +2945,12 @@ void xmpp::file_control(u64 utag, file_control_e fctl)
             return;
         }
 
+    /*
     if ( FIC_CHECK == fctl )
     {
         hf->file_control( utag, FIC_UNKNOWN );
     }
+    */
 
 }
 bool xmpp::file_portion(u64 utag, const file_portion_prm_s *portion)

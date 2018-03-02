@@ -151,6 +151,13 @@ private:
 	static int __sqrt(int n) { return ts::lround(fastsqrt((float)n)); }
 	static float __sqrt(float n) { return fastsqrt(n); }
 
+    static INLINE const T __clamp(const vec_t<T, 2>& _min_, const vec_t<T, 2>& _max_)
+    {
+        T x = (x < _min_.x) ? _min_.x : ((x > _max_.x) ? _max_.x : x);
+        T y = (y < _min_.y) ? _min_.y : ((y > _max_.y) ? _max_.y : y);
+        return vec_t(x,y);
+    }
+
     static INLINE const T __dot(const vec_t<T, 2> &v0, const vec_t<T, 2> &v1) { return v0.x*v1.x + v0.y*v1.y; }
     static INLINE const T __dot(const vec_t<T, 3> &v0, const vec_t<T, 3> &v1) { return v0.x*v1.x + v0.y*v1.y + v0.z*v1.z; }
     static INLINE const T __dot(const vec_t<T, 4> &v0, const vec_t<T, 4> &v1) { return v0.x*v1.x + v0.y*v1.y + v0.z*v1.z + v0.w*v1.w; }
@@ -248,8 +255,22 @@ public:
     INLINE const vec_t operator++(int notused) { vec_t t(*this); EACH_COMPONENT(i) ++(&(super::x))[i]; return t; }
     INLINE const vec_t operator--(int notused) { vec_t t(*this); EACH_COMPONENT(i) --(&(super::x))[i]; return t; }
 
+    INLINE vec_t clamp(const vec_t& _min_, const vec_t& _max_)
+    {
+        return __clamp(_min_,_max_);
+    }
+
+
 	/// dot product
-    INLINE T	dot(const vec_t & v) const { return __dot(*this, v); }
+    INLINE T dot(const vec_t & v) const { return __dot(*this, v); }
+
+    INLINE vec_t norm() const
+    {
+        float fLength = len();
+        if (fLength != 0.0f)
+            return (*this) * (1.0f / fLength);
+        return *this;
+    }
 
 	INLINE T len() const
 	{
@@ -273,9 +294,9 @@ template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::rotate(float fAngle)
     sincos(fAngle, s, c);
 
     float tx = x;
-    x = x * c - y * s; //-V537
-    y = tx * s + y * c;
-    return *this;
+    x = (float)(x * c - y * s); //-V537
+    y = (float)(tx * s + y * c);
+    return (vec_t<T, 2>&)(*this);
 }
 
 template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::rotate(const vec_t<T, 2>& vCentre, float fAngle)

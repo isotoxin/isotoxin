@@ -67,6 +67,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
     bool update_item = false;
     bool read_fail = false;
     bool done_transfer = false;
+    bool blink_on_recv_done = false;
 
     file_transfer_s();
     ~file_transfer_s();

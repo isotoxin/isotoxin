@@ -78,8 +78,8 @@ namespace ts
 #define TO_RAD_K (M_PI/180.0)
 #define TO_GRAD_K (180.0/M_PI)
 
-#define GRAD2RAD(a) (float((a) * TO_RAD_K))
-#define RAD2GRAD(a) (float((a) * TO_GRAD_K))
+#define deg2rad(a) (float((a) * TO_RAD_K))
+#define rad2deg(a) (float((a) * TO_GRAD_K))
 
 #define	PITCH				0		// up / down
 #define	YAW					1		// left / right
@@ -185,6 +185,11 @@ namespace ts
         vcos = cis * r;
 #endif
 
+    }
+
+    namespace internals
+    {
+        INLINE void set(int &a, float b) { a = ts::lround(b); }
     }
 
 #include "tsvec.h"

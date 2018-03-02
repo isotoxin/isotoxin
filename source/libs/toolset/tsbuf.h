@@ -375,6 +375,14 @@ template<typename ALLOCATOR> struct BUFFER_SIZE_ONLY : public ALLOCATOR
 
 bool check_disk_file(const wsptr &name, const uint8 *data, aint size);
 
+struct dataptr
+{
+    const void *ptr;
+    aint sz;
+    dataptr(const void *ptr, aint sz) :ptr(ptr), sz(sz) {}
+};
+
+
 template<typename CORE> class buf_t
 {
     CORE core;
@@ -411,6 +419,8 @@ public:
     INLINE const uint32 *data32() const { return (const uint32 *)core(); }
 
     const asptr cstr() const { return asptr((const char*)core(), (int)core.size()); }
+    const dataptr dptr() const { return dataptr(core(), core.size()); }
+    const dataptr dptr(aint shift) const { return dataptr(core() + shift, core.size() - shift); }
 
     bool inside(const void *ptr, aint sz) const
     {
@@ -449,6 +459,10 @@ public:
     template< typename CORE2 > void append_buf(const buf_t<CORE2>&b)
     {
         append_buf( b.data(), b.size() );
+    }
+    void append_buf(const dataptr &t)
+    {
+        append_buf(t.ptr, t.sz);
     }
 
     void    append_buf(const void *data, aint datasize)
@@ -860,7 +874,6 @@ public:
 
 };
 
-
 template <typename T, typename CORE = BUFFER_RESIZABLE<sizeof(T) * 32, TS_DEFAULT_ALLOCATOR> > class tbuf_t : public buf_t< CORE > // only simple types can be used due memcpy
 {
     static const size_t tsize = sizeof(T);
@@ -1219,6 +1232,7 @@ public:
     }
 
     array_wrapper_c<const T> array() const { return array_wrapper_c<const T>(get(), count()); }
+    array_wrapper_c<const T> array(aint from) const { return array_wrapper_c<const T>(get() + from, count() - from); }
 
     // begin() end() semantics
 
@@ -1264,7 +1278,6 @@ template<typename T> using tbuf0_t = tbuf_t< T, BUFFER_SIZE_ONLY<TS_DEFAULT_ALLO
 template<typename T> using tmp_tbuf_t = tbuf_t< T, BUFFER_SIZE_ONLY<TMP_ALLOCATOR> >;
 
 typedef buf_t< BUFFER_RESIZABLE_COPY_ON_DEMAND<0, TS_DEFAULT_ALLOCATOR> > blob_c;
-
 
 template <uint block_size> class block_buf_c
 {
@@ -1577,3 +1590,5 @@ public:
 
 
 } // namespace ts
+
+DECLARE_MOVABLE(blob_c, true);

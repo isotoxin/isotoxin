@@ -1,3 +1,3 @@
-#define APPVER 0,4,527 
-#define APPVERD 0.4.527 
-#define PLUGINVER 0.4.527 
+#define APPVER 0,4,528 
+#define APPVERD 0.4.528 
+#define PLUGINVER 0.4.528 

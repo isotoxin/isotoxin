@@ -49,7 +49,6 @@
     <ClCompile Include="..\toxcore\TCP_server.c" />
     <ClCompile Include="..\toxcore\tox.c" />
     <ClCompile Include="..\toxcore\util.c" />
-    <ClCompile Include="..\toxdns\toxdns.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\pthread_simple\pthread.h" />
@@ -83,7 +82,6 @@
     <ClInclude Include="..\toxcore\TCP_server.h" />
     <ClInclude Include="..\toxcore\tox.h" />
     <ClInclude Include="..\toxcore\util.h" />
-    <ClInclude Include="..\toxdns\toxdns.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="unistd.h" />
   </ItemGroup>

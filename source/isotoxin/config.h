@@ -16,6 +16,9 @@
 #define INT64PAR( pn, defv ) int64 pn() { return get(CONSTASTR(#pn), (int64)(defv)); } \
                             bool pn( int64 un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_num<int64>(un) ); }
 
+#define UINT64PAR( pn, defv ) uint64 pn() { return get(CONSTASTR(#pn), (uint64)(defv)); } \
+                            bool pn( uint64 un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_num<uint64>(un) ); }
+
 #define FLOATPAR( pn, defv ) float pn() { return get(CONSTASTR(#pn), (float)(defv)); } \
                             bool pn( float un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_float(un) ); }
 

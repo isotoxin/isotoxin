@@ -9,4 +9,3 @@
 #include "../plgcommon/proto_interface.h"
 #include "toxcore/toxcore/tox.h"
 #include "toxcore/toxav/toxav.h"
-#include "toxcore/toxdns/toxdns.h"

@@ -6,6 +6,7 @@ conf
   avatarsize=40,40
   mecontactheight=60
   contactheight=54
+  contactheightsmall=27
   minprotowidth=100
   cltop=62
   clbottom=65

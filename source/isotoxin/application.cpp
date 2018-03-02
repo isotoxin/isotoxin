@@ -1398,6 +1398,16 @@ void application_c::blinking_reason_s::do_recalc_unread_now()
                     file_download_remove(0);
             }
 
+            /*
+            if (is_file_download_rcvd())
+            {
+                for (uint64 mitag : mitags_rcvd)
+                {
+
+                }
+            }
+            */
+
             if (is_folder_share_announce())
             {
                 if (!g_app->folder_share_recv_announce_present())
@@ -2597,16 +2607,18 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
 
     if (activate)
     {
-        av_contact_s &avc = avcontacts().get( avmc->getkey() | sub->getkey(), av_contact_s::AV_INPROGRESS);
-        avc.tag = gui->get_free_tag();
-        avc.camera(camera);
+        if (av_contact_s *avc = avcontacts().get(avmc->getkey() | sub->getkey(), av_contact_s::AV_INPROGRESS))
+        {
+            avc->tag = gui->get_free_tag();
+            avc->camera(camera);
 
-        if (!avmc->getkey().is_conference())
-            avmc->subiterate([&](contact_c *c) {
+            if (!avmc->getkey().is_conference())
+                avmc->subiterate([&](contact_c *c) {
                 if (c->flag_is_av)
                     notice_t<NOTICE_CALL_INPROGRESS>(avmc, c).send();
             });
-        r = &avc;
+            r = avc;
+        }
 
     } else
         avcontacts().del(avmc);
@@ -2911,7 +2923,9 @@ void application_c::cancel_file_transfers( const contact_key_s &historian )
     for (auto &row : prf().get_table_unfinished_file_transfer())
     {
         if (row.other.historian == historian)
+        {
             ch |= row.deleted();
+        }
     }
     if (ch) prf().changed();
 
@@ -2921,8 +2935,10 @@ void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
 {
     if (!disconnected)
         if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
+        {
             if (row->deleted())
                 prf().changed();
+        }
 
     ts::aint cnt = m_files.size();
     for (int i=0;i<cnt;++i)
@@ -3172,6 +3188,7 @@ void preloaded_stuff_s::reload()
     const theme_c &th = gui->theme();
 
     contactheight = th.conf().get_string(CONSTASTR("contactheight")).as_int(55);
+    contactheight_small = th.conf().get_string(CONSTASTR("contactheightsmall")).as_int(27);
     mecontactheight = th.conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     minprotowidth = th.conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
     protoiconsize = th.conf().get_string(CONSTASTR("protoiconsize")).as_int(10);

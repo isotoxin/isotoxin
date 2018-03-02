@@ -2,38 +2,117 @@
 
 namespace ts
 {
+
     struct zippp : zlib_filefunc_def
     {
-        unzFile         unz = nullptr;
-        unz_global_info ginf;
-
+        static THREADLOCAL zippp * first;
+        zippp *next = nullptr;
+        zip_container_c *zc;
+        unzFile unz = nullptr;
+        void *stream = nullptr;
         uint8 rbuf[65536];
-        uint64    rbufshift = (uint64)-1;;
+        uint64    rbufshift = (uint64)-1;
         uint64    rcurpos = 0; // current virtual pos
         uint64    rfcurpos = 0; // current pos in real file
         uint64    fsz = 0;
         aint rbufsize = 0;
 
+        zippp(zip_container_c *owner, bool prefetch) :zc(owner)
+        {
+            zopen_file = fopen_file_func;
+            zread_file = fread_file_func;
+            zwrite_file = nullptr; /*fwrite_file_func*/;
+            ztell_file = ftell_file_func;
+            zseek_file = fseek_file_func;
+            zclose_file = fclose_file_func;
+            zerror_file = ferror_file_func;
+            opaque = this;
+
+            stream = f_open(zc->fn());
+            if (stream)
+            {
+                // load last 64k of file
+                fsz = f_size(stream);
+                if (prefetch)
+                {
+                    // preload last 64k of zip file - need for toc load
+                    rbufsize = (aint)tmin(fsz, 65536);
+                    rbufshift = fsz - rbufsize;
+                    f_set_pos(stream, rbufshift);
+                    f_read(stream, rbuf, rbufsize);
+                    rfcurpos = fsz;
+                }
+                ASSERT(rfcurpos == f_get_pos(stream));
+            }
+            rcurpos = 0;
+        }
+
+        ~zippp()
+        {
+            //ASSERT(unz == nullptr && stream == nullptr);
+        }
+
+        static zippp * get(zip_container_c *c, bool prefetch)
+        {
+            for (zippp *a = zippp::first; a; a = a->next)
+            {
+                if (a->zc == c)
+                    return a;
+            }
+            zippp *n = TSNEW(zippp, c, prefetch);
+            if (n->stream == nullptr)
+            {
+                TSDEL(n);
+                return nullptr;
+            }
+
+            n->unz = unzOpen2(nullptr, n);
+            if (n->unz == nullptr)
+            {
+                TSDEL(n);
+                return nullptr;
+            }
+
+            n->next = zippp::first;
+            zippp::first = n;
+
+            return n;
+        }
+
+        bool closezip()
+        {
+            bool o = false;
+            if (unz)
+            {
+                unzClose(unz);
+                unz = nullptr;
+                o = true;
+            }
+
+            zc->finish_thread();
+            return o;
+        }
+
+
+        static bool close(zip_container_c *c)
+        {
+            for (zippp *a = zippp::first; a; a = a->next)
+            {
+                if (a->zc == c)
+                    return a->closezip();
+            }
+
+            return false;
+        }
+
         static voidpf ZCALLBACK fopen_file_func(voidpf opaque, const char * filename, int mode)
         {
             zippp *z = (zippp *)opaque;
 
-            zip_container_c *zc = (zip_container_c *)(((uint8 *)z) - offsetof(zip_container_c, data));
+            //zip_container_c *zc = (zip_container_c *)(((uint8 *)z) - offsetof(zip_container_c, data));
+            ASSERT(z->stream != nullptr);
 
-            voidpf stream = f_open(zc->fn());
-            if (stream)
-            {
-                // load last 64k of file
-                z->fsz = f_size(stream);
-                z->rbufsize = (aint)tmin(z->fsz, 65536);
-                z->rbufshift = z->fsz - z->rbufsize;
-                f_set_pos(stream, z->rbufshift);
-                f_read(stream, z->rbuf, z->rbufsize);
-                z->rfcurpos = z->fsz;
-                ASSERT(z->rfcurpos == f_get_pos(stream));
-            }
-            z->rcurpos = 0;
-            return stream;
+            return z->stream;
         }
 
         static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
@@ -126,43 +205,35 @@ namespace ts
             return 0;
         }
 
-        zippp()
-        {
-            zopen_file = fopen_file_func;
-            zread_file = fread_file_func;
-            zwrite_file = nullptr; /*fwrite_file_func*/;
-            ztell_file = ftell_file_func;
-            zseek_file = fseek_file_func;
-            zclose_file = fclose_file_func;
-            zerror_file = ferror_file_func;
-            opaque = this;
-        }
 
     };
 
+    zippp * zippp::first = nullptr;
 
     zip_container_c::~zip_container_c()
     {
         close();
-        ((zippp *)data)->~zippp();
     }
 
-#ifdef MODE64
-    //static_assert(sizeof(zippp) < 65657, "1");
-    //static_assert(sizeof(zippp) > 65655, "2");
-#else
-    static_assert(sizeof(zippp) < 65625, "1");
-    static_assert(sizeof(zippp) > 65623, "2");
-#endif
-
-    void zip_container_c::build_z()
+    void zip_container_c::finish_thread()
     {
-        TS_STATIC_CHECK(sizeof(data) >= sizeof(zippp), "size!");
-
-        zippp *z = (zippp *)data;
-        TSPLACENEW(z);
+        zippp *prv = nullptr;
+        for(zippp *a = zippp::first; a; a=a->next)
+        {
+            if (a->zc == this)
+            {
+                if (prv)
+                {
+                    prv->next = a->next;
+                }
+                else
+                    zippp::first = a->next;
+                TSDEL( a );
+                break;
+            }
+            prv = a;
+        }
     }
-
 
     bool    zip_container_c::zip_entry_s::read(unzFile unz, buf_wrapper_s &b)
     {
@@ -192,36 +263,34 @@ namespace ts
 
     bool    zip_container_c::open()
     {
-        zippp &z = *(zippp *)data;
-        if (z.unz) return true;
+        zippp *z = zippp::get(this, true);
+        if (z == nullptr)
+            return false;
 
-        z.unz = unzOpen2( nullptr, &z );
-        if (z.unz == nullptr) return false;
 
-        int err = unzGetGlobalInfo (z.unz,&z.ginf);
+        unz_global_info ginf;
+        int err = unzGetGlobalInfo (z->unz,&ginf);
         if (err!=UNZ_OK)
         {
-            unzClose(z.unz);
-            z.unz = nullptr;
+            z->closezip();
             return false;
         }
 
         ts::shared_ptr<crallocator> a = TSNEW(crallocator);
 
         entries.clear();
-        entries.reserve(z.ginf.number_entry);
+        entries.reserve(ginf.number_entry);
 
         sstr_t<-1032> filename_inzip( 1024, false );
-        for (int i=0;i<(int)z.ginf.number_entry;++i)
+        for (int i=0;i<(int)ginf.number_entry;++i)
         {
             filename_inzip.set_length( 1024 );
             unz_file_info file_info;
-            err = unzGetCurrentFileInfo(z.unz,&file_info,filename_inzip.str(),(uLong)filename_inzip.get_capacity(),nullptr,0,nullptr,0);
+            err = unzGetCurrentFileInfo(z->unz,&file_info,filename_inzip.str(),(uLong)filename_inzip.get_capacity(),nullptr,0,nullptr,0);
             if (err!=UNZ_OK)
             {
                 entries.clear();
-                unzClose(z.unz);
-                z.unz = nullptr;
+                z->closezip();
                 return false;
             }
             filename_inzip.set_length();
@@ -230,14 +299,14 @@ namespace ts
 
             {
 #ifdef _WIN32
-                filename_inzip.case_down();
+                filename_inzip.case_down_ansi();
 #endif // _WIN32
                 filename_inzip.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 
                 zip_entry_s &e = entries.add();
                 e.name = ts::refstring_t<char>::build(filename_inzip, a);
                 e.full_unp_size = file_info.uncompressed_size;
-                unzGetFilePos64(z.unz, &e.ffs );
+                unzGetFilePos64(z->unz, &e.ffs );
 
                 int lsl = filename_inzip.find_last_pos(NATIVE_SLASH);
                 if (lsl > 0)
@@ -260,14 +329,13 @@ namespace ts
 
             }
 next:
-            if ((i+1)<(int)z.ginf.number_entry)
+            if ((i+1)<(int)ginf.number_entry)
             {
-                err = unzGoToNextFile(z.unz);
+                err = unzGoToNextFile(z->unz);
                 if (err!=UNZ_OK)
                 {
                     entries.clear();
-                    unzClose(z.unz);
-                    z.unz = nullptr;
+                    z->closezip();
                     return false;
                 }
             }
@@ -280,11 +348,21 @@ next:
     }
     bool    zip_container_c::close()
     {
-        zippp &z = *(zippp *)data;
-        if (!z.unz) return false;
-        unzClose(z.unz);
-        z.unz = nullptr;
-        return true;
+        return zippp::close(this);
+    }
+
+    bool   zip_container_c::read(const asptr &filename, buf_wrapper_s &b)
+    {
+        aint index = -1;
+        if (entries.find_sorted(index, filename))
+        {
+            zippp *z = zippp::get(this, false);
+            if (z == nullptr)
+                return false;
+            return entries.get(index).read(z->unz, b);
+        }
+
+        return false;
     }
 
     bool   zip_container_c::read(const wsptr &filename, buf_wrapper_s &b)
@@ -298,8 +376,10 @@ next:
         aint index = -1;
         if (entries.find_sorted(index, fn))
         {
-            zippp &z = *(zippp *)data;
-            return entries.get(index).read(z.unz, b);
+            zippp *z = zippp::get(this, false);
+            if (z == nullptr)
+                return false;
+            return entries.get(index).read(z->unz, b);
         }
 
         return false;

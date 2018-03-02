@@ -137,6 +137,7 @@ public:
 #define MAX_PATH_LENGTH 4096
 
 #ifdef _WIN32
+void * sys_instance();
 #define MASTERCLASS_INTERNAL_STUFF_SIZE (ARCHBITS / 32 * 128)
 class sys_master_win32_c : public sys_master_c
 #define MASTER_CLASS sys_master_win32_c

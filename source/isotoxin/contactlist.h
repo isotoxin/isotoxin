@@ -94,6 +94,8 @@ class gui_contact_item_c : public gui_clist_base_c
 
     bool redraw_now(RID, GUIPARAM);
 
+    void draw();
+
     static const ts::flags32_s::BITS  F_LBDN = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS  F_DNDDRAW = FLAGS_FREEBITSTART_LABEL << 1;
     static const ts::flags32_s::BITS  F_SHOWTYPING = FLAGS_FREEBITSTART_LABEL << 2;

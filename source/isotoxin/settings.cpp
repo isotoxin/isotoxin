@@ -2035,11 +2035,12 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_NEWCONN_BAR);
 
-        bgroups[ BGROUP_CLIST ].add( UIOPT_SHOW_SEARCH_BAR );
-        bgroups[ BGROUP_CLIST ].add( UIOPT_TAGFILETR_BAR );
-        bgroups[ BGROUP_CLIST ].add( UIOPT_PROTOICONS );
-        bgroups[ BGROUP_CLIST ].add( UIOPT_GEN_IDENTICONS );
-        bgroups[ BGROUP_CLIST ].add( CLOPT_GROUP_CONTACTS_PROTO );
+        bgroups[BGROUP_CLIST].add(UIOPT_SHOW_SEARCH_BAR);
+        bgroups[BGROUP_CLIST].add(UIOPT_TAGFILETR_BAR);
+        bgroups[BGROUP_CLIST].add(UIOPT_PROTOICONS);
+        bgroups[BGROUP_CLIST].add(UIOPT_GEN_IDENTICONS);
+        bgroups[BGROUP_CLIST].add(CLOPT_GROUP_CONTACTS_PROTO);
+        bgroups[BGROUP_CLIST].add(CLOPT_SMALL_ITEMS);
 
         bgroups[BGROUP_COMMON2].add(UIOPT_AWAYONSCRSAVER);
         bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
@@ -2059,6 +2060,7 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_MSGOPTS].add(MSGOP_REPLACE_SHORT_SMILEYS);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_INLINE_IMG);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_MAXIMIZE_INLINE_IMG);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_PROCESS_MARKDOWN);
 
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
@@ -2390,6 +2392,7 @@ void dialog_settings_c::mod()
             .add( TTT( "Protocol icons as contact state indicator", 296 ), 0, MENUHANDLER(), CONSTASTR( "4" ) )
             .add( TTT( "Generate identicons for contacts without avatar", 469 ), 0, MENUHANDLER(), CONSTASTR( "8" ) )
             .add( TTT("Group contacts by protocol",478), 0, MENUHANDLER(), CONSTASTR( "16" ) )
+            .add(TTT("Compact list items",405), 0, MENUHANDLER(), CONSTASTR("32"))
         );
 
         dm << MASK_PROFILE_NOTIFICATIONS; //____________________________________________________________________________________________________//
@@ -2481,6 +2484,7 @@ void dialog_settings_c::mod()
             .add(t_showdatesep, 0, MENUHANDLER(), CONSTASTR("2"))
             .add(TTT("Show protocol name", 173), 0, MENUHANDLER(), CONSTASTR("4"))
             .add(TTT("Replace short smileys to emoticons",373), 0, MENUHANDLER(), CONSTASTR("8"))
+            .add(TTT("Process Markdown syntax",404), 0, MENUHANDLER(), CONSTASTR("64"))
             .add(TTT("Show inline images",487), 0, MENUHANDLER(), CONSTASTR( "16" ))
             .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("32"))
             ).setname(CONSTASTR("msgopts"));
@@ -3409,7 +3413,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_LANGUAGE, curlang).send();
     }
     bool fontchanged = false;
-    ts::flags32_s::BITS msgopts_changed = 0;
+    ts::flags64_s::BITS msgopts_changed = 0;
     if (profile_selected)
     {
         prf().ctl_to_send(ctl2send);

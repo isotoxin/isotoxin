@@ -3859,10 +3859,12 @@ void lan_engine::file_control(u64 utag, file_control_e ctl)
         }
         return;
     }
+    /*
     if ( FIC_CHECK == ctl )
     {
         hf->file_control( utag, FIC_UNKNOWN );
     }
+    */
 
 }
 

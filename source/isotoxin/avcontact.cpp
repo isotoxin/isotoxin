@@ -417,7 +417,7 @@ void av_contacts_c::set_tag( contact_root_c *cr, int tag )
             avc->tag = tag;
 }
 
-av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
+av_contact_s * av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
 {
     ASSERT( spinlock::tid_self() == g_app->base_tid() );
 
@@ -426,12 +426,14 @@ av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
         {
             if ( av_contact_s::AV_NONE != st )
                 avc->core->state = st;
-            return *avc;
+            return avc;
         }
 
     contact_root_c *root = contact_key_s( avkey ).find_root_contact();
     contact_c *sub = contact_key_s( avkey ).find_sub_contact();
-    ASSERT( root != nullptr && sub != nullptr );
+    if (root == nullptr || sub == nullptr)
+        return nullptr;
+
     ASSERT( avkey == ( root->getkey() | sub->getkey() ) );
 
     av_contact_s *avc = TSNEW( av_contact_s, root, sub, st );
@@ -454,7 +456,7 @@ av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
     g_app->check_capture();
 
     avc->send_so(); // update stream options now
-    return *avc;
+    return avc;
 }
 
 void av_contacts_c::del( active_protocol_c *ap )

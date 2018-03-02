@@ -171,8 +171,8 @@ void rsvg_animation_c::activate(uint st, bool f)
     for (ts::token<char> t(to, ' '); t; ++t)
         dto[i++] = t->as_float();
 
-    dfrom.x = GRAD2RAD(dfrom.x);
-    dto.x = GRAD2RAD(dto.x);
+    dfrom.x = deg2rad(dfrom.x);
+    dto.x = deg2rad(dto.x);
 }
 
 void rsvg_animation_transform_rotate_c::lerp(float t)

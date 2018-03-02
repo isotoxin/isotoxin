@@ -23,7 +23,7 @@ PROFILE_TABLES
 #undef TAB
     pt_count };
 
-enum profile_options_e : unsigned
+enum profile_options_e : uint64
 {
     MSGOP_SHOW_DATE             = SETBIT(0),
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
@@ -63,11 +63,15 @@ enum profile_options_e : unsigned
     COPT_MUTE_MINIMIZED         = SETBIT(28),
 
     MSGOP_SEARCH_ENTIRE_PHRASES = SETBIT(29),
+    MSGOP_PROCESS_MARKDOWN      = SETBIT(30),
 
     OPTOPT_POWER_USER           = SETBIT(31),
+
+    CLOPT_SMALL_ITEMS           = SETBIT(32),
+
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | COPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG|COPT_MUTE_MINIMIZED)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | COPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG|COPT_MUTE_MINIMIZED|MSGOP_PROCESS_MARKDOWN)
 
 enum profile_misc_flags_e
 {
@@ -396,6 +400,19 @@ template<> struct load_on_start<backup_protocol_s> { static const bool value = f
 template<typename T> struct limit_id { static const int value = 0; };
 template<> struct limit_id<active_protocol_s> { static const int value = 65000; };
 
+template<typename T, bool tgtinitialized> struct table_data_initializer { static void init(T &tgt, const T &src) { DEBUG_BREAK(); } };
+template<> struct table_data_initializer<active_protocol_s, false> {
+    static void init(active_protocol_s &tgt, const active_protocol_s &src) {
+        TSPLACENEW(&tgt, src);
+    }
+};
+
+template<> struct table_data_initializer<active_protocol_s, true> {
+    static void init(active_protocol_s &tgt, const active_protocol_s &src) {
+        tgt = src;
+    }
+};
+
 template<typename T, profile_table_e tabi> struct tableview_t
 {
     typedef T ROWTYPE;
@@ -427,8 +444,8 @@ template<typename T, profile_table_e tabi> struct tableview_t
         void temp() { st = s_temp; }
         bool is_temp() const { return st == s_temp; }
 
-        row_s(const row_s&r) {} // do nothing empty fake copy constructor never called, but required for instancing of template
-        row_s operator=(const row_s&r) { return *this; }  // do nothing empty fake operator never called, but required for instancing of template
+        row_s(const row_s&r) :id(r.id), st(r.st) { table_data_initializer<T,false>::init(other, r.other); }
+        row_s &operator=(const row_s&r) { id = r.id; st = r.st; table_data_initializer<T, true>::init(other, r.other); return *this; }
     };
     ts::tmp_tbuf_t<int> *read_ids = nullptr;
     ts::array_inplace_t<row_s, 0> rows;
@@ -618,11 +635,12 @@ class profile_c : public config_base_c
     static const ts::flags32_s::BITS F_ENCRYPT_PROCESS = SETBIT(4);
     static const ts::flags32_s::BITS F_LOADED_TABLES = SETBIT(5);
 
-    ts::flags32_s profile_flags;
-    ts::flags32_s current_options;
+    ts::flags64_s current_options;
 
-	UINT32PAR(msgopts, 0)
-	UINT32PAR(msgopts_edited, 0)
+    ts::flags32_s profile_flags;
+
+	UINT64PAR(msgopts, 0)
+	UINT64PAR(msgopts_edited, 0)
 
     void create_aps();
 
@@ -765,8 +783,8 @@ public:
 
     uint64 uniq_history_item_tag();
 
-    ts::flags32_s INLINE get_options();
-    bool set_options(ts::flags32_s::BITS mo, ts::flags32_s::BITS mask);
+    ts::flags64_s INLINE get_options();
+    bool set_options(ts::flags64_s::BITS mo, ts::flags64_s::BITS mask);
 
     int min_history_load(bool for_button);
 
@@ -844,7 +862,7 @@ public:
 
 #undef TEXTPAR
 
-ts::flags32_s prf_options();
+ts::flags64_s prf_options();
 
 //-V:prf():807
 extern ts::static_setup<profile_c> prf;

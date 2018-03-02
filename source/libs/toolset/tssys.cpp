@@ -23,6 +23,14 @@ namespace ts
 
 #ifdef _WIN32
 #include "_win32/win32_master.inl"
+
+
+    void * sys_instance()
+    {
+        master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+        return istuff.inst;
+    }
+
 #endif
 
 #ifdef _NIX

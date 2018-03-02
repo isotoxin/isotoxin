@@ -6,14 +6,6 @@ namespace ts
 {
     class zip_container_c : public container_c
     {
-        friend struct zippp;
-
-#ifdef MODE64
-        uint8 data[65664];
-#else
-        uint8 data[65624];
-#endif
-
         struct zip_entry_s : movable_flag<true>
         {
             ts::shared_ptr< ts::refstring_t<char> > name;
@@ -28,6 +20,10 @@ namespace ts
             {
                 return str_c::compare(name->cstr(), s);
             }
+            int operator()(const asptr &s) const
+            {
+                return str_c::compare(name->cstr(), s);
+            }
 
             bool  read(unzFile unz, buf_wrapper_s &b);
         };
@@ -35,17 +31,16 @@ namespace ts
         ts::array_inplace_t<zip_entry_s, 1> entries;
         ts::astrings_c paths;
 
-        void build_z();
-
-
     public:
 
-        zip_container_c() :container_c(ts::wstr_c(), 0, 0) { build_z(); } //, m_root(wstr_c()), m_find_cache_file_entry(nullptr) {}
-        zip_container_c(const wstr_c &name, int prior, uint id) :container_c(name, prior, id) { build_z(); }
+        zip_container_c() :container_c(ts::wstr_c(), 0, 0) {} //, m_root(wstr_c()), m_find_cache_file_entry(nullptr) {}
+        zip_container_c(const wstr_c &name, int prior, uint id) :container_c(name, prior, id) {}
         virtual ~zip_container_c();
 
         /*virtual*/ bool    open() override;
         /*virtual*/ bool    close() override;
+
+        bool    read(const asptr &filename, buf_wrapper_s &b);
 
         /*virtual*/ bool    read(const wsptr &filename, buf_wrapper_s &b) override;
         /*virtual*/ size_t  size(const wsptr &filename) override;
@@ -58,6 +53,8 @@ namespace ts
 
         static bool detect( blob_c & );
 
+
+        void finish_thread(); // call this method at end of thread to avoid memory leak
     };
 
     /*

@@ -961,7 +961,7 @@ void text_convert_char_tags(ts::str_c &text)
     }
 }
 
-void text_adapt_user_input(ts::str_c &text)
+void text_adapt_user_input(ts::str_c &text, bool markdown)
 {
     text.replace_all('\t', ' ');
     text.replace_all(CONSTASTR("\r"), CONSTASTR(""));
@@ -988,6 +988,9 @@ void text_adapt_user_input(ts::str_c &text)
             text.replace_all(t1, t2);
         }
     }
+
+    if (!markdown)
+        return;
 
     // markdown
 

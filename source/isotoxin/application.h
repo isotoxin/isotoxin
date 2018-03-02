@@ -19,6 +19,7 @@ struct preloaded_stuff_s
     const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
     const ts::font_desc_c *font_msg_edit = &ts::g_default_text_font;
     int contactheight = 55;
+    int contactheight_small = 27;
     int mecontactheight = 60;
     int minprotowidth = 100;
     int protoiconsize = 10;
@@ -334,6 +335,17 @@ public:
         bool is_file_download() const { return is_file_download_request() || is_file_download_process(); }
         bool is_file_download_request() const { return ftags_request.count() > 0; }
         bool is_file_download_process() const { return ftags_progress.count() > 0; }
+        /*
+        bool is_file_download_rcvd() const { return mitags_rcvd.count() > 0; }
+        void file_downloaded(uint64 msgitmtag)
+        {
+            bool dirty = mitags_rcvd.find_remove_fast(msgitmtag);
+            ts::aint oldc = mitags_rcvd.count();
+            mitags_rcvd.set(msgitmtag);
+            if (dirty || oldc != mitags_rcvd.count())
+                flags.set(F_REDRAW);
+        }
+        */
         void file_download_request_add( uint64 ftag )
         {
             bool dirty = ftags_progress.find_remove_fast(ftag);

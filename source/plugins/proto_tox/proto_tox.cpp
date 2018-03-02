@@ -516,35 +516,31 @@ extern "C"
 
 static std::string dnsquery(const std::string & query, const std::asptr& ver);
 
-struct tox3dns_s
+struct pinnode_s
 {
     std::string addr;
     byte key[32];
-    void *dns3 = nullptr;
     bool key_ok = false;
 
-    void operator=(tox3dns_s && oth)
+    void operator=(pinnode_s && oth)
     {
         addr = oth.addr;
         memcpy(key, oth.key, 32);
         key_ok = oth.key_ok;
-        std::swap(dns3, oth.dns3);
     }
-    tox3dns_s(tox3dns_s && oth) :addr(oth.addr)
+    pinnode_s(pinnode_s && oth) :addr(oth.addr)
     {
         if (oth.key_ok)
         {
             memcpy(key, oth.key, 32);
             key_ok = true;
         }
-        dns3 = oth.dns3;
-        oth.dns3 = nullptr;
     }
 
-    void operator=(const tox3dns_s&) = delete;
-    tox3dns_s(const tox3dns_s&) = delete;
+    void operator=(const pinnode_s&) = delete;
+    pinnode_s(const pinnode_s&) = delete;
 
-    tox3dns_s(const std::asptr &sn, const std::asptr &k = std::asptr()) :addr(sn)
+    pinnode_s(const std::asptr &sn, const std::asptr &k = std::asptr()) :addr(sn)
     {
         if (k.l)
         {
@@ -564,56 +560,17 @@ struct tox3dns_s
         }
     }
 
-    ~tox3dns_s()
+    ~pinnode_s()
     {
-        if (dns3) tox_dns3_kill(dns3);
     }
 
     std::string query1(const std::string &pubid)
     {
-        if (dns3)
-        {
-            tox_dns3_kill(dns3);
-            dns3 = nullptr;
-        }
         std::string request(pubid);
         request.replace_all(STD_ASTR("@"), STD_ASTR("._tox."));
         return dnsquery(request, STD_ASTR("tox1"));
     }
 
-    std::string query3(const std::string &pubid)
-    {
-        if (!key_ok)
-            return query1(pubid);
-
-        if (dns3 == nullptr)
-            dns3 = tox_dns3_new(key);
-
-        uint32_t request_id;
-        std::sstr_t<128> dns_string;
-        int dns_string_len = tox_generate_dns3_string(dns3, (byte *)dns_string.str(), (uint16_t)dns_string.get_capacity(), &request_id, (byte*)pubid.cstr(), (byte)pubid.find_pos('@'));
-
-        if (dns_string_len < 0)
-            return query1(pubid);
-
-        dns_string.set_length(dns_string_len);
-
-        std::string rec(256, true);
-        rec.set_as_char('_').append(dns_string).append(STD_ASTR("._tox.")).append(addr);
-        rec = dnsquery(rec, STD_ASTR("tox3"));
-        if (!rec.is_empty())
-        {
-            byte tox_id[TOX_ADDRESS_SIZE];
-            if (tox_decrypt_dns3_TXT(dns3, tox_id, (/*const*/ byte *)rec.cstr(), (u32)rec.get_length(), request_id) < 0)
-                return query1(pubid);
-
-            rec.clear();
-            rec.append_as_hex(tox_id, sizeof(tox_id));
-            return rec;
-        }
-
-        return query1(pubid);
-    }
 };
 
 struct tox_node_s
@@ -886,7 +843,7 @@ public:
     spinlock::syncvar<av_sender_state_s> callstate;
 
     std::vector<other_typing_s> other_typing;
-    std::vector<tox3dns_s> pinnedservs;
+    std::vector<pinnode_s> pinnedservs;
 
     tox_address_c lastmypubid; // cleared in handshake
 
@@ -2756,14 +2713,14 @@ struct discoverer_s
             std::string servname = ids.substr( ids.find_pos( '@' ) + 1 );
 
             bool pinfound = false;
-            for ( tox3dns_s& pin : cl.pinnedservs )
+            for (pinnode_s& pin : cl.pinnedservs )
             {
                 if ( sync.lock_read()( ).shutdown_discover )
                     break;
 
                 if ( servname.equals( pin.addr ) )
                 {
-                    std::string s = pin.query3( ids );
+                    std::string s = pin.query1( ids );
                     sync.lock_write()( ).pubid.setup( s );
                     pinfound = true;
                     break;
@@ -2773,7 +2730,7 @@ struct discoverer_s
             if ( !pinfound )
             {
                 cl.pinnedservs.emplace_back( servname );
-                std::string s = cl.pinnedservs.back().query3( ids );
+                std::string s = cl.pinnedservs.back().query1( ids );
                 if ( !cl.pinnedservs.back().key_ok )
                     cl.pinnedservs.erase( --cl.pinnedservs.end() ); // kick non tox3 servers from list
 
@@ -4910,7 +4867,7 @@ void contact_descriptor_s::setup_members_and_send(contact_data_s &cd)
     cl.hf->update_contact(&cd);
 }
 
-static void callback_av_conference_audio(void *, int gnum, int peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void * /*userdata*/)
+static void callback_av_conference_audio(void *, uint32_t gnum, uint32_t peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, uint32_t sample_rate, void * /*userdata*/)
 {
     public_key_s pubkey;
     tox_conference_peer_get_public_key(cl.tox, gnum, peernum, pubkey.key, nullptr);
@@ -6823,9 +6780,8 @@ void tox_c::stream_options(contact_id_s id, const stream_options_s * so)
                 {
                 } else
                 {
-                    toxav_bit_rate_set(toxav, cd->get_fid().normal(),
-                        0 != (cd->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
-                        0 != (cd->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
+                    toxav_audio_set_bit_rate(toxav, cd->get_fid().normal(), 0 != (cd->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0, nullptr);
+                    toxav_video_set_bit_rate(toxav, cd->get_fid().normal(), 0 != (cd->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
 
                     int changedso = (cd->cip->local_so.options ^ oldso) & (SO_RECEIVING_AUDIO|SO_RECEIVING_VIDEO);
                     if (changedso)
@@ -7024,10 +6980,12 @@ void tox_c::file_control(u64 utag, file_control_e fctl)
                 return;
             }
 
+        /*
         if ( FIC_CHECK == fctl )
         {
             hf->file_control( utag, FIC_UNKNOWN );
         }
+        */
     }
 }
 

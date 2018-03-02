@@ -578,10 +578,11 @@ namespace internals
         typedef T2 type;
     };
 
-    INLINE void set( int &a, int b ) { a = b; }
-    INLINE void set( int16 &a, int16 b ) { a = b; }
-    INLINE void set( uint16 &a, uint16 b ) { a = b; }
-    INLINE void set( float &a, float b ) { a = b; }
+    INLINE void set(int &a, int b) { a = b; }
+    INLINE void set(int16 &a, int16 b) { a = b; }
+    INLINE void set(uint16 &a, uint16 b) { a = b; }
+    INLINE void set(float &a, float b) { a = b; }
+    INLINE void set(float &a, double b) { a = (float)b; }
 
     INLINE void set( int16 &a, int b ) { a = (int16)b; }
 #ifdef MODE64

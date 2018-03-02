@@ -145,7 +145,7 @@ public:
 
     int get_avinprogresscount() const;
     int get_avringcount() const;
-    av_contact_s & get( uint64 avkey, av_contact_s::state_e st );
+    av_contact_s * get( uint64 avkey, av_contact_s::state_e st );
     av_contact_s * find_inprogress( uint64 avk );
     av_contact_s * find_inprogress_any( contact_root_c *c );
     bool is_any_inprogress(contact_root_c *cr);

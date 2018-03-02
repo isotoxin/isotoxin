@@ -321,7 +321,7 @@ public:
         int i = 0;
         for(;;)
         {
-            int k = str.get_index(i,separator);
+            int k = str.find_pos(i,separator);
             if (k < 0)
             {
                 add(str.substr(i));

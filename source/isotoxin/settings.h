@@ -333,12 +333,12 @@ private:
     struct bits_edit_s
     {
         dialog_settings_c *settings = nullptr;
-        ts::flags32_s::BITS *source = nullptr;
+        ts::flags64_s::BITS *source = nullptr;
         int current = 0;
 
-        ts::flags32_s::BITS masks[8];
+        ts::flags64_s::BITS masks[8];
         int nmasks = 0;
-        void add( ts::flags32_s::BITS m, bool value = false)
+        void add( ts::flags64_s::BITS m, bool value = false)
         {
             ASSERT(nmasks < ARRAY_SIZE(masks)-1);
             int curvm = 1 << nmasks;
@@ -365,8 +365,8 @@ private:
 
     int desktop_notification_duration = 5;
 
-    ts::flags32_s::BITS msgopts_current = 0;
-    ts::flags32_s::BITS msgopts_original = 0;
+    ts::flags64_s::BITS msgopts_current = 0;
+    ts::flags64_s::BITS msgopts_original = 0;
 
     ts::wstr_c tempfolder_sendimg;
     ts::wstr_c tempfolder_handlemsg;

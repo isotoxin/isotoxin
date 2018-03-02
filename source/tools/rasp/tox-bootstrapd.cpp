@@ -105,13 +105,14 @@ int manage_keys(DHT *dht, char *keys_file_path)
             fclose(keys_file);
             return 0;
         }
-
-        memcpy(dht->self_public_key, keys, crypto_box_PUBLICKEYBYTES);
-        memcpy(dht->self_secret_key, keys + crypto_box_PUBLICKEYBYTES, crypto_box_SECRETKEYBYTES);
+        
+        
+        dht_set_self_public_key(dht, keys);
+        dht_set_self_secret_key(dht, keys + crypto_box_PUBLICKEYBYTES);
     } else {
         // Otherwise save new keys
-        memcpy(keys, dht->self_public_key, crypto_box_PUBLICKEYBYTES);
-        memcpy(keys + crypto_box_PUBLICKEYBYTES, dht->self_secret_key, crypto_box_SECRETKEYBYTES);
+        memcpy(keys, dht_get_self_public_key(dht), crypto_box_PUBLICKEYBYTES);
+        memcpy(keys + crypto_box_PUBLICKEYBYTES, dht_get_self_secret_key(dht), crypto_box_SECRETKEYBYTES);
 
         keys_file = fopen(keys_file_path, "w");
 
@@ -276,7 +277,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     }
 
     if (enable_motd) {
-        if (bootstrap_set_callbacks(dht->net, DAEMON_VERSION_NUMBER, (uint8_t *)motd, (uint16_t)strlen(motd) + 1) == 0) {
+        if (bootstrap_set_callbacks(dht_get_net(dht), DAEMON_VERSION_NUMBER, (uint8_t *)motd, (uint16_t)strlen(motd) + 1) == 0) {
             Print(FOREGROUND_BLUE, "Set MOTD successfully.\n");
         } else {
             Print(FOREGROUND_RED, "Couldn't set MOTD: %s. Exiting.\n", motd);
@@ -301,7 +302,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
             return 1;
         }
 
-        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht->self_secret_key, onion);
+        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht_get_self_secret_key(dht), onion);
 
         // tcp_relay_port_count != 0 at this point
         free(tcp_relay_ports);
@@ -347,7 +348,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     }
     */
 
-    print_public_key(dht->self_public_key);
+    print_public_key(dht_get_self_public_key(dht));
 
     free(keys_file_path);
 
@@ -357,7 +358,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     int waiting_for_dht_connection = 1;
 
     if (enable_lan_discovery) {
-        LANdiscovery_init(dht);
+        lan_discovery_init(dht);
         Print(FOREGROUND_BLUE, "Initialized LAN discovery.\n");
     }
 
@@ -365,15 +366,15 @@ int proc_toxrelay(const ts::wstrings_c & pars)
         do_DHT(dht);
 
         if (enable_lan_discovery && is_timeout(last_LANdiscovery, LAN_DISCOVERY_INTERVAL)) {
-            send_LANdiscovery(htons_port, dht);
+            lan_discovery_send(htons_port, dht);
             last_LANdiscovery = unix_time();
         }
 
         if (enable_tcp_relay) {
             do_TCP_server(tcp_server);
         }
-
-        networking_poll(dht->net, nullptr);
+        
+        networking_poll(dht_get_net(dht), nullptr);
 
         if (waiting_for_dht_connection && DHT_isconnected(dht)) {
             Print(FOREGROUND_BLUE, "Connected to other bootstrap node successfully.\n");

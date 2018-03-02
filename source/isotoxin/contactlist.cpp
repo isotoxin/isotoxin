@@ -72,6 +72,10 @@ ts::wstr_c gui_contact_item_c::tt()
         if (const theme_rect_s *thr = themerect())
             subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
     }
+
+    if (prf_options().is(CLOPT_SMALL_ITEMS))
+        return GET_THEME_VALUE(contactheight_small) - subsize;
+
     return GET_THEME_VALUE(contactheight) - subsize;
 }
 
@@ -296,6 +300,7 @@ void gui_contact_item_c::update_text()
 
         } else if (contact->getkey().is_conference())
         {
+            bool small = prf_options().is(CLOPT_SMALL_ITEMS);
             ctext = contact->showname();
 
             if ( contact->get_state() == CS_ONLINE )
@@ -309,7 +314,7 @@ void gui_contact_item_c::update_text()
                         ctext.append_as_uint( sz.x ).append_char( ',' ).append_as_int( -sz.y ).append( CONSTWSTR( ",2>" ) );
                     }
                 }
-                else
+                else if (!small)
                 {
                     ctext.append( CONSTWSTR( "<br>(" ) ).append_as_num( contact->subonlinecount() + 1 ).append_char( '/' );
                     if (auto uc = contact->subunknowncount()) ctext.append_as_num( uc ).append_char( '/' );
@@ -318,13 +323,14 @@ void gui_contact_item_c::update_text()
                         ctext.append(CONSTWSTR(" <l>")).append(ts::from_utf8(ap->get_name())).append(CONSTWSTR("</l>"));
                 }
 
-                if (contact->get_pubid().is_empty())
+                if (!small && contact->get_pubid().is_empty())
                     ctext.append(CONSTWSTR("<br>")).append(TTT("temporary conference", 256));
-            } else
+            } else if (!small)
                 ctext.append(CONSTWSTR("<br>")).append(TTT("inactive conference", 501));
 
         } else if (contact->is_meta())
         {
+            bool small = prf_options().is(CLOPT_SMALL_ITEMS);
             int live = 0, count = 0, rej = 0, invsend = 0, invrcv = 0, wait = 0, deactivated = 0;
             contact->subiterate( [&](contact_c *c) {
                 ++count;
@@ -348,8 +354,14 @@ void gui_contact_item_c::update_text()
             else if (invsend > 0)
             {
                 ctext = contact->showname();
-                if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
-                ctext.append( colorize(TTT("Authorization request has been sent",88), get_default_text_color(COLOR_TEXT_SPECIAL)) );
+                if (!ctext.is_empty())
+                {
+                    if (small)
+                        ctext.append(CONSTWSTR(" "));
+                    else
+                        ctext.append(CONSTWSTR("<br>"));
+                }
+                ctext.append(colorize(TTT("Authorization request has been sent", 88), get_default_text_color(COLOR_TEXT_SPECIAL)));
             }
             else {
                 ctext = contact->showname();
@@ -368,7 +380,7 @@ void gui_contact_item_c::update_text()
                 {
                     if (invrcv)
                     {
-                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                        if (!ctext.is_empty()) ctext.append(small ? CONSTWSTR(" ") : CONSTWSTR("<br>"));
                         ctext.append( colorize( TTT("Please, accept or reject",153), get_default_text_color(COLOR_TEXT_SPECIAL) ) );
                         t2.clear();
 
@@ -377,7 +389,7 @@ void gui_contact_item_c::update_text()
 
                     if (wait)
                     {
-                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                        if (!ctext.is_empty()) ctext.append(small ? CONSTWSTR(" ") : CONSTWSTR("<br>"));
                         ctext.append(colorize(TTT("Waiting...",154), get_default_text_color(COLOR_TEXT_SPECIAL)));
                         t2.clear();
                     } else if (contact->flag_full_search_result && g_app->found_items)
@@ -395,7 +407,7 @@ void gui_contact_item_c::update_text()
                         if (cntitems > 0)
                         {
 
-                            if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                            if (!ctext.is_empty()) ctext.append(small ? CONSTWSTR(" ") : CONSTWSTR("<br>"));
                             ctext.append(CONSTWSTR("<l>")).
                                 append(colorize<ts::wchar>(TTT("Found: $",338)/ts::wmake(cntitems), get_default_text_color(COLOR_TEXT_FOUND))).
                                 append(CONSTWSTR("</l>"));
@@ -409,18 +421,21 @@ void gui_contact_item_c::update_text()
                         ts::wstr_c ins(CONSTWSTR("<fullheight><i>"));
                         t = text_typing( t, b, ins );
                         typing_buf.set(t).append_char('\1').append(b);
-                        if (!ctext.is_empty()) ctext.append(CONSTWSTR("<br>"));
+                        if (!ctext.is_empty()) ctext.append(small ? CONSTWSTR(" ") : CONSTWSTR("<br>"));
 
                         ctext.append(colorize(t.as_sptr(), get_default_text_color(COLOR_TEXT_TYPING)));
                         t2.clear();
                     }
 
-                    if (count == 1 && deactivated > 0)
+                    if (!small)
                     {
-                        t2.clear();
+                        if (count == 1 && deactivated > 0)
+                        {
+                            t2.clear();
+                        }
+                        t2.trim();
+                        if (!t2.is_empty()) ctext.append(CONSTWSTR("<br><l>")).append(ts::from_utf8(t2)).append(CONSTWSTR("</l>"));
                     }
-                    t2.trim();
-                    if (!t2.is_empty()) ctext.append(CONSTWSTR("<br><l>")).append(ts::from_utf8(t2)).append(CONSTWSTR("</l>"));
 
                     if (g_app->F_SHOW_CONTACTS_IDS())
                     {
@@ -530,6 +545,325 @@ bool gui_contact_item_c::allow_drop() const
     return true;
 }
 
+void gui_contact_item_c::draw()
+{
+    if (m_engine && contact)
+    {
+        ts::irect ca = get_client_area();
+        bool small = prf_options().is(CLOPT_SMALL_ITEMS);
+
+        contact_state_e st = contact->get_meta_state();
+        contact_online_state_e ost = contact->get_meta_ostate();
+        if (role == CIR_CONVERSATION_HEAD)
+            st = contact_state_check;
+        const theme_image_s *state_icon = g_app->preloaded_stuff().offline;
+        bool force_state_icon = CIR_ME == role || CIR_METACREATE == role;
+        switch (st)
+        {
+        case CS_INVITE_SEND:
+            state_icon = g_app->preloaded_stuff().invite_send;
+            force_state_icon = true;
+            break;
+        case CS_INVITE_RECEIVE:
+            state_icon = g_app->preloaded_stuff().invite_recv;
+            force_state_icon = true;
+            break;
+        case CS_REJECTED:
+            state_icon = g_app->preloaded_stuff().invite_rej;
+            force_state_icon = true;
+            break;
+        case CS_ONLINE:
+            if (ost < ARRAY_SIZE(g_app->preloaded_stuff().online))
+                state_icon = g_app->preloaded_stuff().online[ost];
+            else
+                state_icon = g_app->preloaded_stuff().online[COS_DND];
+            break;
+        case CS_WAIT:
+            state_icon = nullptr;
+            break;
+        case CS_ROTTEN:
+        case CS_OFFLINE:
+            if (CIR_ME == role)
+                if (contact->subcount() == 0)
+                    state_icon = nullptr;
+            break;
+        case contact_state_check: // some online, some offline
+            if (role == CIR_CONVERSATION_HEAD)
+            {
+                state_icon = nullptr;
+            }
+            else
+            {
+                state_icon = g_app->preloaded_stuff().online_some;
+            }
+            break;
+        }
+
+        m_engine->begin_draw();
+
+        if (!contact->is_system_user && role != CIR_CONVERSATION_HEAD)
+        {
+            if (!force_state_icon && (prf_options().is(UIOPT_PROTOICONS) || contact->fully_unknown()))
+                state_icon = nullptr;
+
+            // draw state
+            if ((force_state_icon || st != CS_ROTTEN) && state_icon)
+            {
+                state_icon->draw(*m_engine.get(), ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), ALGN_RIGHT | ALGN_BOTTOM);
+
+            }
+            else if (contact->is_meta()) // not conference
+            {
+                // draw proto icons
+                int isz = GET_THEME_VALUE(protoiconsize);
+                ts::ivec2 p(ca.rb.x, ca.rb.y - isz);
+                contact->subiterate([&](contact_c *c) {
+                    if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                    {
+                        p.x -= isz;
+
+                        icon_type_e icot = IT_OFFLINE;
+                        if (c->get_state() == CS_ONLINE)
+                        {
+                            contact_online_state_e ost1 = c->get_ostate();
+                            if (COS_AWAY == ost1) icot = IT_AWAY;
+                            else if (COS_DND == ost1) icot = IT_DND;
+                            else icot = IT_ONLINE;
+                        }
+                        else if (c->get_state() == CS_UNKNOWN)
+                            icot = IT_UNKNOWN;
+
+                        m_engine->draw(p, ap->get_icon(isz, icot).extbody(), true);
+                    }
+                });
+            }
+        }
+
+        if (!small && contact->flag_is_av && !contact->flag_full_search_result && CIR_CONVERSATION_HEAD != role)
+        {
+            if (const av_contact_s *avc = g_app->avcontacts().find_inprogress_any(contact))
+            {
+                const theme_image_s *img_voicecall = contact->getkey().is_conference() ? nullptr : gui->theme().get_image(CONSTASTR("voicecall"));
+                const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
+                const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
+                const theme_image_s *img_speakeron = contact->getkey().is_conference() ? gui->theme().get_image(CONSTASTR("speakeron")) : nullptr;
+                const theme_image_s * drawarr[3];
+                int drawarr_cnt = 0;
+                if (img_voicecall)
+                    drawarr[drawarr_cnt++] = img_voicecall;
+                if (avc->is_mic_off() && img_micoff)
+                    drawarr[drawarr_cnt++] = img_micoff;
+                if (avc->is_speaker_off() && img_speakeroff)
+                    drawarr[drawarr_cnt++] = img_speakeroff;
+                if (avc->is_speaker_on() && img_speakeron)
+                    drawarr[drawarr_cnt++] = img_speakeron;
+
+                int h = 0;
+                for (int i = 0; i < drawarr_cnt; ++i)
+                {
+                    int hh = drawarr[i]->info().sz.y;
+                    if (hh > h) h = hh;
+                }
+                int addh[3];
+                for (int i = 0; i < drawarr_cnt; ++i)
+                {
+                    int hh = drawarr[i]->info().sz.y;
+                    addh[i] = (h - hh) / 2;
+                }
+
+                ts::ivec2 p(ca.rt());
+                for (int i = 0; i < drawarr_cnt; ++i)
+                {
+                    p.x -= drawarr[i]->info().sz.x;
+                    drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
+                    --p.x;
+                }
+            }
+        }
+
+        m_engine->end_draw();
+
+        text_draw_params_s tdp;
+
+        const application_c::blinking_reason_s * achtung = nullptr;
+        int ritem = 0, curpww = 0;
+        bool draw_ava = !small && !contact->getkey().is_self;
+        bool draw_proto = !contact->getkey().is_conference();
+        //bool draw_btn = true;
+        if (CIR_CONVERSATION_HEAD == role)
+        {
+            gui_conversation_header_c *ch = ts::ptr_cast<gui_conversation_header_c *>(this);
+
+            ritem = contact_item_rite_margin();
+            if (draw_proto)
+            {
+                curpww = ch->prepare_protocols();
+                ritem += curpww;
+            }
+
+            ts::irect cac(ca);
+
+            int x_offset = draw_ava ? (contact->get_avatar() ? g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x : g_app->preloaded_stuff().icon[contact->get_meta_gender()]->info().sz.x) : 0;
+
+            cac.lt.x += x_offset + 5;
+            cac.rb.x -= 5;
+            cac.rb.x -= ritem;
+            int curw = cac.width();
+            int w = gui->textsize(*textrect.font, textrect.get_text()).x;
+            if (draw_ava && w > curw)
+            {
+                curw += x_offset;
+                draw_ava = false;
+            }
+            while (draw_proto && w > curw)
+            {
+                if (curpww > GET_THEME_VALUE(minprotowidth))
+                {
+                    int shift = w - curw;
+                    if (shift <= (curpww - GET_THEME_VALUE(minprotowidth)))
+                    {
+                        ritem -= curpww;
+                        curw += curpww;
+                        curpww -= shift;
+                        curw -= curpww;
+                        ritem += curpww;
+                        ASSERT(w <= curw);
+                        break;
+                    }
+                }
+
+                curw += curpww;
+                draw_proto = false;
+            }
+
+        }
+        else
+        {
+            achtung = g_app->find_blink_reason(contact->getkey(), false);
+        }
+
+
+        int x_offset = 0;
+        if (draw_ava)
+        {
+            m_engine->begin_draw();
+            if (const avatar_s *ava = contact->get_avatar())
+            {
+                int y = (ca.size().y - ava->info().sz.y) / 2;
+                m_engine->draw(ca.lt + ts::ivec2(y), ava->extbody(), ava->alpha_pixels);
+                x_offset = g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x;
+            }
+            else
+            {
+                const theme_image_s *icon = contact->getkey().is_conference() ? g_app->preloaded_stuff().conference : g_app->preloaded_stuff().icon[contact->get_meta_gender()];
+                icon->draw(*m_engine.get(), ca.lt);
+                x_offset = icon->info().sz.x;
+            }
+            m_engine->end_draw();
+        }
+
+        ts::irect noti_draw_area = ca;
+
+        gui_conversation_header_c *ch = CIR_CONVERSATION_HEAD == role ? ts::ptr_cast<gui_conversation_header_c *>(this) : nullptr;
+
+        if (ch == nullptr || !ch->edit_mode())
+        {
+            MEMT(MEMT_CONTACT_ITEM_1);
+
+            ca.lt += ts::ivec2(x_offset + 5, 2);
+            ca.rb.x -= 5;
+            if (CIR_CONVERSATION_HEAD == role)
+            {
+                ca.rb.x -= ritem;
+                if (!draw_proto)
+                    ca.rb.x += curpww;
+            }
+            draw_data_s &dd = m_engine->begin_draw();
+            dd.size = ca.size();
+            if (dd.size >> 0)
+            {
+                if (ch)
+                {
+                    ch->last_head_text_pos = ca.lt;
+                    tdp.rectupdate = DELEGATE(ch, updrect);
+                }
+
+                dd.offset += ca.lt;
+                int oldxo = dd.offset.x;
+                ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS);
+                tdp.textoptions = &f; //-V506
+                tdp.forecolor = nullptr;
+                gui_clist_base_c::draw(dd, tdp);
+
+                if (ch && draw_proto)
+                {
+                    dd.offset.x = oldxo + dd.size.x + 5;
+                    dd.size.x = curpww;
+                    ch->draw_online_state_text(dd);
+                }
+            }
+            m_engine->end_draw();
+        }
+        if (achtung)
+        {
+            draw_data_s &dd = m_engine->begin_draw();
+
+            auto draw_bg = [&]()
+            {
+                if (const theme_image_s *bachtung = g_app->preloaded_stuff().achtung_bg)
+                {
+                    ts::ivec2 p = GET_THEME_VALUE(achtung_shift) + noti_draw_area.lb();
+                    p.y -= bachtung->info().sz.y;
+                    bachtung->draw(*m_engine.get(), p);
+                    ts::irect trect = ts::irect::from_center_and_size(p + bachtung->center, bachtung->info().sz);
+                    dd.offset += trect.lt;
+                    dd.size = bachtung->info().sz;
+                    tdp.forecolor = &GET_THEME_VALUE(achtung_content_color);
+                }
+
+                if (!achtung->get_blinking())
+                    dd.alpha = 128;
+            };
+
+
+            if ((CS_INVITE_RECEIVE != st && achtung->is_file_download()) || achtung->flags.is(application_c::blinking_reason_s::F_RINGTONE))
+            {
+                draw_bg();
+
+                const theme_image_s *img = nullptr;
+                if (achtung->flags.is(application_c::blinking_reason_s::F_RINGTONE))
+                    img = gui->theme().get_image(CONSTASTR("achtung_call"));
+                else if (achtung->is_file_download())
+                    img = gui->theme().get_image(CONSTASTR("achtung_file"));
+
+                img->draw(*m_engine, (dd.size - img->info().sz) / 2);
+
+            }
+            else if (CS_INVITE_RECEIVE == st || achtung->unread_count > 0 || achtung->flags.is(application_c::blinking_reason_s::F_NEW_VERSION | application_c::blinking_reason_s::F_INVITE_FRIEND))
+            {
+                draw_bg();
+
+                ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
+                tdp.textoptions = &f; //-V506
+
+                if (CS_INVITE_RECEIVE == st || achtung->flags.is(application_c::blinking_reason_s::F_NEW_VERSION) || achtung->unread_count == 0)
+                {
+                    m_engine->draw(ts::wstr_c(CONSTWSTR("!")), tdp);
+                }
+                else
+                {
+                    int n_unread = achtung->unread_count;
+                    if (n_unread > 99) n_unread = 99;
+                    m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
+                }
+            }
+
+            m_engine->end_draw();
+        }
+    }
+
+}
+
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     MEMT( MEMT_CONTACT_ITEM );
@@ -559,326 +893,8 @@ bool gui_contact_item_c::allow_drop() const
             flags.clear( F_DNDDRAW );
         }
         gui_control_c::sq_evt( qp, rid, data );
-        if ( m_engine && contact )
-        {
-            ts::irect ca = get_client_area();
 
-            contact_state_e st = CS_OFFLINE;
-            contact_online_state_e ost = COS_ONLINE;
-            if ( contact )
-            {
-                st = contact->get_meta_state();
-                ost = contact->get_meta_ostate();
-                if ( role == CIR_CONVERSATION_HEAD )
-                    st = contact_state_check;
-            }
-            const theme_image_s *state_icon = g_app->preloaded_stuff().offline;
-            bool force_state_icon = CIR_ME == role || CIR_METACREATE == role;
-            switch ( st )
-            {
-            case CS_INVITE_SEND:
-                state_icon = g_app->preloaded_stuff().invite_send;
-                force_state_icon = true;
-                break;
-            case CS_INVITE_RECEIVE:
-                state_icon = g_app->preloaded_stuff().invite_recv;
-                force_state_icon = true;
-                break;
-            case CS_REJECTED:
-                state_icon = g_app->preloaded_stuff().invite_rej;
-                force_state_icon = true;
-                break;
-            case CS_ONLINE:
-                if ( ost < ARRAY_SIZE( g_app->preloaded_stuff().online ) )
-                    state_icon = g_app->preloaded_stuff().online[ ost ];
-                else
-                    state_icon = g_app->preloaded_stuff().online[ COS_DND ];
-                break;
-            case CS_WAIT:
-                state_icon = nullptr;
-                break;
-            case CS_ROTTEN:
-            case CS_OFFLINE:
-                if ( CIR_ME == role )
-                    if ( contact->subcount() == 0 )
-                        state_icon = nullptr;
-                break;
-            case contact_state_check: // some online, some offline
-                if ( role == CIR_CONVERSATION_HEAD )
-                {
-                    state_icon = nullptr;
-                }
-                else
-                {
-                    state_icon = g_app->preloaded_stuff().online_some;
-                }
-                break;
-            }
-
-            m_engine->begin_draw();
-
-            if ( !contact->is_system_user && role != CIR_CONVERSATION_HEAD )
-            {
-                if ( !force_state_icon && ( prf_options().is( UIOPT_PROTOICONS ) || contact->fully_unknown() ) )
-                    state_icon = nullptr;
-
-                // draw state
-                if ((force_state_icon || st != CS_ROTTEN) && state_icon)
-                {
-                    state_icon->draw( *m_engine.get(), ca + ts::ivec2( shiftstateicon.x, shiftstateicon.y ), ALGN_RIGHT | ALGN_BOTTOM );
-
-                } else if (contact->is_meta()) // not conference
-                {
-                    // draw proto icons
-                    int isz = GET_THEME_VALUE( protoiconsize );
-                    ts::ivec2 p( ca.rb.x, ca.rb.y - isz );
-                    contact->subiterate( [&]( contact_c *c ) {
-                        if ( active_protocol_c *ap = prf().ap( c->getkey().protoid ) )
-                        {
-                            p.x -= isz;
-
-                            icon_type_e icot = IT_OFFLINE;
-                            if ( c->get_state() == CS_ONLINE )
-                            {
-                                contact_online_state_e ost1 = c->get_ostate();
-                                if ( COS_AWAY == ost1 ) icot = IT_AWAY;
-                                else if ( COS_DND == ost1 ) icot = IT_DND;
-                                else icot = IT_ONLINE;
-                            }
-                            else if ( c->get_state() == CS_UNKNOWN )
-                                icot = IT_UNKNOWN;
-
-                            m_engine->draw( p, ap->get_icon( isz, icot ).extbody(), true );
-                        }
-                    } );
-                }
-            }
-
-            if ( contact->flag_is_av && !contact->flag_full_search_result && CIR_CONVERSATION_HEAD != role )
-            {
-                if ( const av_contact_s *avc = g_app->avcontacts().find_inprogress_any( contact ) )
-                {
-                    const theme_image_s *img_voicecall = contact->getkey().is_conference() ? nullptr : gui->theme().get_image( CONSTASTR( "voicecall" ) );
-                    const theme_image_s *img_micoff = gui->theme().get_image( CONSTASTR( "micoff" ) );
-                    const theme_image_s *img_speakeroff = gui->theme().get_image( CONSTASTR( "speakeroff" ) );
-                    const theme_image_s *img_speakeron = contact->getkey().is_conference() ? gui->theme().get_image( CONSTASTR( "speakeron" ) ) : nullptr;
-                    const theme_image_s * drawarr[ 3 ];
-                    int drawarr_cnt = 0;
-                    if ( img_voicecall )
-                        drawarr[ drawarr_cnt++ ] = img_voicecall;
-                    if ( avc->is_mic_off() && img_micoff )
-                        drawarr[ drawarr_cnt++ ] = img_micoff;
-                    if ( avc->is_speaker_off() && img_speakeroff )
-                        drawarr[ drawarr_cnt++ ] = img_speakeroff;
-                    if ( avc->is_speaker_on() && img_speakeron )
-                        drawarr[ drawarr_cnt++ ] = img_speakeron;
-
-                    int h = 0;
-                    for ( int i = 0; i < drawarr_cnt; ++i )
-                    {
-                        int hh = drawarr[ i ]->info().sz.y;
-                        if ( hh > h ) h = hh;
-                    }
-                    int addh[ 3 ];
-                    for ( int i = 0; i < drawarr_cnt; ++i )
-                    {
-                        int hh = drawarr[ i ]->info().sz.y;
-                        addh[ i ] = ( h - hh ) / 2;
-                    }
-
-                    ts::ivec2 p( ca.rt() );
-                    for ( int i = 0; i < drawarr_cnt; ++i )
-                    {
-                        p.x -= drawarr[ i ]->info().sz.x;
-                        drawarr[ i ]->draw( *m_engine, ts::ivec2( p.x, p.y + addh[ i ] ) );
-                        --p.x;
-                    }
-                }
-            }
-
-            m_engine->end_draw();
-
-            if ( contact )
-            {
-                text_draw_params_s tdp;
-
-                const application_c::blinking_reason_s * achtung = nullptr;
-                int ritem = 0, curpww = 0;
-                bool draw_ava = !contact->getkey().is_self;
-                bool draw_proto = !contact->getkey().is_conference();
-                //bool draw_btn = true;
-                if ( CIR_CONVERSATION_HEAD == role )
-                {
-                    gui_conversation_header_c *ch = ts::ptr_cast<gui_conversation_header_c *>( this );
-
-                    ritem = contact_item_rite_margin();
-                    if ( draw_proto )
-                    {
-                        curpww = ch->prepare_protocols();
-                        ritem += curpww;
-                    }
-
-                    ts::irect cac( ca );
-
-                    int x_offset = draw_ava ? ( contact->get_avatar() ? g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz.x : g_app->preloaded_stuff().icon[ contact->get_meta_gender() ]->info().sz.x ) : 0;
-
-                    cac.lt.x += x_offset + 5;
-                    cac.rb.x -= 5;
-                    cac.rb.x -= ritem;
-                    int curw = cac.width();
-                    int w = gui->textsize( *textrect.font, textrect.get_text() ).x;
-                    if ( draw_ava && w > curw )
-                    {
-                        curw += x_offset;
-                        draw_ava = false;
-                    }
-                    while ( draw_proto && w > curw )
-                    {
-                        if ( curpww > GET_THEME_VALUE( minprotowidth ) )
-                        {
-                            int shift = w - curw;
-                            if ( shift <= ( curpww - GET_THEME_VALUE( minprotowidth ) ) )
-                            {
-                                ritem -= curpww;
-                                curw += curpww;
-                                curpww -= shift;
-                                curw -= curpww;
-                                ritem += curpww;
-                                ASSERT( w <= curw );
-                                break;
-                            }
-                        }
-
-                        curw += curpww;
-                        draw_proto = false;
-                    }
-
-                }
-                else
-                {
-                    achtung = g_app->find_blink_reason( contact->getkey(), false );
-                }
-
-
-                int x_offset = 0;
-                if ( draw_ava )
-                {
-                    m_engine->begin_draw();
-                    if ( const avatar_s *ava = contact->get_avatar() )
-                    {
-                        int y = ( ca.size().y - ava->info().sz.y ) / 2;
-                        m_engine->draw( ca.lt + ts::ivec2( y ), ava->extbody(), ava->alpha_pixels );
-                        x_offset = g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz.x;
-                    }
-                    else
-                    {
-                        const theme_image_s *icon = contact->getkey().is_conference() ? g_app->preloaded_stuff().conference : g_app->preloaded_stuff().icon[ contact->get_meta_gender() ];
-                        icon->draw( *m_engine.get(), ca.lt );
-                        x_offset = icon->info().sz.x;
-                    }
-                    m_engine->end_draw();
-                }
-
-                ts::irect noti_draw_area = ca;
-
-                gui_conversation_header_c *ch = CIR_CONVERSATION_HEAD == role ? ts::ptr_cast<gui_conversation_header_c *>( this ) : nullptr;
-
-                if ( ch == nullptr || !ch->edit_mode() )
-                {
-                    MEMT( MEMT_CONTACT_ITEM_1 );
-
-                    ca.lt += ts::ivec2( x_offset + 5, 2 );
-                    ca.rb.x -= 5;
-                    if ( CIR_CONVERSATION_HEAD == role )
-                    {
-                        ca.rb.x -= ritem;
-                        if ( !draw_proto )
-                            ca.rb.x += curpww;
-                    }
-                    draw_data_s &dd = m_engine->begin_draw();
-                    dd.size = ca.size();
-                    if ( dd.size >> 0 )
-                    {
-                        if ( ch )
-                        {
-                            ch->last_head_text_pos = ca.lt;
-                            tdp.rectupdate = DELEGATE( ch, updrect );
-                        }
-
-                        dd.offset += ca.lt;
-                        int oldxo = dd.offset.x;
-                        ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS );
-                        tdp.textoptions = &f; //-V506
-                        tdp.forecolor = nullptr;
-                        draw( dd, tdp );
-
-                        if ( ch && draw_proto )
-                        {
-                            dd.offset.x = oldxo + dd.size.x + 5;
-                            dd.size.x = curpww;
-                            ch->draw_online_state_text( dd );
-                        }
-                    }
-                    m_engine->end_draw();
-                }
-                if ( achtung )
-                {
-                    draw_data_s &dd = m_engine->begin_draw();
-
-                    auto draw_bg = [&]()
-                    {
-                        if ( const theme_image_s *bachtung = g_app->preloaded_stuff().achtung_bg )
-                        {
-                            ts::ivec2 p = GET_THEME_VALUE( achtung_shift ) + noti_draw_area.lb();
-                            p.y -= bachtung->info().sz.y;
-                            bachtung->draw( *m_engine.get(), p );
-                            ts::irect trect = ts::irect::from_center_and_size( p + bachtung->center, bachtung->info().sz );
-                            dd.offset += trect.lt;
-                            dd.size = bachtung->info().sz;
-                            tdp.forecolor = &GET_THEME_VALUE( achtung_content_color );
-                        }
-
-                        if ( !achtung->get_blinking() )
-                            dd.alpha = 128;
-                    };
-
-
-                    if ( (CS_INVITE_RECEIVE != st && achtung->is_file_download()) || achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
-                    {
-                        draw_bg();
-
-                        const theme_image_s *img = nullptr;
-                        if ( achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
-                            img = gui->theme().get_image( CONSTASTR( "achtung_call" ) );
-                        else if ( achtung->is_file_download() )
-                            img = gui->theme().get_image( CONSTASTR( "achtung_file" ) );
-
-                        img->draw( *m_engine, ( dd.size - img->info().sz ) / 2 );
-
-                    }
-                    else if ( CS_INVITE_RECEIVE == st || achtung->unread_count > 0 || achtung->flags.is( application_c::blinking_reason_s::F_NEW_VERSION | application_c::blinking_reason_s::F_INVITE_FRIEND ) )
-                    {
-                        draw_bg();
-
-                        ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_HCENTER );
-                        tdp.textoptions = &f; //-V506
-
-                        if ( CS_INVITE_RECEIVE == st || achtung->flags.is( application_c::blinking_reason_s::F_NEW_VERSION ) || achtung->unread_count == 0 )
-                        {
-                            m_engine->draw(ts::wstr_c(CONSTWSTR("!")), tdp );
-                        }
-                        else
-                        {
-                            int n_unread = achtung->unread_count;
-                            if ( n_unread > 99 ) n_unread = 99;
-                            m_engine->draw( ts::wstr_c().set_as_uint( n_unread ), tdp );
-                        }
-                    }
-
-                    m_engine->end_draw();
-                }
-            }
-        }
+        draw();
         return true;
     case SQ_RECT_CHANGED:
         textrect.make_dirty( false, false, true );
@@ -1218,6 +1234,12 @@ bool gui_contact_item_c::allow_drop() const
                         dialog_msgbox_c::mb_warning(txt).bcancel().on_ok(m_clear_history_doit, cks).summon(true);
                     }
                 }
+                static void m_compact(const ts::str_c&cks)
+                {
+                    bool small = prf_options().is(CLOPT_SMALL_ITEMS);
+                    prf().set_options(small ? 0 : CLOPT_SMALL_ITEMS, CLOPT_SMALL_ITEMS);
+                    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, CLOPT_SMALL_ITEMS).send();
+                }
             };
 
             if (!dialog_already_present(UD_CONTACTPROPS))
@@ -1314,6 +1336,9 @@ bool gui_contact_item_c::allow_drop() const
 
                 m.add_separator();
                 m.add( TTT( "Delete", 85 ), 0, handlers::m_delete, contact->getkey().as_str() );
+
+                m.add_separator();
+                m.add(TTT("Compact view",406), prf_options().is(CLOPT_SMALL_ITEMS) ? MIF_MARKED : 0, handlers::m_compact);
 
                 popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                 popupmenu->leech(this);
@@ -2822,6 +2847,17 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                     contacts().resort_list();
                     contacts().update_roots();
                 DEFERRED_EXECUTION_BLOCK_END( 0 )
+
+            } else if (ch.bits & (CLOPT_SMALL_ITEMS))
+            {
+                contacts().resort_list();
+                gui->repos_children(this);
+                contacts().iterate_root_contacts([&](contact_root_c *c)->bool {
+                    if (c->get_historian()->gui_item)
+                        c->get_historian()->gui_item->update_text();
+
+                    return true;
+                });
 
             }
         }

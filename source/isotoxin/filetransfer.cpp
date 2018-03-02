@@ -51,6 +51,8 @@ bool file_transfer_s::auto_confirm()
             return false;
 
         prepare_fn(ts::fn_join(downf, filename), false);
+        if (image)
+            blink_on_recv_done = true;
 
     }
     else
@@ -168,6 +170,7 @@ void file_transfer_s::kill(file_control_e fctl, unfinished_file_transfer_s *uft)
     }
 
 
+    /*
     if (FIC_UNKNOWN == fctl)
     {
         if (uft)
@@ -176,6 +179,7 @@ void file_transfer_s::kill(file_control_e fctl, unfinished_file_transfer_s *uft)
         g_app->unregister_file_transfer(utag, false);
         return;
     }
+    */
 
     if (!upload && !accepted && (fctl == FIC_NONE || fctl == FIC_DISCONNECT))
     {
@@ -270,6 +274,9 @@ void file_transfer_s::kill(file_control_e fctl, unfinished_file_transfer_s *uft)
         {
             update_history();
             upd_message_item(true);
+            if (blink_on_recv_done)
+                g_app->new_blink_reason(historian).up_unread();
+
         }
     }
     else if (fctl == FIC_DISCONNECT)
@@ -427,7 +434,7 @@ void file_transfer_s::query(uint64 offset_, int sz)
 void file_transfer_s::upload_accepted()
 {
     auto wdata = data.lock_write();
-    ASSERT(wdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT);
+    ASSERT(wdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT || wdata().bytes_per_sec == BPSSV_PAUSED_BY_REMOTE);
     wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
 }
 

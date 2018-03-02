@@ -1170,6 +1170,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
     const int n_per_call = 10;
     int n_done = 0;
     bool some_action = false;
+
     for(row_s &r: rows)
     {
         switch (r.st)
@@ -1404,29 +1405,29 @@ uint64 profile_c::uniq_history_item_tag()
     return utag;
 }
 
-ts::flags32_s INLINE profile_c::get_options()
+ts::flags64_s INLINE profile_c::get_options()
 {
     if (!profile_flags.is(F_OPTIONS_VALID))
     {
-        ts::flags32_s::BITS opts = msgopts();
-        ts::flags32_s::BITS optse = msgopts_edited();
+        ts::flags64_s::BITS opts = msgopts();
+        ts::flags64_s::BITS optse = msgopts_edited();
         current_options.setup((opts & optse) | (~optse & DEFAULT_MSG_OPTIONS));
         profile_flags.set(F_OPTIONS_VALID);
     }
     return current_options;
 }
 
-ts::flags32_s prf_options()
+ts::flags64_s prf_options()
 {
     return prf().get_options();
 }
 
-bool profile_c::set_options(ts::flags32_s::BITS mo, ts::flags32_s::BITS mask)
+bool profile_c::set_options(ts::flags64_s::BITS mo, ts::flags64_s::BITS mask)
 {
-    ts::flags32_s::BITS cur = get_options().__bits;
-    ts::flags32_s::BITS curmod = cur & mask;
-    ts::flags32_s::BITS newbits = mo & mask;
-    ts::flags32_s::BITS edited = msgopts_edited();
+    ts::flags64_s::BITS cur = get_options().__bits;
+    ts::flags64_s::BITS curmod = cur & mask;
+    ts::flags64_s::BITS newbits = mo & mask;
+    ts::flags64_s::BITS edited = msgopts_edited();
     edited |= (curmod ^ newbits);
     msgopts_edited(edited);
     cur = (cur & ~mask) | newbits;

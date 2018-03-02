@@ -866,6 +866,20 @@ public:
         }
     }
 
+    str_t<TCHARACTER, CORE> & case_down_ansi(ZSTRINGS_SIGNED offset0 = 0, ZSTRINGS_SIGNED offset1 = -1)
+    {
+        if (core.len() == 0) return *this;
+        if (offset1 < 0) offset1 = get_length();
+
+        for(ZSTRINGS_SIGNED i = offset0;i<offset1;++i)
+        {
+            TCHARACTER c = get_char(i);
+            if (c >= 'A' && c <= 'Z')
+                set_char(i, c + 32);
+        }
+        return *this;
+    }
+
 
     str_t<TCHARACTER, CORE> & case_down(ZSTRINGS_SIGNED offset0 = 0, ZSTRINGS_SIGNED offset1 = -1)
     {
@@ -1302,6 +1316,32 @@ public:
         return -1;
     };
 
+    ZSTRINGS_SIGNED     find_pos_of_digit(ZSTRINGS_SIGNED index = 0) const
+    {
+        ZSTRINGS_SIGNED l = get_length();
+        while (index < l)
+        {
+            TCHARACTER temp = *(core() + index);
+            if (CHAR_is_digit(temp)) return index;
+            ++index;
+        }
+        return -1;
+    };
+
+    ZSTRINGS_SIGNED     find_last_pos_of_digit() const
+    {
+        ZSTRINGS_SIGNED l = get_length();
+        TCHARACTER temp;
+        while (l > 0)
+        {
+            --l;
+            temp = *(core() + l);
+            if (CHAR_is_digit(temp)) return l;
+        }
+        return -1;
+    };
+
+
     ZSTRINGS_SIGNED find_word_begin(ZSTRINGS_SIGNED i, const TCHARACTER *c) const
     {
         if (i < 0) return -1;
@@ -1476,6 +1516,15 @@ public:
         for( ;i0 < tlen && is_hollow( get_char(i0)); ++i0 );
         for( ;i1 >=0 && is_hollow( get_char(i1)); --i1 );
         return substr(i0,i1+1);
+    }
+
+    template<typename ISHOLLOW> strpart get_trimmed(const ISHOLLOW &is_hollow) const
+    {
+        ZSTRINGS_SIGNED tlen = get_length();
+        ZSTRINGS_SIGNED i0 = 0, i1 = tlen - 1;
+        for (; i0 < tlen && is_hollow(get_char(i0)); ++i0);
+        for (; i1 >= 0 && is_hollow(get_char(i1)); --i1);
+        return substr(i0, i1 + 1);
     }
 
     str_t & trim()						// removes 0x20,0x9,0x0d,0x0a

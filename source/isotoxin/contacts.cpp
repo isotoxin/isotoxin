@@ -1151,7 +1151,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SL>&msg)
                 return true;
 
             return false;
-        })) { if (row->deleted()) prf().changed(); }
+        }))
+        {
+            if (row->deleted()) prf().changed();
+        }
 
         return 0;
     }
@@ -2105,12 +2108,14 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                     goto not_resume;
 
                 auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
+                tft.other.sender = row->other.sender;
+                tft.other.historian = row->other.historian;
                 tft.other.utag = prf().getuid();
                 tft.other.msgitem_utag = guiitm_utag;
                 tft.other.filesize = ifl.filesize;
                 tft.other.filename = fnc;
 
-                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, 0, fnc, ifl.filesize))
+                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, tft.other.utag, fnc, ifl.filesize))
                 {
                     g_app->new_blink_reason(historian->getkey()).file_download_progress_add(ft->utag);
 
@@ -2170,8 +2175,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             ft->pause_by_remote(FIC_PAUSE == ifl.fctl);
         break;
     case FIC_DISCONNECT:
-    case FIC_UNKNOWN:
-    case FIC_STUCK:
+    //case FIC_UNKNOWN:
+    //case FIC_STUCK:
     case FIC_DONE:
         DMSG("fkill " << ifl.i_utag << (int)ifl.fctl );
         if ( file_transfer_s *ft = g_app->find_file_transfer_by_iutag( ifl.i_utag ) )
@@ -2372,7 +2377,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     {
         ts::wstr_c my_name = contacts().calc_self_name( historian->getkey().protoid );
         ts::str_c message( m );
-        text_adapt_user_input( message );
+        text_adapt_user_input( message, prf_options().is(MSGOP_PROCESS_MARKDOWN));
         parse_links( message, true );
         emoti().parse( message );
 
@@ -2979,7 +2984,7 @@ int contact_root_c::calc_unread() const
     {
         const post_s *p = history.get(i);
         if (p->recv_time <= rt) break;
-        if (p->mt() == MTA_MESSAGE)
+        if (p->mt() == MTA_MESSAGE || p->mt() == MTA_RECV_FILE)
             ++cnt;
     }
     return cnt;

@@ -401,6 +401,9 @@
 401=Notifications
 402=Notifications settings
 403=Allow insistent notification of incoming call
+404=Process Markdown syntax
+405=Compact list items
+406=Compact view
 408=Dictionaries...
 409=List of spelling dictionaries is being loaded
 410=Active dictionaries: $ of $

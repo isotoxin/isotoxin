@@ -1851,21 +1851,23 @@ void gui_notice_callinprogress_c::setup(notice_s *pars)
     if (active_protocol_c *ap = prf().ap( sender->getkey().protoid ))
         video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
 
-    av_contact_s &avc = g_app->avcontacts().get(historian->getkey() | sender->getkey(), av_contact_s::AV_INPROGRESS);
-    avcp = &avc;
+    av_contact_s *avc = g_app->avcontacts().get(historian->getkey() | sender->getkey(), av_contact_s::AV_INPROGRESS);
+    avcp = avc;
+    if (avc == nullptr)
+        return;
 
     common.create_buttons( this, getrid(), video_supported );
 
     if (video_supported)
     {
-        if (avc.is_camera_on())
+        if (avc->is_camera_on())
         {
             set_cam_init_anim();
             DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
             calc_cam_display_rects();
         }
 
-        if (avc.is_video_show())
+        if (avc->is_video_show())
         {
             flags.set(F_WAITANIM);
             DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
@@ -4654,7 +4656,7 @@ ts::wstr_c gui_message_item_c::cvt_intext()
     ts::str_c message( intext->cstr() );
     if ( message.is_empty() ) message.set( CONSTASTR( "error" ) );
     else {
-        text_adapt_user_input( message );
+        text_adapt_user_input( message, prf_options().is(MSGOP_PROCESS_MARKDOWN) );
         parse_links( message, true );
         emoti().parse( message );
 

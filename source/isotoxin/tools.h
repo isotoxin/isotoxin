@@ -152,7 +152,7 @@ void text_convert_from_bbcode(ts::str_c &text_utf8);
 void text_convert_to_bbcode(ts::str_c &text_utf8);
 void text_close_bbcode(ts::str_c &text_utf8);
 void text_convert_char_tags(ts::str_c &text_utf8);
-void text_adapt_user_input(ts::str_c &text_utf8); // before print
+void text_adapt_user_input(ts::str_c &text_utf8, bool markdown = true); // before print
 void text_prepare_for_edit(ts::str_c &text_utf8);
 INLINE ts::wstr_c enquote(const ts::wstr_c &x)
 {
@@ -420,11 +420,11 @@ enum settingsparam_e
 template<> struct gmsg<ISOGM_CHANGED_SETTINGS> : public gmsgbase
 {
     gmsg(int protoid, settingsparam_e sp, const ts::str_c &s) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), s(s) {}
-    gmsg(int protoid, settingsparam_e sp, int bits = 0) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), bits(bits) {}
+    gmsg(int protoid, settingsparam_e sp, ts::flags64_s::BITS bits = 0) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), bits(bits) {}
     int protoid;
     settingsparam_e sp;
     ts::str_c s;
-    int bits = 0;
+    ts::flags64_s::BITS bits = 0;
 };
 //
 

@@ -165,8 +165,8 @@ inline void _mm_pause() { usleep( 0 ); }
 #define SLxInterlockedCompareExchange32(a,b,c)   __sync_val_compare_and_swap(a,c,b)
 #define SLxInterlockedCompareExchange2(a,b,c)    __sync_val_compare_and_swap(a,c,b)
 #define SLxInterlockedCompareExchange64(a,b,c)   __sync_val_compare_and_swap(a,c,b)
-#define SLxInterlockedAdd  __sync_add_and_fetch
-#define SLxInterlockedAdd64 __sync_add_and_fetch
+#define SLxInterlockedAdd  __sync_fetch_add_and
+#define SLxInterlockedAdd64 __sync_fetch_add_and
 #define SLxInterlockedAnd64 __sync_and_and_fetch
 #define SLxInterlockedIncrement(a) __sync_add_and_fetch(a,1)
 #define SLxInterlockedDecrement(a) __sync_sub_and_fetch(a,1)
@@ -454,6 +454,11 @@ struct auto_simple_lock
 };
 
 #define SIMPLELOCK( ll ) spinlock::auto_simple_lock UNIQIDLINE(__slock)( ll )
+
+inline long3264 increment_by( volatile long3264 &lock, long3264 val ) // returns initial value
+{
+    return SLxInterlockedAdd( &lock, val );
+}
 
 inline long3264 increment( volatile long3264 &lock )
 {
